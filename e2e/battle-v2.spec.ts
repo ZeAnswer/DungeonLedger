@@ -11,8 +11,8 @@ async function startWithGargoyle(page: import('@playwright/test').Page) {
 
 test('Hand of Glory: Daylight and See Invisibility are separate actions with their own charges', async ({ page }) => {
   await startWithGargoyle(page);
-  const daylight = page.locator('[data-ability="hog-daylight"]');
-  const seeInvis = page.locator('[data-ability="hog-see-invisibility"]');
+  const daylight = page.locator('[data-activation="hog-daylight"]');
+  const seeInvis = page.locator('[data-activation="hog-see-invisibility"]');
   await expect(daylight).toContainText('Hand of Glory');
   await expect(daylight).toContainText('1/1');
   await daylight.getByRole('button', { name: 'Use' }).click();
@@ -27,7 +27,7 @@ test('distance chip enables Point Blank Shot; Boots of Speed toggle adds an atta
   await page.getByRole('button', { name: '30 ft', exact: true }).click();
   await expect(rows.nth(0)).toContainText('+13'); // Point Blank Shot
   await expect(rows).toHaveCount(2);
-  const boots = page.locator('[data-ability="boots-of-speed"]');
+  const boots = page.locator('[data-activation="boots-rounds"]');
   await expect(boots).toContainText('8/10');
   await boots.getByRole('button', { name: 'Use' }).click();
   await expect(rows).toHaveCount(3); // haste extra attack this round
@@ -51,4 +51,18 @@ test('it hit me: logs enemy action and reduces HP', async ({ page }) => {
   await page.getByRole('button', { name: /Memento/ }).click();
   await expect(page.getByRole('button', { name: '/ 50' })).toBeVisible();
   await expect(page.getByText('43', { exact: true })).toBeVisible();
+});
+
+test('Monster Blow: declare chip lasts one attack and spends its charge', async ({ page }) => {
+  await startWithGargoyle(page);
+  const chip = page.getByRole('button', { name: /⚡ Monster Blow/ });
+  const row = page.locator('[data-activation="monster-blow"]');
+  await expect(chip).toContainText('1/1');
+  await chip.click();
+  await expect(row).toContainText('ACTIVE');
+  await expect(chip).toContainText('0/1');
+  // the declaration is spent by the first attack it applies to
+  await page.locator('[data-attack]').nth(0).getByRole('button', { name: 'Hit' }).click();
+  await expect(row).not.toContainText('ACTIVE');
+  await expect(chip).toContainText('0/1');
 });

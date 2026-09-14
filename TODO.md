@@ -6,11 +6,12 @@
 - [x] **Activations per effect, not per item.** Hand of Glory now grants Daylight and See Invisibility as separate actions with their own charges.
 - [x] **Activatable list with origin.** Each action row shows its granter or class as subtext.
 - [x] Consumables: potions have an item cost (quantity decrements on use); healing amount still entered by hand on the character screen.
-- [ ] Situational modifier: "save to library" to turn a one-off into a reusable ability.
+- [x] Situational modifier: "save to library" (Keep in library) turns a one-off Status into a reusable library record.
 - [x] Attack profiles come from equipped weapon items.
 
 ## Rules builder
-- [x] **Rules v2**: selectors + compare/is/in/exists/history conditions, 13 effect verbs, ability envelope (origin, binding, activation, cost, duration, reset policy, grants). See `docs/RULES-FORMAT.md`.
+- [x] **Rules v2**: selectors + compare/is/in/exists/history conditions, 13 effect verbs, ability envelope (origin, binding, activation, cost, duration, reset policy, grants).
+- [x] Record kinds (Features / Items / Spells / Statuses) with activations; rules v3. See `docs/RULES-FORMAT.md`.
 - [ ] Builder: friendlier presets ("+N to a stat vs a creature type" templates) on top of the generic blocks.
 - [ ] Preview an effect against a sample target inside the editor.
 

@@ -14,6 +14,6 @@ npm run serve        # production build + static server on port 4173, no live-re
 Open `http://<mac-ip>:4173` in Chrome on the phone (same Wi-Fi), then menu → "Add to Home screen". It installs as a standalone app with offline cache; data lives in the phone's browser storage. Do not use `npm run dev` on the phone: its live-reload socket refreshes the page every time the tab is suspended.
 
 After changing code: run `npm run serve` again; the installed app picks up the new version on its next launch.
-- `packs/` — authored content (JSON). Source of truth for feats/items/monsters.
+- `packs/` — authored content (JSON). Source of truth for features/items/spells/statuses/monsters; the record format is v3, documented in `docs/RULES-FORMAT.md`.
 - `tools/` — scripts: pack validation, bestiary extraction, RPG Scribe import.
 - `docs/superpowers/specs/` — design spec.

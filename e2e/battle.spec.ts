@@ -43,10 +43,11 @@ test('gargoyle fight: knowledge check, woodland archer +4 after a miss, monster 
   await rows.nth(1).getByRole('button', { name: 'Hit' }).click();
   await expect(page.getByText('Flanked').first()).toBeVisible();
 
-  // monster blow: declare toggle shows; usable 1/1; use it → 0/1
-  await expect(page.getByText('Monster Blow 1/1')).toBeVisible();
-  await page.locator('[data-ability="monster-blow"]').getByRole('button', { name: 'Use' }).click();
-  await expect(page.getByText('Monster Blow 0/1')).toBeVisible();
+  // monster blow: declare chip shows; usable 1/1; use it → 0/1
+  const blowChip = page.getByRole('button', { name: /⚡ Monster Blow/ });
+  await expect(blowChip).toContainText('1/1');
+  await page.locator('[data-activation="monster-blow"]').getByRole('button', { name: 'Use' }).click();
+  await expect(blowChip).toContainText('0/1');
 
   // next round clears the +4
   await page.getByRole('button', { name: /Next round/ }).click();
