@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useStore } from '../store/store';
 import { storage } from '../storage';
 import { Button, Section, inputCls } from '../components/ui';
+import { BUILD, checkForUpdate } from '../pwa';
 
 export function SettingsScreen() {
   const s = useStore();
   const [paste, setPaste] = useState('');
   const [result, setResult] = useState<string | undefined>();
   const [overwrite, setOverwrite] = useState(false);
+  const [update, setUpdate] = useState<string | undefined>();
 
   const report = (r: ReturnType<typeof s.importText>) => {
     if (r.error) { setResult(`Import failed:\n${r.error}`); return; }
@@ -51,7 +53,11 @@ export function SettingsScreen() {
       </Section>
 
       <Section title="About" defaultOpen>
-        <p className="text-sm text-zinc-400">Storage: {storage().kind === 'android' ? 'Android app storage' : 'browser IndexedDB'}. Battles kept: {s.pastBattles.length}.</p>
+        <p className="text-sm text-zinc-400">Build {BUILD}. Storage: {storage().kind === 'android' ? 'Android app storage' : 'browser IndexedDB'}. Battles kept: {s.pastBattles.length}.</p>
+        <div className="mt-2 flex items-center gap-2">
+          <Button onClick={async () => { setUpdate('Checking…'); const r = await checkForUpdate(); setUpdate({ reloading: 'New version found, reloading…', 'up-to-date': 'Already on the latest version.', unsupported: 'Updates are handled by the browser here.', offline: 'Offline: could not check.' }[r]); }}>Check for update</Button>
+          {update && <span className="text-xs text-zinc-400">{update}</span>}
+        </div>
       </Section>
     </div>
   );

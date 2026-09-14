@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import './pwa';
 import App from './App.tsx';
 import { useStore } from './store/store';
 import { App as CapApp } from '@capacitor/app';

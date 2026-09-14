@@ -2,10 +2,19 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vite';
+import { execSync } from 'node:child_process';
+
+function buildStamp(): string {
+  let sha = 'dev';
+  try { sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { /* no git */ }
+  const t = new Date();
+  return `${sha} · ${t.toISOString().slice(0, 16).replace('T', ' ')}`;
+}
 
 export default defineConfig({
   // GitHub Pages serves the app under /<repo>/; set BASE_PATH in CI. Local dev/preview stay at '/'.
   base: process.env.BASE_PATH ?? '/',
+  define: { __BUILD__: JSON.stringify(buildStamp()) },
   plugins: [
     react(),
     tailwindcss(),
