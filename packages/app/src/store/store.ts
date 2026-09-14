@@ -51,6 +51,27 @@ function fullEmpty(): FullLibrary {
   return { ...emptyLibrary(), monsters: {}, characters: {}, monsterOverlay: {} };
 }
 
+/** Stored rules may be in the old v1/v2 format: convert them. A record that will not parse is left as-is so the user can still see and fix it. */
+function convertAbilities(raw: Record<string, unknown> | undefined): FullLibrary['abilities'] {
+  const abilities = raw ?? {};
+  const lookup = (id: string) => abilities[id] as Record<string, unknown> | undefined;
+  return Object.fromEntries(Object.entries(abilities).map(([id, a]) => { try { return [id, AbilitySchema.parse(convertToV3(a, lookup))]; } catch { return [id, a]; } })) as FullLibrary['abilities'];
+}
+
+/** Parse one stored battle, converting old shapes against the library it points at. */
+function loadBattle(raw: unknown, lib: FullLibrary): Battle {
+  return BattleSchema.parse(convertBattle(raw, (id) => { const a = lib.abilities[id]; return a ? { kind: a.kind, activations: activationsOf(a) } : undefined; }));
+}
+
+/** Past battles can be reopened, so they convert too; one that no longer parses is dropped instead of breaking the load. */
+function loadPastBattles(raw: unknown, lib: FullLibrary): Battle[] {
+  const out: Battle[] = [];
+  for (const b of Array.isArray(raw) ? raw : []) {
+    try { out.push(loadBattle(b, lib)); } catch (e) { console.warn('Dropping a past battle that could not be loaded:', e); }
+  }
+  return out;
+}
+
 export const useStore = create<Store>((set, get) => ({
   hydrated: false,
   library: fullEmpty(),
@@ -73,12 +94,8 @@ export const useStore = create<Store>((set, get) => ({
       set({ library: lib, character: ch, hydrated: true, screen: 'battle' });
       return;
     }
-    // Stored rules may be in the old v1/v2 format: convert.
-    const rawAbilities = (library.abilities ?? {}) as Record<string, unknown>;
-    const lookup = (id: string) => rawAbilities[id] as Record<string, unknown> | undefined;
-    const converted = Object.fromEntries(Object.entries(rawAbilities).map(([id, a]) => { try { return [id, AbilitySchema.parse(convertToV3(a, lookup))]; } catch { return [id, a]; } })) as FullLibrary['abilities'];
     // Built-in packs newer than what this install has seen get merged in (same-pack newer version wins; user edits to other packs untouched).
-    let lib: FullLibrary = { ...fullEmpty(), ...library, abilities: converted };
+    let lib: FullLibrary = { ...fullEmpty(), ...library, abilities: convertAbilities(library.abilities as Record<string, unknown> | undefined) };
     const updated: string[] = [];
     for (const p of defaultPacks) {
       const seen = Math.max(0, ...Object.values(lib.meta).filter((m) => m.packId === p.id).map((m) => m.version));
@@ -87,8 +104,8 @@ export const useStore = create<Store>((set, get) => ({
     set({
       library: lib,
       character: character ? CharacterSchema.parse(character) : Object.values(library.characters ?? {})[0],
-      battle: battle ? BattleSchema.parse(convertBattle(battle, (id) => { const a = lib.abilities[id]; return a ? { kind: a.kind, activations: activationsOf(a) } : undefined; })) : undefined,
-      pastBattles: past ?? [],
+      battle: battle ? loadBattle(battle, lib) : undefined,
+      pastBattles: loadPastBattles(past, lib),
       screen: screen ?? 'battle',
       hydrated: true,
     });
@@ -144,15 +161,12 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const raw = JSON.parse(text);
       if (raw?.kind !== 'hl-backup') return 'Not a Hunter\'s Ledger backup file';
-      const rawAbilities = (raw.library?.abilities ?? {}) as Record<string, unknown>;
-      const lookup = (id: string) => rawAbilities[id] as Record<string, unknown> | undefined;
-      const converted = Object.fromEntries(Object.entries(rawAbilities).map(([id, a]) => { try { return [id, AbilitySchema.parse(convertToV3(a, lookup))]; } catch { return [id, a]; } })) as FullLibrary['abilities'];
-      const lib: FullLibrary = { ...fullEmpty(), ...raw.library, abilities: converted };
+      const lib: FullLibrary = { ...fullEmpty(), ...raw.library, abilities: convertAbilities(raw.library?.abilities as Record<string, unknown> | undefined) };
       set({
         library: lib,
         character: raw.character ? CharacterSchema.parse(raw.character) : undefined,
-        battle: raw.battle ? BattleSchema.parse(convertBattle(raw.battle, (id) => { const a = lib.abilities[id]; return a ? { kind: a.kind, activations: activationsOf(a) } : undefined; })) : undefined,
-        pastBattles: raw.pastBattles ?? [],
+        battle: raw.battle ? loadBattle(raw.battle, lib) : undefined,
+        pastBattles: loadPastBattles(raw.pastBattles, lib),
       });
       return undefined;
     } catch (e) {

@@ -242,15 +242,18 @@ export function convertPack(raw: unknown): unknown {
   return { ...raw, abilities: v2.map((a) => convertV2(a, (id) => byId.get(id))) };
 }
 
-/** Stored battles: `situational` → `statuses`; buffs on records with activations get the first activation's id. */
+/** Stored battles: `situational` → `statuses`; in a v2 battle, buffs on records with activations get the first activation's id. Idempotent. */
 export function convertBattle(raw: unknown, lookup: (id: string) => { kind: string; activations?: { id: string }[] } | undefined = () => undefined): unknown {
   if (!isObj(raw)) return raw;
   const out: Any = { ...raw };
-  if (Array.isArray(out.situational)) {
+  // Only a v2 battle serialized `situational`, and only there does a buff without an activationId mean "the record's first activation":
+  // in v3 a buff started by the `grant` verb deliberately has none.
+  const isV2Battle = Array.isArray(out.situational);
+  if (isV2Battle) {
     out.statuses = [...((out.statuses as unknown[]) ?? []), ...(out.situational as unknown[]).map((s) => { const r = convertToV3(s); return r.kind === 'status' ? r : { id: r.id, name: r.name, kind: 'status', effects: r.effects ?? [] }; })];
     delete out.situational;
   }
-  if (Array.isArray(out.activeBuffs)) {
+  if (isV2Battle && Array.isArray(out.activeBuffs)) {
     out.activeBuffs = (out.activeBuffs as Any[]).map((b) => {
       if (!isObj(b) || b.activationId) return b;
       const rec = lookup(b.abilityId as string);

@@ -142,3 +142,22 @@ test('reaction activation sets the trigger on passive blocks and builds no activ
   expect(a.effects[0]!.trigger).toBe('onDamaged');
   expect(activationsOf(a)).toEqual([]);
 });
+
+test('convertBattle leaves a v3 battle alone: a grant buff keeps its missing activationId', () => {
+  const v3Battle = { id: 'b', startedAt: 'now', statuses: [], activeBuffs: [{ instanceId: 'i', abilityId: 'boots-of-speed', owner: 'self', suppressed: false, remainingRounds: 1 }] };
+  const out = convertBattle(v3Battle, (id) => (id === 'boots-of-speed' ? AbilitySchema.parse(convertToV3(boots)) : undefined)) as typeof v3Battle;
+  expect(out).toEqual(v3Battle);
+  expect(out.activeBuffs[0]).not.toHaveProperty('activationId');
+  expect(BattleSchema.parse(out).activeBuffs[0]!.activationId).toBeUndefined();
+});
+
+test('convertPack is idempotent on a v2 pack', () => {
+  const once = convertPack({ id: 'p', name: 'P', version: 1, abilities: [hog, daylight, monsterBlow, shaken, potion] });
+  expect(convertPack(once)).toEqual(once);
+});
+
+test('a v1 situational entry converts to a status', () => {
+  const b = BattleSchema.parse(convertBattle({ id: 'b', startedAt: 'now', situational: [{ id: 'flanking', name: 'Flanking', source: 'situational', effects: [{ id: 'f', do: [{ kind: 'bonus', to: 'attack', value: 2, bonusType: 'untyped' }] }] }] }));
+  expect(b.statuses[0]).toMatchObject({ id: 'flanking', name: 'Flanking', kind: 'status', harmful: false });
+  expect(b.statuses[0]!.effects[0]!.do[0]).toEqual({ verb: 'modify', to: 'attack', value: 2, type: 'untyped', mode: 'add' });
+});
