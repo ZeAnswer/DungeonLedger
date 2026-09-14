@@ -14,6 +14,8 @@ function equippedItems(ctx: EvalContext): { ability: Ability; entry: EvalContext
   return ctx.character.inventory.filter((i) => i.equipped && i.abilityId).map((i) => ({ ability: ctx.library.abilities[i.abilityId!]!, entry: i })).filter((x) => !!x.ability);
 }
 
+function itemMeta(a: Ability | undefined) { return a && a.kind === 'item' ? a.item : undefined; }
+
 /** Read a dot-path selector against the current context. Unknown paths return undefined. */
 export function readSelector(ctx: EvalContext, sel: string): SelValue {
   const p = sel.split('.');
@@ -39,10 +41,10 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
           const inst = c.abilities.find((a) => a.abilityId === id);
           const suppressed = !!ctx.battle?.suppressedAbilities.includes(id);
           if (what === 'enabled') return !!inst?.enabled && !suppressed;
-          if (what === 'active') return !suppressed && !!ctx.battle?.activeBuffs.some((b) => b.abilityId === id && b.owner === 'self' && !b.suppressed);
+          if (what === 'active') return !suppressed && !!ctx.battle?.activeBuffs.some((b) => (b.abilityId === id || b.activationId === id) && b.owner === 'self' && !b.suppressed);
           if (what === 'usesLeft' || what === 'used') {
-            const a = ctx.library.abilities[id]; const r = a?.resources[0]; if (!r) return undefined;
-            const max = evalExpr(r.max, exprVarsRaw(ctx)); const used = resourceUsed(ctx, r.id, r.resetOn);
+            const def = findResourceDef(ctx, id); if (!def) return undefined;
+            const max = evalExpr(def.def.max, exprVarsRaw(ctx)); const used = resourceUsed(ctx, def.def.id, def.def.resetOn);
             return what === 'used' ? used : max - used;
           }
           return undefined;
@@ -57,9 +59,9 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
           const kind = p[2]; const key = p.slice(3).join('.');
           const eq = equippedItems(ctx);
           if (kind === 'item') return eq.some((x) => x.ability.id === key);
-          if (kind === 'slot') return eq.filter((x) => x.ability.item?.slot === key).length;
-          if (kind === 'category') return eq.filter((x) => x.ability.item?.category === key).length;
-          if (kind === 'count' && p[3] === 'tag') { const tag = p.slice(4).join('.'); return eq.filter((x) => x.ability.item?.tags.includes(tag)).length; }
+          if (kind === 'slot') return eq.filter((x) => itemMeta(x.ability)?.slot === key).length;
+          if (kind === 'category') return eq.filter((x) => itemMeta(x.ability)?.category === key).length;
+          if (kind === 'count' && p[3] === 'tag') { const tag = p.slice(4).join('.'); return eq.filter((x) => itemMeta(x.ability)?.tags.includes(tag)).length; }
           return undefined;
         }
         case 'param': {
@@ -107,8 +109,8 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
         case 'weapon': {
           const w = a.weaponAbilityId ? ctx.library.abilities[a.weaponAbilityId] : undefined;
           if (rest === 'id') return a.weaponAbilityId;
-          if (rest === 'category') return w?.item?.category;
-          if (p[2] === 'tag') return !!w?.item?.tags.includes(p.slice(3).join('.'));
+          if (rest === 'category') return itemMeta(w)?.category;
+          if (p[2] === 'tag') return !!itemMeta(w)?.tags.includes(p.slice(3).join('.'));
           return undefined;
         }
         default: return undefined;

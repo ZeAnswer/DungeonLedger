@@ -1,4 +1,4 @@
-import { targetTags, targetTagsInCategory, type EvalContext } from './context';
+import { findResourceDef, targetTags, targetTagsInCategory, type EvalContext } from './context';
 import type { Battle, HistoryFilter, LogEvent } from './schema';
 
 function inScope(e: LogEvent, battle: Battle, scope: HistoryFilter['scope']): boolean {
@@ -33,7 +33,7 @@ export function countHistory(ctx: EvalContext, f: HistoryFilter): number {
       case 'miss': if (!((e.kind === 'attack' && e.result === 'miss' && vsOk(e.targetId)) || (e.kind === 'enemy' && e.result === 'miss' && vsOk(e.actor)))) continue; break;
       case 'crit': if (!((e.kind === 'attack' && e.result === 'crit' && vsOk(e.targetId)) || (e.kind === 'enemy' && e.result === 'crit' && vsOk(e.actor)))) continue; break;
       case 'damaged': if (!(e.kind === 'enemy' && (e.damage ?? 0) > 0 && vsOk(e.actor))) continue; break;
-      case 'used': if (!(e.kind === 'use' && (!f.abilityId || e.abilityId === f.abilityId) && (f.vs === 'any' || vsOk(e.targetId)))) continue; break;
+      case 'used': if (!(e.kind === 'use' && (!f.abilityId || e.abilityId === f.abilityId || e.activationId === f.abilityId) && (f.vs === 'any' || vsOk(e.targetId)))) continue; break;
       case 'activated': if (!(e.kind === 'activate' && (!f.abilityId || e.abilityId === f.abilityId))) continue; break;
       case 'moved': if (e.kind !== 'move') continue; break;
     }
@@ -41,8 +41,8 @@ export function countHistory(ctx: EvalContext, f: HistoryFilter): number {
   }
   // 'day' scope: also count today's uses recorded on the character (previous battles)
   if (f.scope === 'day' && f.event === 'used' && f.abilityId && f.vs === 'any') {
-    const a = ctx.library.abilities[f.abilityId];
-    for (const r of a?.resources ?? []) if (r.resetOn === 'day') n = Math.max(n, ctx.character.resourceState[r.id]?.used ?? 0);
+    const def = findResourceDef(ctx, f.abilityId);
+    if (def && def.def.resetOn === 'day') n = Math.max(n, ctx.character.resourceState[def.def.id]?.used ?? 0);
   }
   return n;
 }

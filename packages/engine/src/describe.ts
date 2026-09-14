@@ -1,12 +1,17 @@
 import type { EvalContext } from './context';
 import { evalCondition } from './conditions';
-import type { Condition, Effect, HistoryFilter } from './schema';
+import { activationsOf, type Condition, type Effect, type HistoryFilter } from './schema';
 
 function tagLabel(ctx: EvalContext, id: string): string {
   return ctx.library.tags[id]?.label ?? id;
 }
-function abilityName(ctx: EvalContext, id: string): string {
-  return ctx.library.abilities[id]?.name ?? id;
+
+/** Name of a record or of an activation by id. */
+export function nameOf(ctx: EvalContext, id: string): string {
+  const rec = ctx.library.abilities[id] ?? ctx.battle?.statuses.find((s) => s.id === id);
+  if (rec) return rec.name;
+  for (const a of Object.values(ctx.library.abilities)) for (const act of activationsOf(a)) if (act.id === id) return act.name ?? a.name;
+  return id;
 }
 
 /** Human phrase for a selector path. */
@@ -30,9 +35,9 @@ export function describeSelector(ctx: EvalContext, sel: string): string {
     case 'self':
       switch (p[1]) {
         case 'tag': return `you are ${tagLabel(ctx, rest)}`;
-        case 'ability': return `${abilityName(ctx, p.slice(2, -1).join('.'))} ${p[p.length - 1] === 'active' ? 'is active' : p[p.length - 1] === 'enabled' ? 'is enabled' : p[p.length - 1]}`;
+        case 'ability': return `${nameOf(ctx, p.slice(2, -1).join('.'))} ${p[p.length - 1] === 'active' ? 'is active' : p[p.length - 1] === 'enabled' ? 'is enabled' : p[p.length - 1]}`;
         case 'resource': return `${p.slice(2, -1).join('.')} ${p[p.length - 1]}`;
-        case 'equipped': return p[2] === 'item' ? `${abilityName(ctx, p.slice(3).join('.'))} equipped` : `equipped ${p.slice(2).join(' ')}`;
+        case 'equipped': return p[2] === 'item' ? `${nameOf(ctx, p.slice(3).join('.'))} equipped` : `equipped ${p.slice(2).join(' ')}`;
         case 'skill': return `${ctx.library.skills[p.slice(2, -1).join('.')]?.name ?? p[2]} ${p[p.length - 1]}`;
         case 'class': return `${ctx.library.classTables[p.slice(2, -1).join('.')]?.name ?? p[2]} level`;
         case 'stat': return rest;
@@ -51,7 +56,7 @@ export function describeSelector(ctx: EvalContext, sel: string): string {
       }
     case 'battle':
       switch (p[1]) {
-        case 'toggle': return `"${rest}" declared`;
+        case 'toggle': return `"${rest}" switched on`;
         case 'prompt': return `${rest} check entered`;
         case 'round': return 'round';
         case 'tag': return `battle is ${tagLabel(ctx, rest)}`;
@@ -63,7 +68,7 @@ export function describeSelector(ctx: EvalContext, sel: string): string {
 }
 
 function describeHistory(ctx: EvalContext, f: HistoryFilter): string {
-  const what = { hit: 'hit', miss: 'missed', crit: 'critted', attack: 'attacked', used: `used ${f.abilityId ? abilityName(ctx, f.abilityId) : 'ability'}`, activated: 'activated', damaged: 'damaged', moved: 'moved' }[f.event];
+  const what = { hit: 'hit', miss: 'missed', crit: 'critted', attack: 'attacked', used: `used ${f.abilityId ? nameOf(ctx, f.abilityId) : 'ability'}`, activated: 'activated', damaged: 'damaged', moved: 'moved' }[f.event];
   const who = f.by === 'me' ? 'you' : f.by === 'target' ? 'the target' : 'anyone';
   const vs = f.vs === 'current' ? (f.by === 'target' ? ' you' : ' this target') : f.vs === 'sameCategory' ? ` a ${f.category ?? 'similar'} target` : '';
   const when = { thisRound: 'this round', thisAttackSequence: 'this round', lastRound: 'last round', encounter: 'this battle', day: 'today' }[f.scope];

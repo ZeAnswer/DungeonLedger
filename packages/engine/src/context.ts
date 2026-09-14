@@ -1,4 +1,5 @@
-import type { Ability, AttackKind, AttackProfile, Battle, Character, ClassTable, Combatant, Skill, Tag } from './schema';
+import { activationsOf, poolsOf, type Ability, type AttackKind, type AttackProfile, type Battle, type Character, type ClassTable, type Combatant, type Expr, type ResetOn, type Skill, type Tag } from './schema';
+export type { ResetOn };
 
 export type Library = {
   abilities: Record<string, Ability>;
@@ -62,19 +63,24 @@ export function promptKey(ctx: EvalContext, promptId: string, perTagCategory?: s
   return cat ? `${promptId}:${cat}` : undefined;
 }
 
-export function findResourceDef(ctx: EvalContext, resourceId: string) {
-  for (const inst of ctx.character.abilities) {
-    const def = ctx.library.abilities[inst.abilityId]?.resources.find((r) => r.id === resourceId);
-    if (def) return { def, abilityId: inst.abilityId };
+export type ResourceDef = { id: string; label?: string; max: Expr; resetOn: ResetOn };
+
+/** A charge definition by pool id, activation id, or record id (first activation with charges, else first pool). */
+export function findResourceDef(ctx: EvalContext, id: string): { def: ResourceDef; abilityId: string } | undefined {
+  const records = [...Object.values(ctx.library.abilities), ...(ctx.battle?.statuses ?? [])];
+  for (const a of records) {
+    for (const act of activationsOf(a)) if (act.id === id && act.charges) return { def: { id: act.id, ...(act.charges.label ? { label: act.charges.label } : {}), max: act.charges.max, resetOn: act.charges.resetOn }, abilityId: a.id };
+    for (const p of poolsOf(a)) if (p.id === id) return { def: p, abilityId: a.id };
   }
-  for (const a of [...Object.values(ctx.library.abilities), ...(ctx.battle?.situational ?? [])]) {
-    const def = a.resources.find((r) => r.id === resourceId);
-    if (def) return { def, abilityId: a.id };
+  const rec = ctx.library.abilities[id];
+  if (rec) {
+    const act = activationsOf(rec).find((x) => x.charges);
+    if (act) return findResourceDef(ctx, act.id);
+    const pool = poolsOf(rec)[0];
+    if (pool) return { def: pool, abilityId: rec.id };
   }
   return undefined;
 }
-
-export type ResetOn = 'round' | 'encounter' | 'day' | 'rest' | 'manual' | 'never';
 
 /** Where a resource's usage counter lives: round/encounter on the battle, everything else on the character. */
 export function resourceUsed(ctx: EvalContext, resourceId: string, resetOn: ResetOn): number {

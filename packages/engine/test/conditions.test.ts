@@ -1,12 +1,17 @@
 import { evalCondition } from '../src/conditions';
 import { convertCondition } from '../src/migrate';
-import { makeCtx, makeBattle, makeCombatant, makeAbility, makeCharacter, ev } from './fixtures';
+import { AbilitySchema } from '../src/schema';
+import { readSelector } from '../src/selectors';
+import { describeSelector } from '../src/describe';
+import { makeCtx, makeBattle, makeCombatant, makeCharacter, ev } from './fixtures';
 
 const gargoyle = makeCombatant({ id: 'g1', tags: ['monstrous-humanoid'], size: 'medium', hurt: 'bloodied' });
 const chuul = makeCombatant({ id: 'c1', tags: ['aberration', 'aquatic'], size: 'large', conditions: [{ tag: 'flanked' }] });
 
-const monsterBlow = makeAbility({ id: 'monster-blow', resources: [{ id: 'monster-blow', max: 1, per: 'day' }] });
-const favored = makeAbility({ id: 'favored-enemy', params: { types: { kind: 'tags', category: 'creatureType', count: 2 } } });
+// NOTE: makeAbility (fixtures.ts) only converts v1 -> v2 and no longer parses against the v3 AbilitySchema;
+// it's slated for a fixtures update in a later task. Build these two records directly against v3 in the meantime.
+const monsterBlow = AbilitySchema.parse({ id: 'monster-blow', name: 'monster-blow', kind: 'feature', pools: [{ id: 'monster-blow', max: 1, resetOn: 'day' }] });
+const favored = AbilitySchema.parse({ id: 'favored-enemy', name: 'favored-enemy', kind: 'feature', params: { types: { kind: 'tags', category: 'creatureType', count: 2 } } });
 
 function ctx(over: Parameters<typeof makeCtx>[0] = {}) {
   const battle = makeBattle({ round: 2, combatants: [gargoyle, chuul], toggles: { flanking: true }, prompts: { 'knowledge:aberration': 22 } });
@@ -114,4 +119,16 @@ test('param leaf matches character selections against target tags', () => {
   expect(t({ kind: 'param', name: 'types', includesTargetTag: true }, c)).toBe(true);
   const g = ctx({ target: gargoyle, abilityInstance: { abilityId: 'favored-enemy', enabled: true, paramValues: { types: ['aberration', 'magical-beast'] } } });
   expect(t({ kind: 'param', name: 'types', includesTargetTag: true }, g)).toBe(false);
+});
+
+test('self.ability.<id> reads activation and record state; usesLeft by pool, activation or record id', () => {
+  const boots = AbilitySchema.parse({ id: 'boots', name: 'Boots', kind: 'item', item: { category: 'wondrous', slot: 'feet' }, activations: [{ id: 'boots-rounds', action: 'free', charges: { max: 10 }, duration: 'untilMyNextTurn' }] });
+  const c = makeCtx({ character: makeCharacter({ abilities: [{ abilityId: 'boots', enabled: true, paramValues: {} }], resourceState: { 'boots-rounds': { used: 3 } } }), battle: makeBattle({ activeBuffs: [{ instanceId: 'i', abilityId: 'boots', activationId: 'boots-rounds', owner: 'self', suppressed: false, remainingRounds: 1 }] }) });
+  c.library.abilities['boots'] = boots;
+  expect(readSelector(c, 'self.ability.boots.active')).toBe(true);
+  expect(readSelector(c, 'self.ability.boots-rounds.active')).toBe(true);
+  expect(readSelector(c, 'self.ability.boots.usesLeft')).toBe(7);
+  expect(readSelector(c, 'self.ability.boots-rounds.used')).toBe(3);
+  expect(readSelector(c, 'self.resource.boots-rounds.left')).toBe(7);
+  expect(describeSelector(c, 'self.ability.boots-rounds.active')).toBe('Boots is active');
 });
