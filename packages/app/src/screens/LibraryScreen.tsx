@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MonsterSchema, TagSchema, type Ability, type Monster, type RecordKind, type Size, type Tag, activationsOf } from '@hl/engine';
+import { ItemCategorySchema, MonsterSchema, TagSchema, type Ability, type Monster, type RecordKind, type Size, type Tag, activationsOf } from '@hl/engine';
 import { useStore } from '../store/store';
 import { Button, Chip, Field, Sheet, cx, humanize, inputCls } from '../components/ui';
 import { RecordEditor, freshRecord } from '../components/library/RecordEditor';
@@ -31,8 +31,8 @@ const FILTERS: Record<RecordKind, { id: string; label: string; test: (a: Ability
     { id: 'race', label: 'racial', test: (a) => a.kind === 'feature' && a.acquired.kind === 'race' },
     { id: 'dm', label: 'DM / memories', test: (a) => a.kind === 'feature' && a.acquired.kind === 'dm' },
   ],
-  item: ['weapon', 'armor', 'shield', 'wondrous', 'potion', 'wand', 'trophy', 'material', 'gear'].map((c) => ({ id: c, label: c, test: (a: Ability) => a.kind === 'item' && a.item.category === c })),
-  spell: [0, 1, 2, 3, 4].map((l) => ({ id: String(l), label: `level ${l}`, test: (a: Ability) => a.kind === 'spell' && a.level === l })),
+  item: ItemCategorySchema.options.map((c) => ({ id: c, label: c, test: (a: Ability) => a.kind === 'item' && a.item.category === c })),
+  spell: Array.from({ length: 10 }, (_, l) => ({ id: String(l), label: `level ${l}`, test: (a: Ability) => a.kind === 'spell' && a.level === l })),
   status: [{ id: 'buff', label: 'buffs', test: (a) => a.kind === 'status' && !a.harmful }, { id: 'harmful', label: 'conditions', test: (a) => a.kind === 'status' && a.harmful }],
 };
 
@@ -48,6 +48,8 @@ function subtitle(a: Ability, classes: Record<string, { name: string }>): string
   if (a.todo) parts.push('⚑ ' + a.todo);
   return parts.join(' · ');
 }
+
+const PLURALS: Record<RecordKind, string> = { feature: 'features', item: 'items', spell: 'spells', status: 'statuses' };
 
 function RecordsTab({ kind }: { kind: RecordKind }) {
   const library = useStore((s) => s.library);
@@ -82,7 +84,7 @@ function RecordsTab({ kind }: { kind: RecordKind }) {
   const NEW_LABEL = { feature: '+ New feature', item: '+ New item', spell: '+ New spell', status: '+ New status' }[kind];
   return (
     <div>
-      <div className="mb-2 flex gap-2"><input className={inputCls} placeholder={`Search ${kind}s…`} value={q} onChange={(e) => setQ(e.target.value)} /><Button onClick={() => setEditing(freshRecord(kind))}>{NEW_LABEL}</Button></div>
+      <div className="mb-2 flex gap-2"><input className={inputCls} placeholder={`Search ${PLURALS[kind]}…`} value={q} onChange={(e) => setQ(e.target.value)} /><Button onClick={() => setEditing(freshRecord(kind))}>{NEW_LABEL}</Button></div>
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1">{filters.map((f) => <Chip key={f.id} active={filter === f.id} onClick={() => setFilter(filter === f.id ? undefined : f.id)}>{f.label}</Chip>)}</div>
       <div className="space-y-1">
         {list.map((a) => (
@@ -94,7 +96,7 @@ function RecordsTab({ kind }: { kind: RecordKind }) {
             {character && kind === 'feature' && <button type="button" onClick={() => toggleOnChar(a.id)} className={cx('rounded-full border px-2 py-0.5 text-xs', onChar(a.id) ? 'border-amber-500 text-amber-300' : 'border-zinc-700 text-zinc-500')}>{onChar(a.id) ? 'on sheet' : 'add'}</button>}
           </div>
         ))}
-        {list.length === 0 && <p className="text-sm text-zinc-500">Nothing here yet.</p>}
+        {list.length === 0 && <p className="text-sm text-zinc-500">No {PLURALS[kind]} yet.</p>}
       </div>
       <Sheet open={!!editing} onClose={() => setEditing(undefined)} title={editing?.name || NEW_LABEL.slice(2)} tall>
         {editing && <RecordEditor key={editing.id} initial={editing} onSave={save} onCancel={() => setEditing(undefined)} onDelete={library.abilities[editing.id] ? remove : undefined} />}
