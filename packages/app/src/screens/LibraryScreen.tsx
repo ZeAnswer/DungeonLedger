@@ -1,39 +1,66 @@
 import { useState } from 'react';
-import { MonsterSchema, TagSchema, type Ability, type Monster, type Size, type Tag } from '@hl/engine';
+import { MonsterSchema, TagSchema, type Ability, type Monster, type RecordKind, type Size, type Tag, activationsOf } from '@hl/engine';
 import { useStore } from '../store/store';
 import { Button, Chip, Field, Sheet, cx, humanize, inputCls } from '../components/ui';
-import { AbilityEditor } from '../components/library/AbilityEditor';
+import { RecordEditor, freshRecord } from '../components/library/RecordEditor';
 
-const SOURCES = ['feat', 'classFeature', 'item', 'memory', 'buff', 'condition', 'spell', 'situational', 'core'] as const;
 const CATEGORIES = ['creatureType', 'subtype', 'habitat', 'condition', 'custom'] as const;
 const SIZES: Size[] = ['fine', 'diminutive', 'tiny', 'small', 'medium', 'large', 'huge', 'gargantuan', 'colossal'];
 
+type Tab = RecordKind | 'tags' | 'monsters';
+const TABS: { id: Tab; label: string }[] = [{ id: 'feature', label: 'Features' }, { id: 'item', label: 'Items' }, { id: 'spell', label: 'Spells' }, { id: 'status', label: 'Statuses' }, { id: 'tags', label: 'Tags' }, { id: 'monsters', label: 'Monsters' }];
+
 export function LibraryScreen() {
-  const [tab, setTab] = useState<'abilities' | 'tags' | 'monsters'>('abilities');
+  const [tab, setTab] = useState<Tab>(() => { try { return (localStorage.getItem('hl.libraryTab') as Tab) || 'feature'; } catch { return 'feature'; } });
+  const pick = (t: Tab) => { setTab(t); try { localStorage.setItem('hl.libraryTab', t); } catch { /* ignore */ } };
   return (
     <div className="p-4">
       <h1 className="mb-3 text-2xl font-bold">Library</h1>
-      <div className="mb-3 flex gap-1 rounded-xl bg-zinc-900 p-1">
-        {(['abilities', 'tags', 'monsters'] as const).map((t) => <button key={t} type="button" onClick={() => setTab(t)} className={cx('flex-1 rounded-lg py-1.5 text-sm', tab === t ? 'bg-zinc-700 text-white' : 'text-zinc-400')}>{humanize(t)}</button>)}
+      <div className="mb-3 flex gap-1 overflow-x-auto rounded-xl bg-zinc-900 p-1">
+        {TABS.map((t) => <button key={t.id} type="button" onClick={() => pick(t.id)} className={cx('flex-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-sm', tab === t.id ? 'bg-zinc-700 text-white' : 'text-zinc-400')}>{t.label}</button>)}
       </div>
-      {tab === 'abilities' && <Abilities />}
-      {tab === 'tags' && <Tags />}
-      {tab === 'monsters' && <Monsters />}
+      {tab === 'tags' ? <Tags /> : tab === 'monsters' ? <Monsters /> : <RecordsTab key={tab} kind={tab} />}
     </div>
   );
 }
 
-function Abilities() {
+const FILTERS: Record<RecordKind, { id: string; label: string; test: (a: Ability) => boolean }[]> = {
+  feature: [
+    { id: 'feat', label: 'feats', test: (a) => a.kind === 'feature' && a.acquired.kind === 'feat' },
+    { id: 'class', label: 'class features', test: (a) => a.kind === 'feature' && a.acquired.kind === 'class' },
+    { id: 'race', label: 'racial', test: (a) => a.kind === 'feature' && a.acquired.kind === 'race' },
+    { id: 'dm', label: 'DM / memories', test: (a) => a.kind === 'feature' && a.acquired.kind === 'dm' },
+  ],
+  item: ['weapon', 'armor', 'shield', 'wondrous', 'potion', 'wand', 'trophy', 'material', 'gear'].map((c) => ({ id: c, label: c, test: (a: Ability) => a.kind === 'item' && a.item.category === c })),
+  spell: [0, 1, 2, 3, 4].map((l) => ({ id: String(l), label: `level ${l}`, test: (a: Ability) => a.kind === 'spell' && a.level === l })),
+  status: [{ id: 'buff', label: 'buffs', test: (a) => a.kind === 'status' && !a.harmful }, { id: 'harmful', label: 'conditions', test: (a) => a.kind === 'status' && a.harmful }],
+};
+
+function subtitle(a: Ability, classes: Record<string, { name: string }>): string {
+  const acts = activationsOf(a);
+  const parts: string[] = [];
+  if (a.kind === 'feature') parts.push(a.acquired.kind === 'class' ? `${classes[a.acquired.classId ?? '']?.name ?? 'class'}${a.acquired.level ? ` ${a.acquired.level}` : ''}` : { feat: 'feat', race: 'racial', dm: 'DM' }[a.acquired.kind]);
+  if (a.kind === 'item') parts.push(a.item.category);
+  if (a.kind === 'spell') parts.push(a.level !== undefined ? `level ${a.level}` : 'spell');
+  if (a.kind === 'status') parts.push(a.harmful ? 'condition' : 'buff');
+  if (a.effects.length) parts.push(`${a.effects.length} effect${a.effects.length === 1 ? '' : 's'}`);
+  if (acts.length) parts.push(`${acts.length} activation${acts.length === 1 ? '' : 's'}`);
+  if (a.todo) parts.push('⚑ ' + a.todo);
+  return parts.join(' · ');
+}
+
+function RecordsTab({ kind }: { kind: RecordKind }) {
   const library = useStore((s) => s.library);
   const setLibrary = useStore((s) => s.setLibrary);
   const character = useStore((s) => s.character);
   const setCharacter = useStore((s) => s.setCharacter);
   const showToast = useStore((s) => s.showToast);
   const [q, setQ] = useState('');
-  const [src, setSrc] = useState<string | undefined>();
+  const [filter, setFilter] = useState<string | undefined>();
   const [editing, setEditing] = useState<Ability | undefined>();
-
-  const list = Object.values(library.abilities).filter((a) => (!q || a.name.toLowerCase().includes(q.toLowerCase())) && (!src || a.origin === src)).sort((a, b) => a.name.localeCompare(b.name));
+  const filters = FILTERS[kind];
+  const active = filters.find((f) => f.id === filter);
+  const list = Object.values(library.abilities).filter((a) => a.kind === kind && (!q || a.name.toLowerCase().includes(q.toLowerCase())) && (!active || active.test(a))).sort((a, b) => a.name.localeCompare(b.name));
   const onChar = (id: string) => character?.abilities.some((x) => x.abilityId === id);
   const save = (parsed: Ability) => {
     const rest = { ...library.abilities };
@@ -52,25 +79,25 @@ function Abilities() {
     if (!character) return;
     setCharacter(onChar(id) ? { ...character, abilities: character.abilities.filter((x) => x.abilityId !== id) } : { ...character, abilities: [...character.abilities, { abilityId: id, enabled: true, paramValues: {} }] });
   };
-  const fresh = (): Ability => ({ id: `new-${Date.now().toString(36)}`, name: 'New ability', origin: 'feat', binding: 'none', activation: 'passive', cost: [], resources: [], grants: [], enabledByDefault: true, effects: [{ id: 'e1', trigger: 'always', when: { all: [] }, do: [{ verb: 'modify', to: 'attack', value: 1, type: 'untyped', mode: 'add' }] }] });
-
+  const NEW_LABEL = { feature: '+ New feature', item: '+ New item', spell: '+ New spell', status: '+ New status' }[kind];
   return (
     <div>
-      <div className="mb-2 flex gap-2"><input className={inputCls} placeholder="Search abilities…" value={q} onChange={(e) => setQ(e.target.value)} /><Button onClick={() => setEditing(fresh())}>+ New</Button></div>
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1">{SOURCES.map((s) => <Chip key={s} active={src === s} onClick={() => setSrc(src === s ? undefined : s)}>{s}</Chip>)}</div>
+      <div className="mb-2 flex gap-2"><input className={inputCls} placeholder={`Search ${kind}s…`} value={q} onChange={(e) => setQ(e.target.value)} /><Button onClick={() => setEditing(freshRecord(kind))}>{NEW_LABEL}</Button></div>
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1">{filters.map((f) => <Chip key={f.id} active={filter === f.id} onClick={() => setFilter(filter === f.id ? undefined : f.id)}>{f.label}</Chip>)}</div>
       <div className="space-y-1">
         {list.map((a) => (
           <div key={a.id} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2">
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setEditing(a)}>
               <div className="truncate">{a.name}</div>
-              <div className="truncate text-xs text-zinc-500">{a.origin} · {a.effects.length} effect{a.effects.length === 1 ? '' : 's'}{a.todo ? ' · ⚑ ' + a.todo : ''}</div>
+              <div className="truncate text-xs text-zinc-500">{subtitle(a, library.classTables)}</div>
             </button>
-            {character && <button type="button" onClick={() => toggleOnChar(a.id)} className={cx('rounded-full border px-2 py-0.5 text-xs', onChar(a.id) ? 'border-amber-500 text-amber-300' : 'border-zinc-700 text-zinc-500')}>{onChar(a.id) ? 'on sheet' : 'add'}</button>}
+            {character && kind === 'feature' && <button type="button" onClick={() => toggleOnChar(a.id)} className={cx('rounded-full border px-2 py-0.5 text-xs', onChar(a.id) ? 'border-amber-500 text-amber-300' : 'border-zinc-700 text-zinc-500')}>{onChar(a.id) ? 'on sheet' : 'add'}</button>}
           </div>
         ))}
+        {list.length === 0 && <p className="text-sm text-zinc-500">Nothing here yet.</p>}
       </div>
-      <Sheet open={!!editing} onClose={() => setEditing(undefined)} title={editing?.name} tall>
-        {editing && <AbilityEditor key={editing.id} initial={editing} onSave={save} onCancel={() => setEditing(undefined)} onDelete={library.abilities[editing.id] ? remove : undefined} />}
+      <Sheet open={!!editing} onClose={() => setEditing(undefined)} title={editing?.name || NEW_LABEL.slice(2)} tall>
+        {editing && <RecordEditor key={editing.id} initial={editing} onSave={save} onCancel={() => setEditing(undefined)} onDelete={library.abilities[editing.id] ? remove : undefined} />}
       </Sheet>
     </div>
   );
