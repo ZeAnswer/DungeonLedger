@@ -1,4 +1,4 @@
-import { SLOTS, type BonusType, type Duration, type Effect } from '@hl/engine';
+import { SLOTS, type Ability, type BonusType, type Duration, type Effect } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Chip, inputCls } from '../ui';
 import { StatSelect } from './StatSelect';
@@ -41,7 +41,7 @@ function defaultFor(verb: Verb): Effect {
 
 export function DurationPicker({ value, onChange }: { value: Duration; onChange: (d: Duration) => void }) {
   const kind = typeof value === 'object' ? ('rounds' in value ? 'rounds' : 'minutes') : value;
-  const opts: [string, string][] = [['instant', 'instant'], ['thisAttack', 'this attack'], ['thisTurn', 'this turn'], ['untilMyNextTurn', 'until my next turn'], ['endOfRound', 'end of round'], ['rounds', 'N rounds'], ['minutes', 'N minutes'], ['encounter', 'whole battle'], ['untilRemoved', 'until removed'], ['whileActive', 'while active'], ['concentration', 'concentration']];
+  const opts: [string, string][] = [['thisAttack', 'this attack'], ['thisTurn', 'this turn'], ['untilMyNextTurn', 'until my next turn'], ['rounds', 'N rounds'], ['minutes', 'N minutes'], ['encounter', 'whole battle'], ['untilRemoved', 'until removed']];
   return (
     <div className="flex flex-wrap items-center gap-1 text-xs">
       <select className={inputCls + ' w-auto py-1.5'} value={kind} onChange={(e) => { const k = e.target.value; onChange(k === 'rounds' ? { rounds: 3 } : k === 'minutes' ? { minutes: 1 } : (k as Duration)); }}>{opts.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
@@ -58,8 +58,8 @@ export function EffectEditor({ value, onChange, onRemove }: { value: Effect; onC
   const kindChips = (current: 'ranged' | 'melee' | undefined) => (
     <div className="flex gap-1 text-xs"><span className="self-center text-zinc-500">only for</span>{(['any', 'ranged', 'melee'] as const).map((k) => <Chip key={k} active={(current ?? 'any') === k} onClick={() => set({ attackKind: k === 'any' ? undefined : k })}>{k}</Chip>)}</div>
   );
-  const abilitySelect = (cur: string, onSel: (v: string) => void) => (
-    <select className={inputCls} value={cur} onChange={(e) => onSel(e.target.value)}><option value="">— pick ability —</option>{Object.values(abilities).sort((a, b) => a.name.localeCompare(b.name)).map((a) => <option key={a.id} value={a.id}>{a.name} ({a.origin})</option>)}</select>
+  const abilitySelect = (cur: string, onSel: (v: string) => void, only?: (a: Ability) => boolean) => (
+    <select className={inputCls} value={cur} onChange={(e) => onSel(e.target.value)}><option value="">— pick ability —</option>{Object.values(abilities).filter((a) => !only || only(a)).sort((a, b) => a.name.localeCompare(b.name)).map((a) => <option key={a.id} value={a.id}>{a.name} ({a.kind})</option>)}</select>
   );
 
   let body: React.ReactNode = null;
@@ -109,7 +109,7 @@ export function EffectEditor({ value, onChange, onRemove }: { value: Effect; onC
     }
     case 'flag': body = <div className="flex gap-1"><input className={inputCls} list="flag-names" placeholder="ignoreConcealment, neverFlatFooted, immune.fear, sense.darkvision…" value={value.flag} onChange={(e) => set({ flag: e.target.value })} /><datalist id="flag-names"><option value="ignoreConcealment" /><option value="neverFlatFooted" /><option value="immune.fear" /><option value="immune.paralysis" /><option value="sense.darkvision" /><option value="sense.scent" /><option value="canFly" /></datalist><select className={inputCls + ' w-auto'} value={String(value.value)} onChange={(e) => set({ value: e.target.value === 'true' })}><option value="true">on</option><option value="false">off</option></select></div>; break;
     case 'tag': body = <div className="space-y-1"><div className="flex gap-1">{(['target', 'self', 'allEnemies'] as const).map((t) => <Chip key={t} active={value.to === t} onClick={() => set({ to: t })}>{{ target: 'target', self: 'me', allEnemies: 'all enemies' }[t]}</Chip>)}</div><select className={inputCls} value={value.tag} onChange={(e) => set({ tag: e.target.value })}>{Object.values(tags).filter((t) => t.category === 'condition' || t.category === 'custom').sort((a, b) => a.label.localeCompare(b.label)).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select><DurationPicker value={value.duration} onChange={(d) => set({ duration: d })} /></div>; break;
-    case 'grant': body = <div className="space-y-1">{abilitySelect(value.ability, (v) => set({ ability: v }))}<div className="text-xs text-zinc-500">Duration: {value.duration ? '' : "the granted ability's own"}</div>{value.duration && <DurationPicker value={value.duration} onChange={(d) => set({ duration: d })} />}{!value.duration && <button type="button" className="text-sm text-amber-300" onClick={() => set({ duration: { rounds: 5 } })}>+ override duration</button>}</div>; break;
+    case 'grant': body = <div className="space-y-1">{abilitySelect(value.ability, (v) => set({ ability: v }), (x) => x.kind === 'status' || x.kind === 'feature')}<div className="text-xs text-zinc-500">Duration: {value.duration ? '' : "the granted ability's own"}</div>{value.duration && <DurationPicker value={value.duration} onChange={(d) => set({ duration: d })} />}{!value.duration && <button type="button" className="text-sm text-amber-300" onClick={() => set({ duration: { rounds: 5 } })}>+ override duration</button>}</div>; break;
     case 'suppress': body = abilitySelect(value.ability, (v) => set({ ability: v })); break;
     case 'slot': body = <div className="flex items-center gap-2 text-xs text-zinc-400"><select className={inputCls} value={value.slot} onChange={(e) => set({ slot: e.target.value })}>{SLOTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select> +<input className={inputCls + ' w-16'} inputMode="numeric" value={value.count} onChange={(e) => set({ count: Number(e.target.value) || 1 })} /></div>; break;
     case 'resource': body = <div className="flex gap-1"><select className={inputCls + ' w-auto'} value={value.op} onChange={(e) => set({ op: e.target.value })}><option value="consume">spend</option><option value="restore">restore</option><option value="set">set used to</option></select><input className={inputCls + ' w-20'} placeholder="amount" value={String(value.amount)} onChange={(e) => set({ amount: /^\d+$/.test(e.target.value) ? Number(e.target.value) : e.target.value })} /><input className={inputCls} placeholder="resource id" value={value.id} onChange={(e) => set({ id: e.target.value })} /></div>; break;

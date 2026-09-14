@@ -94,13 +94,13 @@ export function SelectorPicker({ value, onChange }: { value: string; onChange: (
       case 'tags': return Object.values(lib.tags).map((t) => ({ id: t.id, label: t.label, group: t.category }));
       case 'conditionTags': return Object.values(lib.tags).filter((t) => t.category === 'condition' || t.category === 'custom').map((t) => ({ id: t.id, label: t.label, group: t.category }));
       case 'skills': return Object.values(lib.skills).map((s) => ({ id: s.id, label: s.name }));
-      case 'abilities': return Object.values(lib.abilities).map((a) => ({ id: a.id, label: a.name, group: a.origin }));
-      case 'items': return Object.values(lib.abilities).filter((a) => a.item).map((a) => ({ id: a.id, label: a.name, group: a.item!.category }));
+      case 'abilities': return Object.values(lib.abilities).map((a) => ({ id: a.id, label: a.name, group: a.kind }));
+      case 'items': return Object.values(lib.abilities).flatMap((a) => (a.kind === 'item' ? [{ id: a.id, label: a.name, group: a.item.category }] : []));
       case 'classes': return Object.values(lib.classTables).map((c) => ({ id: c.id, label: c.name }));
       case 'slots': return SLOTS.map((s) => ({ id: s.id, label: s.label }));
       case 'itemCategories': return ['weapon', 'armor', 'shield', 'ammunition', 'wondrous', 'potion', 'scroll', 'wand', 'tool', 'trophy', 'material', 'gear'].map((c) => ({ id: c, label: c }));
-      case 'itemTags': return [...new Set(Object.values(lib.abilities).flatMap((a) => a.item?.tags ?? []))].map((t) => ({ id: t, label: t }));
-      case 'params': return [...new Set(Object.values(lib.abilities).flatMap((a) => Object.keys(a.params ?? {})))].map((p) => ({ id: p, label: p }));
+      case 'itemTags': return [...new Set(Object.values(lib.abilities).flatMap((a) => (a.kind === 'item' ? a.item.tags : [])))].map((t) => ({ id: t, label: t }));
+      case 'params': return [...new Set(Object.values(lib.abilities).flatMap((a) => (a.kind === 'feature' ? Object.keys(a.params ?? {}) : [])))].map((p) => ({ id: p, label: p }));
       case 'vars': return Object.keys(character?.vars ?? {}).map((v) => ({ id: v, label: v }));
       case 'stats': return STATS.map((s) => ({ id: s, label: s }));
       default: return [];

@@ -10,6 +10,9 @@ const FORMS: { id: Form; label: string; group: string }[] = [
   { id: 'is', label: 'State is true', group: 'State' }, { id: 'compare', label: 'Compare a value', group: 'State' }, { id: 'in', label: 'Target type is one of', group: 'State' }, { id: 'exists', label: 'Value exists', group: 'State' },
   { id: 'history', label: 'Something happened (history)', group: 'Memory' },
 ];
+/** A one-click starter condition offered next to `+ add condition` at the top level. */
+export type Preset = { label: string; make: () => Condition };
+
 const OPS = ['=', '!=', '<', '<=', '>', '>='] as const;
 const SIZES = ['fine', 'diminutive', 'tiny', 'small', 'medium', 'large', 'huge', 'gargantuan', 'colossal'];
 const HURTS = ['unhurt', 'scratched', 'bloodied', 'nearDeath'];
@@ -33,7 +36,7 @@ function defaultFor(form: Form): Condition {
   }
 }
 
-export function ConditionEditor({ value, onChange, onRemove, depth = 0 }: { value: Condition; onChange: (c: Condition) => void; onRemove?: () => void; depth?: number }) {
+export function ConditionEditor({ value, onChange, onRemove, depth = 0, presets }: { value: Condition; onChange: (c: Condition) => void; onRemove?: () => void; depth?: number; presets?: Preset[] }) {
   const tags = useStore((s) => s.library.tags);
   const abilities = useStore((s) => s.library.abilities);
   const form = formOf(value);
@@ -41,7 +44,10 @@ export function ConditionEditor({ value, onChange, onRemove, depth = 0 }: { valu
   const list = (arr: Condition[], key: string) => (
     <div className="space-y-2">
       {arr.map((c, i) => <ConditionEditor key={i} value={c} depth={depth + 1} onChange={(n) => set({ [key]: arr.map((x, j) => (j === i ? n : x)) })} onRemove={() => set({ [key]: arr.filter((_, j) => j !== i) })} />)}
-      <button type="button" className="text-sm text-amber-300" onClick={() => set({ [key]: [...arr, { is: 'target.tag.aquatic' }] })}>+ add condition</button>
+      <div>
+        <button type="button" className="text-sm text-amber-300" onClick={() => set({ [key]: [...arr, { is: 'target.tag.aquatic' }] })}>+ add condition</button>
+        {depth === 0 && presets?.map((p) => <button key={p.label} type="button" className="ml-2 text-sm text-sky-300" onClick={() => set({ [key]: [...arr, p.make()] })}>+ {p.label}</button>)}
+      </div>
     </div>
   );
 
@@ -70,7 +76,7 @@ export function ConditionEditor({ value, onChange, onRemove, depth = 0 }: { valu
       </div>
     );
   } else if ('in' in value) {
-    const params = [...new Set(Object.values(abilities).flatMap((a) => Object.keys(a.params ?? {})))];
+    const params = [...new Set(Object.values(abilities).flatMap((a) => (a.kind === 'feature' ? Object.keys(a.params ?? {}) : [])))];
     body = (
       <div className="space-y-1">
         <SelectorPicker value={value.in} onChange={(s) => set({ in: s })} />
