@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  AbilitySchema, BattleSchema, CharacterSchema, PackSchema, convertV1, emptyLibrary, mergePack, libraryToPack, newBattle,
+  AbilitySchema, BattleSchema, CharacterSchema, PackSchema, convertToV3, convertBattle, emptyLibrary, mergePack, libraryToPack, newBattle, activationsOf,
   type Battle, type Character, type EvalContext, type LibraryWithMeta, type MergeReport, type Monster, type MonsterOverlay, type Pack,
 } from '@hl/engine';
 import { storage } from '../storage';
@@ -73,8 +73,10 @@ export const useStore = create<Store>((set, get) => ({
       set({ library: lib, character: ch, hydrated: true, screen: 'battle' });
       return;
     }
-    // Stored rules may be in the old v1 format: convert.
-    const converted = Object.fromEntries(Object.entries(library.abilities ?? {}).map(([id, a]) => { try { return [id, AbilitySchema.parse(convertV1(a))]; } catch { return [id, a]; } }));
+    // Stored rules may be in the old v1/v2 format: convert.
+    const rawAbilities = (library.abilities ?? {}) as Record<string, unknown>;
+    const lookup = (id: string) => rawAbilities[id] as Record<string, unknown> | undefined;
+    const converted = Object.fromEntries(Object.entries(rawAbilities).map(([id, a]) => { try { return [id, AbilitySchema.parse(convertToV3(a, lookup))]; } catch { return [id, a]; } })) as FullLibrary['abilities'];
     // Built-in packs newer than what this install has seen get merged in (same-pack newer version wins; user edits to other packs untouched).
     let lib: FullLibrary = { ...fullEmpty(), ...library, abilities: converted };
     const updated: string[] = [];
@@ -85,7 +87,7 @@ export const useStore = create<Store>((set, get) => ({
     set({
       library: lib,
       character: character ? CharacterSchema.parse(character) : Object.values(library.characters ?? {})[0],
-      battle: battle ? BattleSchema.parse(battle) : undefined,
+      battle: battle ? BattleSchema.parse(convertBattle(battle, (id) => { const a = lib.abilities[id]; return a ? { kind: a.kind, activations: activationsOf(a) } : undefined; })) : undefined,
       pastBattles: past ?? [],
       screen: screen ?? 'battle',
       hydrated: true,
@@ -142,10 +144,14 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const raw = JSON.parse(text);
       if (raw?.kind !== 'hl-backup') return 'Not a Hunter\'s Ledger backup file';
+      const rawAbilities = (raw.library?.abilities ?? {}) as Record<string, unknown>;
+      const lookup = (id: string) => rawAbilities[id] as Record<string, unknown> | undefined;
+      const converted = Object.fromEntries(Object.entries(rawAbilities).map(([id, a]) => { try { return [id, AbilitySchema.parse(convertToV3(a, lookup))]; } catch { return [id, a]; } })) as FullLibrary['abilities'];
+      const lib: FullLibrary = { ...fullEmpty(), ...raw.library, abilities: converted };
       set({
-        library: { ...fullEmpty(), ...raw.library },
+        library: lib,
         character: raw.character ? CharacterSchema.parse(raw.character) : undefined,
-        battle: raw.battle ? BattleSchema.parse(raw.battle) : undefined,
+        battle: raw.battle ? BattleSchema.parse(convertBattle(raw.battle, (id) => { const a = lib.abilities[id]; return a ? { kind: a.kind, activations: activationsOf(a) } : undefined; })) : undefined,
         pastBattles: raw.pastBattles ?? [],
       });
       return undefined;
@@ -160,8 +166,8 @@ export const useStore = create<Store>((set, get) => ({
     const packChar = defaultPacks.flatMap((p) => p.characters).find((c) => c.id === character.id);
     if (!packChar) return `No built-in character with id ${character.id}`;
     const itemIds = new Set(packChar.inventory.map((i) => i.abilityId).filter(Boolean));
-    const keep = character.abilities.filter((a) => library.abilities[a.abilityId]?.origin !== 'item');
-    const items = packChar.abilities.filter((a) => itemIds.has(a.abilityId) || library.abilities[a.abilityId]?.origin === 'item');
+    const keep = character.abilities.filter((a) => library.abilities[a.abilityId]?.kind !== 'item');
+    const items = packChar.abilities.filter((a) => itemIds.has(a.abilityId) || library.abilities[a.abilityId]?.kind === 'item');
     set({ character: { ...character, inventory: packChar.inventory, abilities: [...keep, ...items], journal: [...character.journal, { at: new Date().toISOString(), kind: 'edit', text: 'Inventory replaced from built-in pack' }] } });
     return undefined;
   },
