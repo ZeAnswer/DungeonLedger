@@ -112,3 +112,14 @@ Situational modifiers typed during a battle ("+2 attack, higher ground, this att
 ## Out of scope
 
 Class tables editor, spell lists per class, spells known in the level ledger, initiative, party sync.
+
+## Implementation notes (added 2026-09-14 while planning)
+
+- **One map, stored `kind`.** The library keeps a single `abilities` map (one id space: activation `spell` refs, `cost.item` refs, `grant`/`suppress` verbs all point into it). Each record stores `kind: feature | item | spell | status`. The editor never shows it; the tab sets it. This replaces the "four maps, kind only in memory" sentence above.
+- **Pool ids.** An activation's inline `charges` is a pool whose id is the activation id. Activation ids are therefore unique across the library (the validator checks). `cost: {kind: charge, resourceId}` and `self.resource.<id>.*` address pools and inline charges alike. Migration names activations after the v2 resource id so stored `resourceState` survives.
+- **Buffs.** `ActiveBuff` gains `activationId?` and `expires?: Duration`. A buff with `activationId` contributes the activation's `whileActive` blocks (plus the spell's `effects` when `spell` is set); a buff without one contributes the record's `effects` (statuses, `grant` verb targets). `logAttack` drops buffs whose `expires` is `thisAttack` after running triggers.
+- **Manual toggles stay.** `battle.toggle.<id>` and the chip row remain for manual switches referenced by conditions (Dodge target, sniping). Only the `declare` activation kind goes away; a declared activation is an active buff. Migration strips `is battle.toggle.<own id>` from a converted declare ability's blocks.
+- **Selectors.** `self.ability.<id>.active` accepts a record id (any of its activations or its status buff active) or an activation id. `usesLeft`/`used` accept a pool id, activation id, or record id (first activation with charges, else first pool).
+- **Instant spells.** An activation with `spell` and no duration (own or the spell's) runs the spell's `effects` blocks once on use, like `onUse` blocks. A spell with a duration contributes its `effects` while the activation is active.
+- **One-offs.** `battle.situational` becomes `battle.statuses: Status[]`; `addSituational` becomes `addStatus`. The quick modifier sheet stays and writes Status records there; the buffs drawer can open one in the Status editor or move it to the library.
+- **Vaelor's Manual.** The three `origin: item` abilities without item meta (Monster Knowledge, Hunter's Analysis, Hunter's Instinct) become two activations and one passive block on the Vaelor's Manual item in the generator; the character no longer lists them separately.
