@@ -61,3 +61,36 @@ test('slotless items (potions, manuals) toggle "carried/active" without a slot; 
   ctx = { ...ctx, character: unequipItem(ctx, 'i1').character };
   expect(ctx.character.abilities.find((a) => a.abilityId === 'ring-a')?.enabled).toBe(false);
 });
+
+import { AbilitySchema as AS2 } from '../src/schema';
+import { equipItem as equip2, unequipItem as unequip2, twoHandedInMainHand } from '../src/equipment';
+import { makeCharacter as mkChar2, makeCtx as mkCtx2 } from './fixtures';
+
+function handsCtx() {
+  const bow = AS2.parse({ id: 'bow2h', name: 'Longbow', kind: 'item', item: { category: 'weapon', slot: 'mainHand', weapon: { kind: 'ranged', dice: '1d8', attackAbility: 'dex', twoHanded: true } } });
+  const sword = AS2.parse({ id: 'sword1h', name: 'Shortsword', kind: 'item', item: { category: 'weapon', slot: 'mainHand', weapon: { kind: 'melee', dice: '1d6', attackAbility: 'str' } } });
+  const shield = AS2.parse({ id: 'shield', name: 'Heavy Shield', kind: 'item', item: { category: 'shield', slot: 'offHand' } });
+  const c = mkCtx2({ character: mkChar2({ attackProfiles: [], inventory: [{ id: 'i-bow', abilityId: 'bow2h', quantity: 1, equipped: false }, { id: 'i-shield', abilityId: 'shield', quantity: 1, equipped: false }, { id: 'i-sword', abilityId: 'sword1h', quantity: 1, equipped: false }] }) });
+  for (const a of [bow, sword, shield]) c.library.abilities[a.id] = a;
+  return c;
+}
+
+test('a two-handed weapon needs a free off hand and blocks the off hand while held', () => {
+  let c = handsCtx();
+  c = { ...c, character: equip2(c, 'i-shield').character };
+  const r = equip2(c, 'i-bow');
+  expect(r.ok).toBe(false);
+  expect(r.reason).toMatch(/off hand/i);
+  c = { ...c, character: equip2(c, 'i-bow', { replace: true }).character };
+  expect(c.character.inventory.find((i) => i.id === 'i-shield')!.equipped).toBe(false);
+  expect(twoHandedInMainHand(c)?.id).toBe('i-bow');
+  const r2 = equip2(c, 'i-shield');
+  expect(r2.ok).toBe(false);
+  expect(r2.reason).toMatch(/both hands/i);
+  c = { ...c, character: equip2(c, 'i-shield', { replace: true }).character };
+  expect(c.character.inventory.find((i) => i.id === 'i-bow')!.equipped).toBe(false);
+  expect(twoHandedInMainHand(c)).toBeUndefined();
+  c = { ...c, character: unequip2(c, 'i-shield').character };
+  c = { ...c, character: equip2(c, 'i-sword').character };
+  expect(equip2(c, 'i-shield').ok).toBe(true);
+});

@@ -38,6 +38,11 @@ function setAbilityEnabled(c: Character, abilityId: string | undefined, enabled:
   return { ...c, abilities: has ? c.abilities.map((a) => (a.abilityId === abilityId ? { ...a, enabled } : a)) : [...c.abilities, { abilityId, enabled, paramValues: {} }] };
 }
 
+/** The equipped main-hand entry whose weapon is two-handed, if any: it occupies the off hand too. */
+export function twoHandedInMainHand(ctx: EvalContext): InventoryEntry | undefined {
+  return ctx.character.inventory.find((i) => { const a = itemAbility(ctx, i); return i.equipped && a?.kind === 'item' && a.item.slot === 'mainHand' && !!a.item.weapon?.twoHanded; });
+}
+
 export type EquipResult = { ok: boolean; reason?: string; character: Character };
 
 export function unequipItem(ctx: EvalContext, itemId: string): EquipResult {
@@ -56,9 +61,24 @@ export function equipItem(ctx: EvalContext, itemId: string, opts: { replace?: bo
   const slot = slotOf(ability);
   let c = ctx.character;
   let slotIndex: number | undefined;
+  const twoHanded = ability?.kind === 'item' && !!ability.item.weapon?.twoHanded;
+  if (slot === 'mainHand' && twoHanded) {
+    const off = slotOccupants(ctx, 'offHand').filter((o) => o.id !== itemId);
+    if (off.length) {
+      if (!opts.replace) return { ok: false, reason: `Off hand holds ${off.map((o) => itemAbility(ctx, o)?.name ?? o.name ?? 'an item').join(', ')}; a two-handed weapon needs both hands`, character: c };
+      for (const o of off) c = unequipItem({ ...ctx, character: c }, o.id).character;
+    }
+  }
+  if (slot === 'offHand') {
+    const held = twoHandedInMainHand(ctx);
+    if (held && held.id !== itemId) {
+      if (!opts.replace) return { ok: false, reason: `Both hands hold ${itemAbility(ctx, held)?.name ?? 'a two-handed weapon'}`, character: c };
+      c = unequipItem({ ...ctx, character: c }, held.id).character;
+    }
+  }
   if (slot && slot !== 'none') {
-    const cap = slotCapacity(ctx)[slot];
-    const occupants = slotOccupants(ctx, slot).filter((o) => o.id !== itemId);
+    const cap = slotCapacity({ ...ctx, character: c })[slot];
+    const occupants = slotOccupants({ ...ctx, character: c }, slot).filter((o) => o.id !== itemId);
     if (occupants.length >= cap) {
       if (!opts.replace) return { ok: false, reason: `${SLOTS.find((s) => s.id === slot)?.label ?? slot} slot is full`, character: c };
       const out = occupants[occupants.length - 1]!;

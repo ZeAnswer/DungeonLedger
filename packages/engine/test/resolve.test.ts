@@ -1,4 +1,4 @@
-import { resolveStat, resolveAttack, availableActions, listAttackModes, listPools, activeSources } from '../src/resolve';
+import { resolveStat, resolveAttack, attackProfiles, availableActions, listAttackModes, listPools, activeSources } from '../src/resolve';
 import { makeCtx, makeBattle, makeCombatant, makeAbility, makeCharacter, ev } from './fixtures';
 import { AbilitySchema, type Ability } from '../src/schema';
 
@@ -264,4 +264,11 @@ test('availableActions lists activations with charges, spell name and declare fl
   expect(src!.blocks).toEqual(daylight.effects);
   c.battle!.suppressedAbilities.push('monster-blow');
   expect(listPools(c)).toEqual([]);
+});
+
+test('a manual attack profile that duplicates an equipped weapon by name is hidden', () => {
+  const bow = AbilitySchema.parse({ id: 'bow-x', name: 'Composite Longbow +1', kind: 'item', item: { category: 'weapon', slot: 'mainHand', tags: ['bow'], weapon: { kind: 'ranged', dice: '1d8', attackAbility: 'dex', enhancement: 1 } } });
+  const c = makeCtx({ character: makeCharacter({ attackProfiles: [{ id: 'old', name: 'composite longbow +1', kind: 'ranged', baseDice: '1d8', enhancement: 1, critRange: 20, critMult: 3, attackAbility: 'dex', damageAbilityMultiplier: 1 }, { id: 'sword', name: 'Longsword', kind: 'melee', baseDice: '1d8', enhancement: 0, critRange: 19, critMult: 2, attackAbility: 'str', damageAbilityMultiplier: 1 }], inventory: [{ id: 'i', abilityId: 'bow-x', quantity: 1, equipped: true }], abilities: [{ abilityId: 'bow-x', enabled: true, paramValues: {} }] }) });
+  c.library.abilities['bow-x'] = bow;
+  expect(attackProfiles(c).map((p) => p.id)).toEqual(['weapon:bow-x', 'sword']);
 });

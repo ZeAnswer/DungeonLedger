@@ -201,7 +201,9 @@ export function attackProfiles(ctx: EvalContext): (AttackProfile & { weaponAbili
     if (!a || !w) continue;
     out.push({ id: `${WEAPON_PROFILE_PREFIX}${a.id}`, name: a.name, kind: w.kind, baseDice: w.dice, enhancement: w.enhancement, critRange: w.critRange, critMult: w.critMult, ...(w.rangeIncrement !== undefined ? { rangeIncrement: w.rangeIncrement } : {}), attackAbility: w.attackAbility, ...(w.damageAbility ? { damageAbility: w.damageAbility } : {}), ...(w.maxDamageAbilityBonus !== undefined ? { maxDamageAbilityBonus: w.maxDamageAbilityBonus } : {}), damageAbilityMultiplier: w.damageAbilityMultiplier, weaponAbilityId: a.id });
   }
-  out.push(...ctx.character.attackProfiles);
+  // Hand-written profiles that duplicate an equipped weapon (older characters listed the bow twice) are hidden.
+  const weaponNames = new Set(out.map((p) => p.name.trim().toLowerCase()));
+  out.push(...ctx.character.attackProfiles.filter((p) => !weaponNames.has(p.name.trim().toLowerCase())));
   for (const { source, effect } of collectEffects(ctx, undefined).applied) {
     if (effect.verb === 'attack' && effect.naturalAttack) {
       const n = effect.naturalAttack;

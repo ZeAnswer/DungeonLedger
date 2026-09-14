@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AbilitySchema, SLOTS, type Ability, type Condition, type Feature, type Item, type ItemCategory, type Spell, type Status } from '@hl/engine';
+import { AbilitySchema, SLOTS, WeaponMetaSchema, type Ability, type Condition, type Feature, type Item, type ItemCategory, type Spell, type Status } from '@hl/engine';
 import { Button, Chip, Field, cx, inputCls } from '../ui';
 import { BlocksEditor, uniqueId } from './BlocksEditor';
 import { ActivationEditor } from './ActivationEditor';
@@ -144,7 +144,7 @@ function ItemFields({ a, set }: { a: Item; set: (p: Partial<Ability>) => void })
   const item = a.item;
   const itemSet = (patch: Partial<Item['item']>) => set({ item: { ...item, ...patch } });
   const cat = item.category; const slots = SLOTTED[cat];
-  const w = item.weapon ?? { kind: 'melee' as const, dice: '1d8', critRange: 20, critMult: 2, attackAbility: 'str' as const, damageAbility: 'str' as const, damageAbilityMultiplier: 1, enhancement: 0, tags: [] as string[] };
+  const w = item.weapon ?? WeaponMetaSchema.parse({ kind: 'melee', dice: '1d8', attackAbility: 'str', damageAbility: 'str' });
   const ws = (p: Partial<typeof w>) => itemSet({ weapon: { ...w, ...p } });
   return (
     <div className="mb-3 rounded-2xl border border-zinc-800 p-2">
@@ -174,6 +174,7 @@ function ItemFields({ a, set }: { a: Item; set: (p: Partial<Ability>) => void })
             <input className={inputCls} placeholder="range ft" inputMode="numeric" value={w.rangeIncrement ?? ''} onChange={(e) => ws({ rangeIncrement: e.target.value === '' ? undefined : Number(e.target.value) })} />
             <input className={inputCls} placeholder="max Str to dmg" inputMode="numeric" value={w.maxDamageAbilityBonus ?? ''} onChange={(e) => ws({ maxDamageAbilityBonus: e.target.value === '' ? undefined : Number(e.target.value) })} />
           </div>
+          <label className="mt-1 flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={w.twoHanded} onChange={(e) => ws({ twoHanded: e.target.checked })} /> two-handed (needs the off hand too)</label>
           <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-zinc-400">attack uses <select className={inputCls + ' w-auto py-1'} value={w.attackAbility} onChange={(e) => ws({ attackAbility: e.target.value as 'str' })}>{['str', 'dex', 'con', 'int', 'wis', 'cha'].map((k) => <option key={k} value={k}>{k.toUpperCase()}</option>)}</select> damage uses <select className={inputCls + ' w-auto py-1'} value={w.damageAbility ?? ''} onChange={(e) => ws({ damageAbility: (e.target.value || undefined) as 'str' | undefined })}><option value="">none</option>{['str', 'dex'].map((k) => <option key={k} value={k}>{k.toUpperCase()}</option>)}</select> ×<input className={inputCls + ' w-14 py-1'} value={w.damageAbilityMultiplier} onChange={(e) => ws({ damageAbilityMultiplier: Number(e.target.value) || 1 })} /></div>
         </div>
       )}

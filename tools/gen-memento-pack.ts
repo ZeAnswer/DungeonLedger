@@ -57,7 +57,7 @@ const MK = { kind: 'param', name: 'types', includesTargetTag: true } as const;
 const pack: Pack = PackSchema.parse({
   id: 'memento',
   name: 'Memento (Ranger 5 / Monster Hunter 1)',
-  version: 10, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
+  version: 11, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
   description: 'Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor\'s Monsters\' Manual.',
   tags: [
     { id: 'analyzed', label: 'Analyzed (Hunter\'s Analysis)', category: 'condition' },
@@ -194,7 +194,7 @@ const pack: Pack = PackSchema.parse({
       effects: [],
     },
     // ---- plain gear (no rules yet) ----
-    { id: 'strong-arm-composite-longbow-1', name: 'Strong-Arm Composite Longbow +1', source: 'item', item: { category: 'weapon', slot: 'mainHand', weight: 3, tags: ['bow', 'longbow', 'composite'], weapon: { kind: 'ranged', dice: '1d8', critRange: 20, critMult: 3, rangeIncrement: 110, attackAbility: 'dex', damageAbility: 'str', maxDamageAbilityBonus: 4, enhancement: 1 } }, text: 'Composite longbow with a +1 enhancement bonus. DM homebrew: adds your full Strength modifier to damage, up to +4 (no penalty for a low score). Two-handed. 1d8, ×3, 110 ft.', effects: [] },
+    { id: 'strong-arm-composite-longbow-1', name: 'Strong-Arm Composite Longbow +1', source: 'item', item: { category: 'weapon', slot: 'mainHand', weight: 3, tags: ['bow', 'longbow', 'composite'], weapon: { kind: 'ranged', dice: '1d8', critRange: 20, critMult: 3, rangeIncrement: 110, attackAbility: 'dex', damageAbility: 'str', maxDamageAbilityBonus: 4, enhancement: 1, twoHanded: true } }, text: 'Composite longbow with a +1 enhancement bonus. DM homebrew: adds your full Strength modifier to damage, up to +4 (no penalty for a low score). Two-handed. 1d8, ×3, 110 ft.', effects: [] },
     { id: 'studded-leather', name: 'Studded Leather Armor', source: 'item', item: { category: 'armor', slot: 'armor', weight: 20, price: '25 gp' }, text: 'Light armor: +3 AC, max Dex +5, armor check penalty -1, 15% arcane spell failure.', effects: [{ id: 'ac', do: [{ kind: 'bonus', to: 'ac', value: 3, bonusType: 'armor' }] }] },
     { id: 'potion-cure-moderate', name: 'Potion of Cure Moderate Wounds', origin: 'item', item: { category: 'potion', weight: 0, price: '300 gp' }, text: 'CL 3: heals 2d8+3 hp. Standard action to drink; one potion is used up.', activation: { action: 'standard' }, cost: [{ kind: 'item', abilityId: 'potion-cure-moderate' }], effects: [{ id: 'n', trigger: 'onUse', do: [{ verb: 'note', text: 'Roll 2d8+3 and apply as healing.' }] }] },
     { id: 'potion-cure-serious', name: 'Potion of Cure Serious Wounds', origin: 'item', item: { category: 'potion', weight: 0, price: '750 gp' }, text: 'CL 5: heals 3d8+5 hp. Standard action to drink; one potion is used up.', activation: { action: 'standard' }, cost: [{ kind: 'item', abilityId: 'potion-cure-serious' }], effects: [{ id: 'n', trigger: 'onUse', do: [{ verb: 'note', text: 'Roll 3d8+5 and apply as healing.' }] }] },

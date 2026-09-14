@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { SLOTS, activationsOf, addItemInstance, equipItem, itemAbility, removeItemInstance, slotCapacity, slotOccupants, slotOf, unequipItem, type Ability, type EvalContext, type InventoryEntry, type Item, type ItemCategory, type SlotId } from '@hl/engine';
+import { SLOTS, activationsOf, addItemInstance, equipItem, itemAbility, removeItemInstance, slotCapacity, slotOccupants, slotOf, twoHandedInMainHand, unequipItem, type Ability, type EvalContext, type InventoryEntry, type Item, type ItemCategory, type SlotId } from '@hl/engine';
 import { useStore } from '../store/store';
 import { useCtx } from '../store/hooks';
 import { Button, Chip, Field, Sheet, cx, humanize, inputCls } from '../components/ui';
@@ -67,8 +67,15 @@ export function InventoryScreen() {
           {SLOTS.map((s) => {
             const occ = slotOccupants(ctx, s.id);
             const n = cap[s.id];
+            const held = s.id === 'offHand' ? twoHandedInMainHand(ctx) : undefined;
             return Array.from({ length: n }, (_, idx) => {
               const e = occ.find((o) => (o.slotIndex ?? 0) === idx) ?? occ[idx];
+              if (!e && held && idx === 0) return (
+                <div key={`${s.id}-${idx}`} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-900/60 px-3 py-2 text-zinc-500">
+                  <div className="w-24 shrink-0 text-xs uppercase tracking-wide">{s.label}</div>
+                  <span className="min-w-0 flex-1 truncate italic">{entryName(ctx, held)} (two-handed)</span>
+                </div>
+              );
               return (
                 <div key={`${s.id}-${idx}`} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2">
                   <div className="w-24 shrink-0 text-xs uppercase tracking-wide text-zinc-500">{s.label}{n > 1 ? ` ${idx + 1}` : ''}</div>

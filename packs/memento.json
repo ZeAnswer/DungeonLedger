@@ -1,7 +1,7 @@
 {
   "id": "memento",
   "name": "Memento (Ranger 5 / Monster Hunter 1)",
-  "version": 10,
+  "version": 11,
   "description": "Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor's Monsters' Manual.",
   "tags": [
     {
@@ -932,6 +932,7 @@
           "maxDamageAbilityBonus": 4,
           "damageAbilityMultiplier": 1,
           "enhancement": 1,
+          "twoHanded": true,
           "tags": []
         }
       },

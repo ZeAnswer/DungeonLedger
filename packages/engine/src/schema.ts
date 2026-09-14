@@ -210,6 +210,8 @@ export const WeaponMetaSchema = z.object({
   maxDamageAbilityBonus: z.number().int().optional(),
   damageAbilityMultiplier: z.number().default(1),
   enhancement: z.number().int().default(0),
+  /** Needs both hands: equipping it empties the off hand, and the off hand stays blocked while it is held. */
+  twoHanded: z.boolean().default(false),
   tags: z.array(z.string()).default([]),
 });
 export type WeaponMeta = z.infer<typeof WeaponMetaSchema>;
