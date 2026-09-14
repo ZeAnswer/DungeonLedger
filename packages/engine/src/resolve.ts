@@ -1,9 +1,9 @@
-import { SIZE_MOD, abilityMod, resourceUsed, targetTags, targetTagsInCategory, type AbilityInstance, type AttackCtx, type EvalContext } from './context';
+import { SIZE_MOD, abilityMod, findResourceDef, resourceUsed, targetTags, targetTagsInCategory, type AbilityInstance, type AttackCtx, type EvalContext } from './context';
 import { evalCondition } from './conditions';
 import { firstFailure, summarizeEffects } from './describe';
 import { evalExpr } from './expr';
 import { derivedFromLevels } from './levels';
-import type { Ability, AttackKind, AttackProfile, BonusType, Effect, EffectBlock, StatId, Value } from './schema';
+import { activationsOf, poolsOf, type Ability, type Acquired, type Action, type Activation, type AttackKind, type AttackProfile, type BonusType, type Duration, type Effect, type EffectBlock, type StatId, type Value } from './schema';
 import { stackBonuses, type BonusEntry, type StackedEntry } from './stacking';
 import { exprVars } from './vars';
 
@@ -50,59 +50,65 @@ export type AttackMode = { modeId: string; label: string; base: 'single' | 'full
 
 export type ActionInfo = {
   abilityId: string;
+  activationId: string;
+  /** Activation name (or the spell's, or the record's). */
   name: string;
-  origin: Ability['origin'];
-  /** Ability that grants this one (Hand of Glory → Daylight), for subtext. */
-  grantedBy?: string;
-  activation: Ability['activation'];
+  recordName: string;
+  kind: Ability['kind'];
+  acquired?: Acquired;
+  action: Action;
+  /** Lasts one attack or one turn: shown as a pre-roll chip. */
+  declare: boolean;
+  duration?: Duration;
+  charges?: { id: string; label: string; remaining: number; max: number; resetOn: string };
+  costText: string[];
   active: boolean;
   usable: boolean;
   eligible: boolean;
   reasons: string[];
-  resources: { id: string; label: string; remaining: number; max: number; resetOn: string; resetTo: 'max' | 'zero' }[];
   notes: string[];
 };
 
+export type PoolInfo = { id: string; label: string; remaining: number; max: number; resetOn: string; abilityId: string };
+
 // ---------- sources ----------
-export type Source = { ability: Ability; instance: AbilityInstance | undefined; kind: 'ability' | 'buff' | 'situational' | 'granted'; grantedBy?: string };
+export type Source = {
+  ability: Ability;
+  instance: AbilityInstance | undefined;
+  kind: 'ability' | 'buff' | 'activation';
+  activation?: Activation;
+  /** Blocks this source contributes right now. */
+  blocks: EffectBlock[];
+  /** Shown in breakdowns and near-miss lists. */
+  label: string;
+};
 
-function bindingOk(ctx: EvalContext, a: Ability): boolean {
-  const b = a.binding;
-  if (b === 'none' || b === 'thisItem') return true; // thisItem: enabled flag already follows equipped state
-  if (b === 'thisWeapon') return ctx.attack?.weaponAbilityId === a.id;
-  return ctx.character.inventory.some((i) => i.equipped && i.abilityId && ctx.library.abilities[i.abilityId]?.item?.slot === b.slot);
-}
-
-/** Every ability currently contributing effects for the character. Abilities with a duration contribute only while active (via activeBuffs). */
+/** Every record/activation currently contributing blocks: enabled features and equipped items (their `effects`), active statuses and grant buffs (record `effects`), and running activations (`whileActive` plus the cast spell's `effects`). */
 export function activeSources(ctx: EvalContext, warnings: string[] = []): Source[] {
   const out: Source[] = [];
   const seen = new Set<string>();
   const suppressed = new Set(ctx.battle?.suppressedAbilities ?? []);
-  const push = (s: Source) => { if (seen.has(s.ability.id)) return; seen.add(s.ability.id); out.push(s); };
-  const addGranted = (parent: Ability, instance: AbilityInstance | undefined) => {
-    for (const gid of parent.grants) {
-      const g = ctx.library.abilities[gid];
-      if (!g || suppressed.has(gid)) continue;
-      push({ ability: g, instance, kind: 'granted', grantedBy: parent.id });
-    }
-  };
+  const push = (key: string, s: Source) => { if (seen.has(key)) return; seen.add(key); out.push(s); };
   for (const inst of ctx.character.abilities) {
     if (!inst.enabled || suppressed.has(inst.abilityId)) continue;
     const ability = ctx.library.abilities[inst.abilityId];
     if (!ability) { warnings.push(`Unknown ability "${inst.abilityId}" on character; ignored.`); continue; }
-    if (ability.origin === 'buff' || ability.origin === 'condition') continue; // only via activeBuffs
-    if (ability.duration && ability.activation !== 'passive') { addGranted(ability, inst); continue; } // lasts only after use: contributes via activeBuffs
-    if (!bindingOk(ctx, ability)) continue;
-    push({ ability, instance: inst, kind: 'ability' });
-    addGranted(ability, inst);
+    if (ability.kind === 'status' || ability.kind === 'spell') continue; // only while active
+    push(ability.id, { ability, instance: inst, kind: 'ability', blocks: ability.effects, label: ability.name });
   }
   for (const buff of ctx.battle?.activeBuffs ?? []) {
     if (buff.owner !== 'self' || buff.suppressed || suppressed.has(buff.abilityId)) continue;
-    const ability = ctx.library.abilities[buff.abilityId] ?? ctx.battle?.situational.find((a) => a.id === buff.abilityId);
+    const ability = ctx.library.abilities[buff.abilityId] ?? ctx.battle?.statuses.find((s) => s.id === buff.abilityId);
     if (!ability) { warnings.push(`Unknown buff "${buff.abilityId}"; ignored.`); continue; }
     const instance = ctx.character.abilities.find((a) => a.abilityId === buff.abilityId);
-    push({ ability, instance, kind: 'buff' });
-    addGranted(ability, instance);
+    if (buff.activationId) {
+      const activation = activationsOf(ability).find((x) => x.id === buff.activationId);
+      if (!activation) { warnings.push(`${ability.name} has no activation "${buff.activationId}"; ignored.`); continue; }
+      const spell = activation.spell ? ctx.library.abilities[activation.spell] : undefined;
+      push(`${ability.id}/${activation.id}`, { ability, instance, kind: 'activation', activation, blocks: [...activation.whileActive, ...(spell?.kind === 'spell' ? spell.effects : [])], label: activation.name ?? spell?.name ?? ability.name });
+    } else {
+      push(ability.id, { ability, instance, kind: 'buff', blocks: ability.effects, label: ability.name });
+    }
   }
   return out;
 }
@@ -138,7 +144,7 @@ export function collectEffects(ctx: EvalContext, stat?: StatId, trigger: EffectB
   const nearMiss: NearMiss[] = [];
   for (const source of activeSources(ctx, warnings)) {
     const sctx: EvalContext = { ...ctx, abilityInstance: source.instance };
-    for (const block of source.ability.effects) {
+    for (const block of source.blocks) {
       if (block.trigger !== trigger) continue;
       const relevant = block.do.filter((e) => relevantToStat(e, stat));
       if (relevant.length === 0) continue;
@@ -146,7 +152,7 @@ export function collectEffects(ctx: EvalContext, stat?: StatId, trigger: EffectB
         for (const effect of relevant) applied.push({ source, block, effect });
       } else if (stat && !('all' in block.when && block.when.all.length === 0)) {
         const failed = firstFailure(block.when, sctx) ?? 'condition not met';
-        nearMiss.push({ source: source.ability.id, sourceName: source.ability.name, label: block.label ?? source.ability.name, summary: summarizeEffects(block.do), failed });
+        nearMiss.push({ source: source.ability.id, sourceName: source.label, label: block.label ?? source.label, summary: summarizeEffects(block.do), failed });
       }
     }
   }
@@ -172,7 +178,7 @@ export function resolveFlags(ctx: EvalContext): Record<string, boolean> {
     const out: Record<string, boolean> = {};
     for (const source of activeSources(ctx)) {
       const sctx: EvalContext = { ...ctx, abilityInstance: source.instance };
-      for (const block of source.ability.effects) {
+      for (const block of source.blocks) {
         if (block.trigger !== 'always' || !block.do.some((e) => e.verb === 'flag')) continue;
         if (!evalCondition(block.when, sctx)) continue;
         for (const e of block.do) if (e.verb === 'flag') out[e.flag] = e.value;
@@ -191,7 +197,7 @@ export function attackProfiles(ctx: EvalContext): (AttackProfile & { weaponAbili
   for (const i of ctx.character.inventory) {
     if (!i.equipped || !i.abilityId) continue;
     const a = ctx.library.abilities[i.abilityId];
-    const w = a?.item?.weapon;
+    const w = a?.kind === 'item' ? a.item.weapon : undefined;
     if (!a || !w) continue;
     out.push({ id: `${WEAPON_PROFILE_PREFIX}${a.id}`, name: a.name, kind: w.kind, baseDice: w.dice, enhancement: w.enhancement, critRange: w.critRange, critMult: w.critMult, ...(w.rangeIncrement !== undefined ? { rangeIncrement: w.rangeIncrement } : {}), attackAbility: w.attackAbility, ...(w.damageAbility ? { damageAbility: w.damageAbility } : {}), ...(w.maxDamageAbilityBonus !== undefined ? { maxDamageAbilityBonus: w.maxDamageAbilityBonus } : {}), damageAbilityMultiplier: w.damageAbilityMultiplier, weaponAbilityId: a.id });
   }
@@ -199,7 +205,7 @@ export function attackProfiles(ctx: EvalContext): (AttackProfile & { weaponAbili
   for (const { source, effect } of collectEffects(ctx, undefined).applied) {
     if (effect.verb === 'attack' && effect.naturalAttack) {
       const n = effect.naturalAttack;
-      out.push({ id: `natural:${source.ability.id}:${n.name}`, name: `${n.name} (${source.ability.name})`, kind: 'melee', baseDice: n.dice, enhancement: n.attackBonus, critRange: 20, critMult: 2, attackAbility: 'str', damageAbilityMultiplier: 1 });
+      out.push({ id: `natural:${source.ability.id}:${n.name}`, name: `${n.name} (${source.label})`, kind: 'melee', baseDice: n.dice, enhancement: n.attackBonus, critRange: 20, critMult: 2, attackAbility: 'str', damageAbilityMultiplier: 1 });
     }
   }
   return out;
@@ -298,10 +304,10 @@ function resolveValue(ctx: EvalContext, source: Source, value: Value, vars: Retu
   const key = value.per && ctx.target ? targetTagsInCategory(ctx, ctx.target, value.per)[0] : undefined;
   const stored = value.per ? (key ? ctx.battle?.prompts[`${value.prompt}:${key}`] : undefined) : ctx.battle?.prompts[value.prompt];
   if (stored === undefined) {
-    const req: PromptRequest = { promptId: value.prompt, ...(value.per ? { perTagCategory: value.per } : {}), ...(key ? { tag: key } : {}), source: source.ability.id, sourceName: source.ability.name };
+    const req: PromptRequest = { promptId: value.prompt, ...(value.per ? { perTagCategory: value.per } : {}), ...(key ? { tag: key } : {}), source: source.ability.id, sourceName: source.label };
     if (!out.promptsNeeded.some((p) => p.promptId === req.promptId && p.source === req.source)) out.promptsNeeded.push(req);
     const vs = key ? ` vs ${ctx.library.tags[key]?.label ?? key}` : value.per && !ctx.target ? ' (pick a target)' : '';
-    const w = `${source.ability.name}: needs a ${value.prompt[0]!.toUpperCase()}${value.prompt.slice(1)} check${vs}`;
+    const w = `${source.label}: needs a ${value.prompt[0]!.toUpperCase()}${value.prompt.slice(1)} check${vs}`;
     if (!out.warnings.includes(w)) out.warnings.push(w);
     return undefined;
   }
@@ -338,8 +344,8 @@ export function resolveStat(ctx: EvalContext, stat: StatId): StatResult {
     const col = collectEffects(ctx, stat);
     warnings.push(...col.warnings);
     for (const { source, block, effect } of col.applied) {
-      names[source.ability.id] = source.ability.name;
-      const label = block.label ?? source.ability.name;
+      names[source.ability.id] = source.label;
+      const label = block.label ?? source.label;
       switch (effect.verb) {
         case 'modify': {
           if (statIsAttackLike(stat) && !kindMatches(effect.attackKind, ctx)) break;
@@ -354,7 +360,7 @@ export function resolveStat(ctx: EvalContext, stat: StatId): StatResult {
         }
         case 'dice':
           if (!kindMatches(effect.attackKind, ctx)) break;
-          dice.push({ dice: effect.dice, label: effect.label ?? source.ability.name, ...(effect.damageType ? { damageType: effect.damageType } : {}) });
+          dice.push({ dice: effect.dice, label: effect.label ?? source.label, ...(effect.damageType ? { damageType: effect.damageType } : {}) });
           break;
         case 'note': {
           const text = interpolate(effect.text, vars) + (effect.dc !== undefined ? ` (DC ${(() => { try { return evalExpr(effect.dc, vars); } catch { return '?'; } })()})` : '');
@@ -447,43 +453,71 @@ export function resolveAttack(ctx: EvalContext, opts: ResolveAttackOptions): Att
 }
 
 // ---------- actions ----------
+function chargeInfo(ctx: EvalContext, id: string, vars: ReturnType<typeof exprVars>, fallbackLabel: string) {
+  const d = findResourceDef(ctx, id);
+  if (!d) return undefined;
+  const max = evalExpr(d.def.max, vars);
+  return { id: d.def.id, label: d.def.label ?? fallbackLabel, remaining: max - resourceUsed(ctx, d.def.id, d.def.resetOn), max, resetOn: d.def.resetOn };
+}
+
+/** One row per activation of every enabled feature and equipped item. */
 export function availableActions(ctx: EvalContext): ActionInfo[] {
   const out: ActionInfo[] = [];
   const vars = exprVars(ctx);
   const suppressed = new Set(ctx.battle?.suppressedAbilities ?? []);
-  const seen = new Set<string>();
-  const consider = (ability: Ability, instance: AbilityInstance | undefined, grantedBy?: string) => {
-    if (seen.has(ability.id)) return;
-    seen.add(ability.id);
-    for (const gid of ability.grants) { const g = ctx.library.abilities[gid]; if (g && !suppressed.has(gid)) consider(g, instance, ability.id); }
-    if (ability.activation === 'passive' && ability.resources.length === 0) return;
-    const reasons: string[] = [];
-    const resources = ability.resources.map((r) => {
-      const max = evalExpr(r.max, vars);
-      const remaining = max - resourceUsed(ctx, r.id, r.resetOn);
-      return { id: r.id, label: r.label ?? ability.name, remaining, max, resetOn: r.resetOn, resetTo: r.resetTo };
-    });
-    const chargeCosts = ability.cost.filter((c) => c.kind === 'charge');
-    const pools = chargeCosts.length ? resources.filter((r) => chargeCosts.some((c) => c.kind === 'charge' && c.resourceId === r.id)) : resources;
-    const usable = pools.every((r) => r.remaining > 0);
-    if (!usable) reasons.push(`No charges left (${pools.map((r) => `${r.remaining}/${r.max} per ${r.resetOn}`).join(', ')})`);
-    const declared: EvalContext = { ...ctx, abilityInstance: instance, ...(ctx.battle ? { battle: { ...ctx.battle, toggles: { ...ctx.battle.toggles, [ability.id]: true } } } : {}) };
-    let eligible = true;
-    const notes: string[] = [];
-    const blocks = ability.effects.filter((b) => b.trigger === 'always' || b.trigger === 'onUse' || b.trigger === 'onActivate');
-    if (blocks.length) {
-      const passing = blocks.filter((b) => evalCondition(b.when, declared));
-      eligible = passing.length > 0;
-      if (!eligible) for (const b of blocks) { const f = firstFailure(b.when, declared); if (f) reasons.push(`Needs: ${f}`); }
-      for (const b of passing) for (const e of b.do) if (e.verb === 'note') notes.push(interpolate(e.text, vars));
-    }
-    const active = !!ctx.battle?.activeBuffs.some((b) => b.abilityId === ability.id && !b.suppressed);
-    out.push({ abilityId: ability.id, name: ability.name, origin: ability.origin, ...(grantedBy ? { grantedBy } : {}), activation: ability.activation, active, usable, eligible, reasons, resources, notes });
-  };
   for (const inst of ctx.character.abilities) {
     if (!inst.enabled || suppressed.has(inst.abilityId)) continue;
-    const a = ctx.library.abilities[inst.abilityId];
-    if (a) consider(a, inst);
+    const ability = ctx.library.abilities[inst.abilityId];
+    if (!ability) continue;
+    for (const act of activationsOf(ability)) {
+      const spell = act.spell ? ctx.library.abilities[act.spell] : undefined;
+      const name = act.name ?? spell?.name ?? ability.name;
+      const reasons: string[] = [];
+      const charges = act.charges ? chargeInfo(ctx, act.id, vars, name) : undefined;
+      let usable = true;
+      if (charges && charges.remaining <= 0) { usable = false; reasons.push(`No charges left (${charges.remaining}/${charges.max} per ${charges.resetOn})`); }
+      const costText: string[] = [];
+      for (const c of act.cost) {
+        if (c.kind === 'charge') { const p = chargeInfo(ctx, c.resourceId, vars, c.resourceId); const n = evalExpr(c.amount, vars); costText.push(`${n} ${p?.label ?? c.resourceId}`); if (p && p.remaining < n) { usable = false; reasons.push(`Not enough ${p.label} (${p.remaining}/${p.max})`); } }
+        else if (c.kind === 'item') { const have = ctx.character.inventory.filter((i) => i.abilityId === c.abilityId).reduce((s, i) => s + i.quantity, 0); costText.push(`${c.quantity} ${ctx.library.abilities[c.abilityId]?.name ?? c.abilityId}`); if (have < c.quantity) { usable = false; reasons.push('None left'); } }
+        else if (c.kind === 'hp') costText.push(`${evalExpr(c.amount, vars)} hp`);
+        else if (c.kind === 'spellSlot') costText.push(`level ${c.level} slot`);
+        else costText.push(`${c.amount} ${c.kind}`);
+      }
+      const ectx: EvalContext = { ...ctx, abilityInstance: inst };
+      const blocks = [...act.onUse, ...act.whileActive];
+      let eligible = true;
+      const notes: string[] = [];
+      if (blocks.length) {
+        const passing = blocks.filter((b) => evalCondition(b.when, ectx));
+        eligible = passing.length > 0;
+        if (!eligible) for (const b of blocks) { const f = firstFailure(b.when, ectx); if (f) reasons.push(`Needs: ${f}`); }
+        for (const b of passing) for (const e of b.do) if (e.verb === 'note') notes.push(interpolate(e.text, vars));
+      }
+      const duration = act.duration ?? (spell?.kind === 'spell' ? spell.duration : undefined);
+      const active = !!ctx.battle?.activeBuffs.some((b) => b.abilityId === ability.id && b.activationId === act.id && !b.suppressed);
+      out.push({
+        abilityId: ability.id, activationId: act.id, name, recordName: ability.name, kind: ability.kind,
+        ...(ability.kind === 'feature' ? { acquired: ability.acquired } : {}),
+        action: act.action, declare: duration === 'thisAttack' || duration === 'thisTurn', ...(duration ? { duration } : {}),
+        ...(charges ? { charges } : {}), costText, active, usable, eligible, reasons, notes,
+      });
+    }
+  }
+  return out;
+}
+
+/** Shared pools on enabled records (not inline activation charges). */
+export function listPools(ctx: EvalContext): PoolInfo[] {
+  const out: PoolInfo[] = [];
+  const vars = exprVars(ctx);
+  for (const inst of ctx.character.abilities) {
+    if (!inst.enabled) continue;
+    const ability = ctx.library.abilities[inst.abilityId];
+    for (const p of poolsOf(ability)) {
+      const max = evalExpr(p.max, vars);
+      out.push({ id: p.id, label: p.label ?? ability!.name, remaining: max - resourceUsed(ctx, p.id, p.resetOn), max, resetOn: p.resetOn, abilityId: ability!.id });
+    }
   }
   return out;
 }
