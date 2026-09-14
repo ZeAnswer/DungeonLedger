@@ -29,12 +29,10 @@ const skillDefs: [string, 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', boolean
 
 const xpTable = Array.from({ length: 20 }, (_, i) => ({ level: i + 1, xp: (i * (i + 1) * 1000) / 2 }));
 
-const KD_TABLE = [{ upTo: 15, value: 1 }, { upTo: 25, value: 2 }, { upTo: 30, value: 3 }, { upTo: 35, value: 4 }, { value: 5 }];
-
 const pack: Pack = PackSchema.parse({
   id: 'core-3.5e',
   name: 'Core 3.5e',
-  version: 2,
+  version: 3,
   description: 'Creature types, subtypes, conditions, skills, XP table, Ranger class, common feats and buffs.',
   tags: [
     ...creatureTypes.map((t) => tag(t, 'creatureType')),
@@ -131,7 +129,6 @@ const pack: Pack = PackSchema.parse({
     { id: 'prone-self', name: 'Prone', source: 'condition', duration: 'untilRemoved', text: 'Prone: -4 melee attack, cannot use bows effectively (crossbows ok), +4 AC vs ranged, -4 AC vs melee.', effects: [{ id: 'p', when: { kind: 'attack.kind', attackKind: 'melee' }, do: [{ kind: 'bonus', to: 'attack', value: -4 }] }] },
     // ---- generic situational helpers (targets) ----
     { id: 'higher-ground', name: 'Higher ground', source: 'situational', duration: 'untilRemoved', effects: [{ id: 'h', when: { kind: 'attack.kind', attackKind: 'melee' }, do: [{ kind: 'bonus', to: 'attack', value: 1 }] }] },
-    { id: 'knowledge-devotion-table', name: 'Knowledge Devotion table (reference)', source: 'core', enabledByDefault: false, text: 'Reference: Knowledge check 15- +1, 16-25 +2, 26-30 +3, 31-35 +4, 36+ +5.', effects: [{ id: 't', do: [{ kind: 'bonusFromTable', promptId: 'knowledge', perTagCategory: 'creatureType', to: 'attack', bonusType: 'insight', table: KD_TABLE }] }] },
   ],
 });
 

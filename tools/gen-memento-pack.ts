@@ -57,7 +57,7 @@ const MK = { kind: 'param', name: 'types', includesTargetTag: true } as const;
 const pack: Pack = PackSchema.parse({
   id: 'memento',
   name: 'Memento (Ranger 5 / Monster Hunter 1)',
-  version: 9, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
+  version: 10, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
   description: 'Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor\'s Monsters\' Manual.',
   tags: [
     { id: 'analyzed', label: 'Analyzed (Hunter\'s Analysis)', category: 'condition' },
@@ -163,21 +163,6 @@ const pack: Pack = PackSchema.parse({
       id: 'monster-lore', name: 'Monster Lore', source: 'class', enabledByDefault: false,
       text: 'MH2: Locate monster type DC 20, specific monster DC 30, assess below 50% HP DC 25 (+3 per size above Large).', effects: [],
     },
-    // ---- Vaelor's Monsters' Manual ----
-    {
-      id: 'monster-knowledge', name: 'Monster Knowledge (Vaelor\'s Manual)', source: 'item', activation: { action: 'standard' },
-      text: 'Standard action: Knowledge check DC 16 to recall everything in the book about this monster (except HP). Enter the same check as Knowledge Devotion.',
-      effects: [{ id: 'reveal', trigger: 'onUse', when: { kind: 'prompt', id: 'knowledge', perTagCategory: 'creatureType', atLeast: 16 }, do: [{ kind: 'revealTarget' }] }],
-    },
-    {
-      id: 'hunters-analysis', name: 'Hunter\'s Analysis (Vaelor\'s Manual)', source: 'item', activation: { action: 'full' },
-      text: 'Spend a full round observing a monster. From your next turn, vs that monster for the rest of the battle: threat range ×2 (20 → 19-20). If immune to crits, instead reduce its DR/SR by half your MH level (min 1) for 1 round, or suppress one unique ability for 1 round with Knowledge DC 20.',
-      effects: [
-        { id: 'mark', trigger: 'onUse', do: [{ kind: 'applyTag', to: 'target', tag: 'analyzed', duration: 'encounter' }] },
-        { id: 'crit', label: 'Analyzed target', when: { kind: 'target.hasCondition', condition: 'analyzed' }, do: [{ kind: 'bonus', to: 'critRange', value: 1 }, { kind: 'note', text: 'Hunter\'s Analysis: threat range doubled vs this target (if base is 19-20 use 17-20). If crit-immune: DR/SR -1 for 1 round, or suppress one ability (Knowledge DC 20).' }] },
-      ],
-    },
-    { id: 'hunters-instinct', name: 'Hunter\'s Instinct (Vaelor\'s Manual)', source: 'item', text: '+1 on Knowledge checks to identify monsters.', effects: [{ id: 'k', do: [{ kind: 'bonus', to: 'skill.knowledge-monsters', value: 1 }] }] },
     // ---- items ----
     {
       id: 'boots-of-speed', name: 'Boots of Speed', origin: 'item', activation: { action: 'free' }, duration: 'endOfRound', item: { category: 'wondrous', slot: 'feet', weight: 1, price: '12,000 gp' },
@@ -213,7 +198,18 @@ const pack: Pack = PackSchema.parse({
     { id: 'studded-leather', name: 'Studded Leather Armor', source: 'item', item: { category: 'armor', slot: 'armor', weight: 20, price: '25 gp' }, text: 'Light armor: +3 AC, max Dex +5, armor check penalty -1, 15% arcane spell failure.', effects: [{ id: 'ac', do: [{ kind: 'bonus', to: 'ac', value: 3, bonusType: 'armor' }] }] },
     { id: 'potion-cure-moderate', name: 'Potion of Cure Moderate Wounds', origin: 'item', item: { category: 'potion', weight: 0, price: '300 gp' }, text: 'CL 3: heals 2d8+3 hp. Standard action to drink; one potion is used up.', activation: { action: 'standard' }, cost: [{ kind: 'item', abilityId: 'potion-cure-moderate' }], effects: [{ id: 'n', trigger: 'onUse', do: [{ verb: 'note', text: 'Roll 2d8+3 and apply as healing.' }] }] },
     { id: 'potion-cure-serious', name: 'Potion of Cure Serious Wounds', origin: 'item', item: { category: 'potion', weight: 0, price: '750 gp' }, text: 'CL 5: heals 3d8+5 hp. Standard action to drink; one potion is used up.', activation: { action: 'standard' }, cost: [{ kind: 'item', abilityId: 'potion-cure-serious' }], effects: [{ id: 'n', trigger: 'onUse', do: [{ verb: 'note', text: 'Roll 3d8+5 and apply as healing.' }] }] },
-    { id: 'vaelors-manual', name: "Vaelor's Monsters' Manual", source: 'item', item: { category: 'wondrous', slot: 'none', weight: 5 }, text: 'Unique artifact, no slot, CL 12. Grants Monster Knowledge, Hunter\'s Analysis, Hunter\'s Instinct and the Bestiary Collection.', effects: [] },
+    {
+      id: 'vaelors-manual', name: "Vaelor's Monsters' Manual", kind: 'item', item: { category: 'wondrous', slot: 'none', weight: 5 },
+      text: 'Unique artifact, no slot, CL 12. Grants Monster Knowledge, Hunter\'s Analysis, Hunter\'s Instinct and the Bestiary Collection.',
+      effects: [
+        { id: 'instinct', label: "Hunter's Instinct", do: [{ verb: 'modify', to: 'skill.knowledge-monsters', value: 1 }] },
+        { id: 'crit', label: 'Analyzed target', when: { is: 'target.condition.analyzed' }, do: [{ verb: 'modify', to: 'critRange', value: 1 }, { verb: 'note', text: 'Hunter\'s Analysis: threat range doubled vs this target (if base is 19-20 use 17-20). If crit-immune: DR/SR -1 for 1 round, or suppress one ability (Knowledge DC 20).' }] },
+      ],
+      activations: [
+        { id: 'monster-knowledge', name: 'Monster Knowledge', action: 'standard', onUse: [{ id: 'reveal', when: { compare: 'battle.prompt.knowledge', op: '>=', value: 16 }, do: [{ verb: 'reveal' }] }] },
+        { id: 'hunters-analysis', name: "Hunter's Analysis", action: 'fullRound', onUse: [{ id: 'mark', do: [{ verb: 'tag', to: 'target', tag: 'analyzed', duration: 'encounter' }] }] },
+      ],
+    },
     { id: 'gargoyle-hands', name: "Gargoyle's hands", source: 'item', item: { category: 'material' }, text: 'Trophy crafting material (Monstrous humanoid). Crafts: Gargoyle bracers — DR 10/magic, freeze DC +15, +2 Con.', effects: [] },
     { id: 'gorgon-scale', name: "Gorgon's scale", source: 'item', item: { category: 'material' }, text: 'Trophy crafting material (Magical beast). Crafts: Gorgon belt — +2d6 damage when charging, petrifying cone 60 ft 1/day DC +14 Fort negates.', effects: [] },
     // ---- trophies (Monster Hunter) ----
@@ -249,7 +245,6 @@ const pack: Pack = PackSchema.parse({
       { abilityId: 'monster-killer', paramValues: { types: ['monstrous-humanoid', 'aberration', 'magical-beast'] } },
       { abilityId: 'monster-blow', paramValues: { types: ['monstrous-humanoid', 'aberration', 'magical-beast'] } },
       { abilityId: 'trophy-crafting' }, { abilityId: 'monster-lore', enabled: false },
-      { abilityId: 'monster-knowledge' }, { abilityId: 'hunters-analysis' }, { abilityId: 'hunters-instinct' },
       ...[...linkedAbilities].map((abilityId) => ({ abilityId, enabled: equippedAbilities.has(abilityId) })),
       { abilityId: 'gargoyle-bracers', enabled: false }, { abilityId: 'rider-ring', enabled: false }, { abilityId: 'medusa-mask', enabled: false }, { abilityId: 'shield-amulet', enabled: false },
     ],

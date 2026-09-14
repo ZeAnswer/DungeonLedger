@@ -1,7 +1,7 @@
 {
   "id": "core-3.5e",
   "name": "Core 3.5e",
-  "version": 2,
+  "version": 3,
   "description": "Creature types, subtypes, conditions, skills, XP table, Ranger class, common feats and buffs.",
   "tags": [
     {
@@ -399,22 +399,8 @@
     {
       "id": "favored-enemy-1",
       "name": "Favored Enemy (1st)",
-      "origin": "classFeature",
       "text": "+2 on Bluff, Listen, Sense Motive, Spot and Survival checks and weapon damage rolls against the chosen creature type. Increases by +2 at ranger levels 5, 10, 15, 20 (choose which favored enemy improves).",
       "sourceRef": "PHB p.47",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "params": {
-        "types": {
-          "kind": "tags",
-          "label": "Creature type",
-          "category": "creatureType",
-          "count": 1
-        }
-      },
-      "grants": [],
       "effects": [
         {
           "id": "fe",
@@ -470,27 +456,27 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "class"
+      },
+      "params": {
+        "types": {
+          "kind": "tags",
+          "label": "Creature type",
+          "category": "creatureType",
+          "count": 1
+        }
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "favored-enemy-2",
       "name": "Favored Enemy (2nd)",
-      "origin": "classFeature",
       "text": "Second favored enemy, gained at ranger level 5.",
       "sourceRef": "PHB p.47",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "params": {
-        "types": {
-          "kind": "tags",
-          "label": "Creature type",
-          "category": "creatureType",
-          "count": 1
-        }
-      },
-      "grants": [],
       "effects": [
         {
           "id": "fe",
@@ -546,107 +532,118 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "class"
+      },
+      "params": {
+        "types": {
+          "kind": "tags",
+          "label": "Creature type",
+          "category": "creatureType",
+          "count": 1
+        }
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "track",
       "name": "Track",
-      "origin": "feat",
       "text": "Use Survival to follow tracks.",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "endurance",
       "name": "Endurance",
-      "origin": "feat",
       "text": "+4 on checks and saves to resist nonlethal damage from exertion, environment, starvation, etc. Sleep in light or medium armor without fatigue.",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "craft-magic-arms-and-armor",
       "name": "Craft Magic Arms and Armor",
-      "origin": "feat",
       "text": "Create magic weapons, armor and shields (caster level 5 normally).",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "craft-wondrous-item",
       "name": "Craft Wondrous Item",
-      "origin": "feat",
       "text": "Create wondrous items (caster level 3 normally).",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "ranger-spells",
       "name": "Ranger Spells",
-      "origin": "classFeature",
       "text": "From ranger level 4: divine spells from the ranger list, prepared daily, Wis-based (DC 10 + spell level + Wis mod). Caster level = half ranger level. Base 1st-level slots: 0 at ranger 4-5, 1 at 6-13, 2 at 14+; plus 1 bonus 1st-level slot for Wis 12-19 (2 for Wis 20+). Set the per-day totals in character vars rangerSpells1..rangerSpells4.",
-      "binding": "none",
-      "activation": {
-        "action": "standard"
+      "effects": [],
+      "kind": "feature",
+      "acquired": {
+        "kind": "class"
       },
-      "cost": [],
-      "resources": [
+      "enabledByDefault": true,
+      "activations": [
         {
           "id": "ranger-spell-1",
-          "label": "1st-level spells",
-          "max": "rangerSpells1",
-          "resetOn": "day",
-          "resetTo": "max"
+          "action": "standard",
+          "charges": {
+            "max": "rangerSpells1",
+            "resetOn": "day",
+            "label": "1st-level spells"
+          },
+          "cost": [],
+          "onUse": [],
+          "whileActive": []
         }
       ],
-      "grants": [],
-      "effects": [],
-      "enabledByDefault": true
+      "pools": []
     },
     {
       "id": "wild-empathy",
       "name": "Wild Empathy",
-      "origin": "classFeature",
       "text": "Improve the attitude of an animal like a Diplomacy check: 1d20 + ranger level + Cha mod.",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "class"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "point-blank-shot",
       "name": "Point Blank Shot",
-      "origin": "feat",
       "text": "+1 on attack and damage rolls with ranged weapons at ranges up to 30 feet.",
       "sourceRef": "PHB p.98",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "pbs",
@@ -684,19 +681,19 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "precise-shot",
       "name": "Precise Shot",
-      "origin": "feat",
       "text": "No -4 penalty for shooting into melee.",
       "sourceRef": "PHB p.98",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "n",
@@ -714,19 +711,19 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "rapid-shot",
       "name": "Rapid Shot",
-      "origin": "feat",
       "text": "One extra ranged attack at your highest bonus during a full attack; all attacks that round take -2.",
       "sourceRef": "PHB p.99",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "mode",
@@ -749,19 +746,19 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "manyshot",
       "name": "Manyshot",
-      "origin": "feat",
       "text": "As a standard action fire two arrows at a single target within 30 ft with one attack roll at -4 (three arrows at BAB +11 for -6, four at +16 for -8). Precision damage applies once.",
       "sourceRef": "PHB p.97",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "mode",
@@ -785,19 +782,19 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "weapon-focus-ranged",
       "name": "Weapon Focus (ranged weapon)",
-      "origin": "feat",
       "text": "+1 on attack rolls with the chosen weapon.",
       "sourceRef": "PHB p.102",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "wf",
@@ -818,17 +815,17 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "improved-initiative",
       "name": "Improved Initiative",
-      "origin": "feat",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "ii",
@@ -847,18 +844,18 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "dodge",
       "name": "Dodge",
-      "origin": "feat",
       "text": "+1 dodge bonus to AC against one designated opponent.",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "d",
@@ -877,21 +874,18 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "feature",
+      "acquired": {
+        "kind": "feat"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
     },
     {
       "id": "haste",
       "name": "Haste",
-      "origin": "buff",
       "text": "One extra attack at full BAB on a full attack, +1 dodge to attack and AC, +1 Reflex, +30 ft speed.",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "duration": {
-        "rounds": 10
-      },
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "h",
@@ -937,20 +931,15 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "status",
+      "harmful": false,
+      "duration": {
+        "rounds": 10
+      }
     },
     {
       "id": "bless",
       "name": "Bless",
-      "origin": "buff",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "duration": {
-        "rounds": 10
-      },
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "b",
@@ -976,19 +965,16 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "status",
+      "harmful": false,
+      "duration": {
+        "rounds": 10
+      }
     },
     {
       "id": "inspire-courage-1",
       "name": "Inspire Courage +1",
-      "origin": "buff",
       "text": "Bard song: +1 morale on attack and weapon damage, +1 vs charm and fear.",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "duration": "untilRemoved",
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "ic",
@@ -1014,18 +1000,13 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "status",
+      "harmful": false,
+      "duration": "untilRemoved"
     },
     {
       "id": "inspire-courage-2",
       "name": "Inspire Courage +2",
-      "origin": "buff",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "duration": "untilRemoved",
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "ic",
@@ -1051,20 +1032,13 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "status",
+      "harmful": false,
+      "duration": "untilRemoved"
     },
     {
       "id": "prayer",
       "name": "Prayer",
-      "origin": "buff",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "duration": {
-        "rounds": 6
-      },
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "p",
@@ -1111,18 +1085,15 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "status",
+      "harmful": false,
+      "duration": {
+        "rounds": 6
+      }
     },
     {
       "id": "shaken",
       "name": "Shaken",
-      "origin": "condition",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "duration": "untilRemoved",
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "s",
@@ -1162,19 +1133,14 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "status",
+      "harmful": true,
+      "duration": "untilRemoved"
     },
     {
       "id": "prone-self",
       "name": "Prone",
-      "origin": "condition",
       "text": "Prone: -4 melee attack, cannot use bows effectively (crossbows ok), +4 AC vs ranged, -4 AC vs melee.",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "duration": "untilRemoved",
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "p",
@@ -1195,18 +1161,13 @@
           ]
         }
       ],
-      "enabledByDefault": true
+      "kind": "status",
+      "harmful": true,
+      "duration": "untilRemoved"
     },
     {
       "id": "higher-ground",
       "name": "Higher ground",
-      "origin": "situational",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "duration": "untilRemoved",
-      "resources": [],
-      "grants": [],
       "effects": [
         {
           "id": "h",
@@ -1227,61 +1188,9 @@
           ]
         }
       ],
-      "enabledByDefault": true
-    },
-    {
-      "id": "knowledge-devotion-table",
-      "name": "Knowledge Devotion table (reference)",
-      "origin": "core",
-      "text": "Reference: Knowledge check 15- +1, 16-25 +2, 26-30 +3, 31-35 +4, 36+ +5.",
-      "binding": "none",
-      "activation": "passive",
-      "cost": [],
-      "resources": [],
-      "grants": [],
-      "effects": [
-        {
-          "id": "t",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": {
-                "prompt": "knowledge",
-                "per": "creatureType",
-                "table": [
-                  {
-                    "upTo": 15,
-                    "value": 1
-                  },
-                  {
-                    "upTo": 25,
-                    "value": 2
-                  },
-                  {
-                    "upTo": 30,
-                    "value": 3
-                  },
-                  {
-                    "upTo": 35,
-                    "value": 4
-                  },
-                  {
-                    "value": 5
-                  }
-                ]
-              },
-              "type": "insight",
-              "mode": "add"
-            }
-          ]
-        }
-      ],
-      "enabledByDefault": false
+      "kind": "status",
+      "harmful": false,
+      "duration": "untilRemoved"
     }
   ],
   "monsters": [],

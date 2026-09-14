@@ -4,7 +4,7 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { PackSchema, emptyLibrary, mergePack, evalExpr, exprVars, resolveStat, resolveAttack, listAttackModes, attackProfiles, type EvalContext, type Pack } from '../packages/engine/src';
+import { PackSchema, emptyLibrary, mergePack, evalExpr, exprVars, resolveStat, resolveAttack, listAttackModes, attackProfiles, activationsOf, poolsOf, type EvalContext, type Pack } from '../packages/engine/src';
 
 const dir = new URL('../packs/', import.meta.url).pathname;
 const files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
@@ -34,25 +34,37 @@ const checkSelector = (owner: string, sel: string) => {
   if (p[0] === 'self' && p[1] === 'ability' && !lib.abilities[p.slice(2, -1).join('.')]) problems.push(`${owner}: unknown ability in selector "${sel}"`);
   if (p[0] === 'self' && p[1] === 'class' && !lib.classTables[p.slice(2, -1).join('.')]) problems.push(`${owner}: unknown class in selector "${sel}"`);
 };
+let owner = '';
+const walk = (c: unknown): void => {
+  if (!c || typeof c !== 'object') return;
+  const o = c as Record<string, unknown>;
+  for (const k of ['is', 'exists', 'compare', 'in']) if (typeof o[k] === 'string') checkSelector(owner, o[k] as string);
+  if (Array.isArray(o.set)) for (const t of o.set as string[]) if (!lib.tags[t]) problems.push(`${owner}: unknown tag "${t}"`);
+  for (const k of ['all', 'any', 'none', 'count']) if (Array.isArray(o[k])) (o[k] as unknown[]).forEach(walk);
+  if (o.not) walk(o.not);
+};
+const activationIds = new Map<string, string>();
 for (const a of Object.values(lib.abilities)) {
-  const walk = (c: unknown): void => {
-    if (!c || typeof c !== 'object') return;
-    const o = c as Record<string, unknown>;
-    for (const k of ['is', 'exists', 'compare', 'in']) if (typeof o[k] === 'string') checkSelector(`ability ${a.id}`, o[k] as string);
-    if (Array.isArray(o.set)) for (const t of o.set as string[]) if (!lib.tags[t]) problems.push(`ability ${a.id}: unknown tag "${t}"`);
-    for (const k of ['all', 'any', 'none', 'count']) if (Array.isArray(o[k])) (o[k] as unknown[]).forEach(walk);
-    if (o.not) walk(o.not);
-  };
-  for (const b of a.effects) {
+  owner = `ability ${a.id}`;
+  const blocks = [...a.effects, ...activationsOf(a).flatMap((x) => [...x.onUse, ...x.whileActive])];
+  for (const b of blocks) {
     walk(b.when);
     for (const e of b.do) {
-      if (e.verb === 'modify' && e.to.startsWith('skill.') && !lib.skills[e.to.slice(6)]) problems.push(`ability ${a.id}: unknown skill "${e.to}"`);
-      if (e.verb === 'tag' && !lib.tags[e.tag]) problems.push(`ability ${a.id}: tag verb unknown tag "${e.tag}"`);
-      if ((e.verb === 'grant' || e.verb === 'suppress') && !lib.abilities[e.ability]) problems.push(`ability ${a.id}: ${e.verb} unknown ability "${e.ability}"`);
+      if (e.verb === 'modify' && e.to.startsWith('skill.') && !lib.skills[e.to.slice(6)]) problems.push(`${a.id}: unknown skill "${e.to}"`);
+      if (e.verb === 'tag' && !lib.tags[e.tag]) problems.push(`${a.id}: tag verb unknown tag "${e.tag}"`);
+      if ((e.verb === 'grant' || e.verb === 'suppress') && !lib.abilities[e.ability]) problems.push(`${a.id}: ${e.verb} unknown ability "${e.ability}"`);
     }
   }
-  for (const g of a.grants) if (!lib.abilities[g]) problems.push(`ability ${a.id}: grants unknown ability "${g}"`);
-  for (const c of a.cost) if (c.kind === 'charge' && !a.resources.some((r) => r.id === c.resourceId) && !Object.values(lib.abilities).some((x) => x.resources.some((r) => r.id === c.resourceId))) problems.push(`ability ${a.id}: charge cost unknown resource "${c.resourceId}"`);
+  const poolIds = new Set(poolsOf(a).map((p) => p.id));
+  for (const act of activationsOf(a)) {
+    const prev = activationIds.get(act.id);
+    if (prev) problems.push(`${a.id}: activation id "${act.id}" already used by ${prev}`); else activationIds.set(act.id, a.id);
+    if (act.spell && lib.abilities[act.spell]?.kind !== 'spell') problems.push(`${a.id}/${act.id}: spell "${act.spell}" is not a spell record`);
+    for (const c of act.cost) {
+      if (c.kind === 'charge' && !poolIds.has(c.resourceId) && !Object.values(lib.abilities).some((x) => poolsOf(x).some((p) => p.id === c.resourceId) || activationsOf(x).some((y) => y.id === c.resourceId && y.charges))) problems.push(`${a.id}/${act.id}: charge cost unknown pool "${c.resourceId}"`);
+      if (c.kind === 'item' && lib.abilities[c.abilityId]?.kind !== 'item') problems.push(`${a.id}/${act.id}: item cost "${c.abilityId}" is not an item`);
+    }
+  }
 }
 for (const m of Object.values(monsters) as { id: string; tags: string[] }[]) for (const t of m.tags) if (!lib.tags[t]) problems.push(`monster ${m.id}: unknown tag "${t}"`);
 
@@ -69,7 +81,8 @@ for (const ch of Object.values(characters)) {
       if (!vals?.length) problems.push(`character ${ch.id}: ${a.id} param "${p}" not chosen`);
       for (const v of vals ?? []) { const t = lib.tags[v]; if (!t) problems.push(`character ${ch.id}: ${a.id} param "${p}" unknown tag "${v}"`); else if (def.category && t.category !== def.category) problems.push(`character ${ch.id}: ${a.id} param "${p}" tag "${v}" is ${t.category}, expected ${def.category}`); }
     }
-    for (const r of a.resources) { try { evalExpr(r.max, vars); } catch (e) { problems.push(`${a.id} resource ${r.id}: ${(e as Error).message}`); } }
+    for (const act of activationsOf(a)) { if (act.charges) { try { evalExpr(act.charges.max, vars); } catch (e) { problems.push(`${a.id}/${act.id}: ${(e as Error).message}`); } } }
+    for (const p of poolsOf(a)) { try { evalExpr(p.max, vars); } catch (e) { problems.push(`${a.id} pool ${p.id}: ${(e as Error).message}`); } }
     for (const b of a.effects) for (const e of b.do) if (e.verb === 'modify' && typeof e.value === 'string') { try { evalExpr(e.value, vars); } catch (err) { problems.push(`${a.id}/${b.id}: ${(err as Error).message}`); } }
   }
   // smoke: every stat and attack mode resolves
