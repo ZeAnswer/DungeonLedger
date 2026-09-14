@@ -128,3 +128,17 @@ test('convertPack converts abilities with sibling lookup; convertBattle renames 
   expect(b.statuses[0]).toMatchObject({ id: 'sit-1', kind: 'status' });
   expect(b.activeBuffs[0]).toMatchObject({ abilityId: 'boots-of-speed', activationId: 'boots-rounds' });
 });
+
+test('stripToggle removes a bare root toggle leaf', () => {
+  const a = AbilitySchema.parse(convertToV3({ id: 'mb2', name: 'MB2', origin: 'classFeature', binding: 'none', activation: 'declare', cost: [], resources: [], grants: [], enabledByDefault: true, effects: [{ id: 'declared', trigger: 'always', when: { is: 'battle.toggle.mb2' }, do: [{ verb: 'note', text: 'x' }] }] }));
+  const [act] = activationsOf(a);
+  expect(act!.whileActive[0]!.when).toEqual({ all: [] });
+});
+
+const reactionFeat = { id: 'react-feat', name: 'React Feat', origin: 'feat', activation: { reaction: 'onDamaged' }, effects: [{ id: 'r', trigger: 'always', do: [{ verb: 'note', text: 'x' }] }] };
+
+test('reaction activation sets the trigger on passive blocks and builds no activation', () => {
+  const a = AbilitySchema.parse(convertToV3(reactionFeat));
+  expect(a.effects[0]!.trigger).toBe('onDamaged');
+  expect(activationsOf(a)).toEqual([]);
+});

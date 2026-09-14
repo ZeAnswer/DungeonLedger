@@ -116,6 +116,7 @@ type Kind = 'feature' | 'item' | 'spell' | 'status';
 const KIND_OF_ORIGIN: Record<string, Kind> = { feat: 'feature', classFeature: 'feature', race: 'feature', memory: 'feature', core: 'feature', monster: 'feature', item: 'item', spell: 'spell', buff: 'status', condition: 'status', situational: 'status' };
 const RESET_V3: Record<string, string> = { rest: 'day', manual: 'never' };
 const ON_USE_TRIGGERS = new Set(['onUse', 'onActivate']);
+const V3_TRIGGERS = new Set(['always', 'onHit', 'onMiss', 'onCrit', 'onDamaged', 'onRoundStart', 'onRoundEnd']);
 
 export function isV2Ability(a: unknown): boolean {
   return isObj(a) && 'origin' in a && !('kind' in a);
@@ -132,6 +133,7 @@ export function convertDurationV3(d: unknown): Duration | undefined {
 export function stripToggle(c: unknown, id: string): unknown {
   if (!isObj(c)) return c;
   const sel = `battle.toggle.${id}`;
+  if (c.is === sel) return { all: [] };
   for (const k of ['all', 'any', 'none', 'count'] as const) {
     if (Array.isArray(c[k])) return { ...c, [k]: (c[k] as unknown[]).filter((x) => !(isObj(x) && x.is === sel)).map((x) => stripToggle(x, id)) };
   }
@@ -169,7 +171,13 @@ export function convertV2(a: unknown, lookup: (id: string) => Any | undefined = 
     return { ...b, when: { all: [bindCond, ...inner] } };
   };
   const isDeclare = a.activation === 'declare';
+  const isReaction = isObj(a.activation) && 'reaction' in a.activation;
+  const reactionTrigger = isReaction ? (a.activation as Any).reaction : undefined;
   let passive = blocks.filter((b) => !ON_USE_TRIGGERS.has((b.trigger as string) ?? 'always') && b.trigger !== 'onDeactivate').map(withBind).map((b) => ({ ...b, when: isDeclare ? stripToggle(b.when, id) : b.when }));
+  // A reaction ability is passive in v3: its passive blocks fire on the reaction's trigger instead of always.
+  if (isReaction && V3_TRIGGERS.has(reactionTrigger as string)) {
+    passive = passive.map((b) => (((b.trigger as string) ?? 'always') === 'always' ? { ...b, trigger: reactionTrigger } : b));
+  }
   const onUse = blocks.filter((b) => ON_USE_TRIGGERS.has(b.trigger as string)).map((b) => { const { trigger: _t, ...rest } = b; return rest; });
   const base: Any = { id, name: a.name, kind, ...(a.text !== undefined ? { text: a.text } : {}), ...(a.sourceRef !== undefined ? { sourceRef: a.sourceRef } : {}), ...(a.todo !== undefined ? { todo: a.todo } : {}) };
   const duration = convertDurationV3(a.duration);
@@ -182,7 +190,6 @@ export function convertV2(a: unknown, lookup: (id: string) => Any | undefined = 
 
   const resources = (Array.isArray(a.resources) ? (a.resources as Any[]) : []);
   const cost = (Array.isArray(a.cost) ? (a.cost as Any[]) : []);
-  const isReaction = isObj(a.activation) && 'reaction' in a.activation;
   const isActive = a.activation !== undefined && a.activation !== 'passive' && !isReaction;
   const activations: Any[] = [];
   const pools: Any[] = resources.map((r) => ({ id: r.id, ...(r.label ? { label: r.label } : {}), max: r.max, resetOn: RESET_V3[r.resetOn as string] ?? r.resetOn ?? 'day' }));
