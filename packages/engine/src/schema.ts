@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { convertV1 } from './migrate';
+import { convertPack, convertBattle } from './migrate';
 
 // ---------- primitives ----------
 export const BonusTypeSchema = z.enum([
@@ -40,11 +40,14 @@ export const StatIdSchema = z.string().regex(
 export type StatId = z.infer<typeof StatIdSchema>;
 
 export const DurationSchema = z.union([
-  z.literal('instant'), z.literal('thisAttack'), z.literal('thisTurn'), z.literal('untilMyNextTurn'), z.literal('endOfRound'),
+  z.literal('thisAttack'), z.literal('thisTurn'), z.literal('untilMyNextTurn'),
   z.object({ rounds: z.union([z.number().int().positive(), z.string()]) }), z.object({ minutes: z.number().positive() }),
-  z.literal('encounter'), z.literal('untilRemoved'), z.literal('whileActive'), z.literal('concentration'),
+  z.literal('encounter'), z.literal('untilRemoved'),
 ]);
 export type Duration = z.infer<typeof DurationSchema>;
+
+export const ResetOnSchema = z.enum(['round', 'encounter', 'day', 'never']);
+export type ResetOn = z.infer<typeof ResetOnSchema>;
 
 // ---------- selectors ----------
 /**
@@ -133,7 +136,7 @@ export const EffectSchema = z.discriminatedUnion('verb', [
 ]);
 export type Effect = z.infer<typeof EffectSchema>;
 
-export const TriggerSchema = z.enum(['always', 'onUse', 'onActivate', 'onDeactivate', 'onHit', 'onMiss', 'onCrit', 'onDamaged', 'onRoundStart', 'onRoundEnd']);
+export const TriggerSchema = z.enum(['always', 'onHit', 'onMiss', 'onCrit', 'onDamaged', 'onRoundStart', 'onRoundEnd']);
 export type Trigger = z.infer<typeof TriggerSchema>;
 
 export const EffectBlockSchema = z.object({
@@ -145,14 +148,9 @@ export const EffectBlockSchema = z.object({
 });
 export type EffectBlock = z.infer<typeof EffectBlockSchema>;
 
-// ---------- ability envelope ----------
+// ---------- activations ----------
 export const ActionSchema = z.union([z.enum(['free', 'swift', 'immediate', 'move', 'standard', 'fullRound']), z.object({ minutes: z.number().positive() }), z.object({ hours: z.number().positive() })]);
-export const ActivationSchema = z.union([
-  z.enum(['passive', 'declare', 'atWill']),
-  z.object({ action: ActionSchema }),
-  z.object({ reaction: TriggerSchema }),
-]);
-export type Activation = z.infer<typeof ActivationSchema>;
+export type Action = z.infer<typeof ActionSchema>;
 
 export const CostSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('charge'), resourceId: z.string(), amount: ExprSchema.default(1) }),
@@ -164,14 +162,27 @@ export const CostSchema = z.discriminatedUnion('kind', [
 ]);
 export type Cost = z.infer<typeof CostSchema>;
 
-export const ResourceDefSchema = z.object({
-  id: z.string(),
-  label: z.string().optional(),
-  max: ExprSchema,
-  resetOn: z.enum(['round', 'encounter', 'day', 'rest', 'manual', 'never']).default('day'),
-  resetTo: z.enum(['max', 'zero']).default('max'),
+/** Inline charges of an activation: a pool whose id is the activation id. */
+export const ChargesSchema = z.object({ max: ExprSchema, resetOn: ResetOnSchema.default('day'), label: z.string().optional() });
+export type Charges = z.infer<typeof ChargesSchema>;
+
+/** A named charge pool on a record, shared by several activations or records. */
+export const PoolSchema = z.object({ id: z.string().min(1), label: z.string().optional(), max: ExprSchema, resetOn: ResetOnSchema.default('day') });
+export type Pool = z.infer<typeof PoolSchema>;
+
+export const ActivationSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().optional(),
+  action: ActionSchema.default('standard'),
+  charges: ChargesSchema.optional(),
+  cost: z.array(CostSchema).default([]),
+  duration: DurationSchema.optional(),
+  /** Casts this library spell: its effects (and duration, unless overridden) apply. */
+  spell: z.string().optional(),
+  onUse: z.array(EffectBlockSchema).default([]),
+  whileActive: z.array(EffectBlockSchema).default([]),
 });
-export type ResourceDef = z.infer<typeof ResourceDefSchema>;
+export type Activation = z.infer<typeof ActivationSchema>;
 
 export const ParamDefSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tags'), label: z.string().optional(), category: z.string().optional(), count: z.number().int().positive().optional() }),
@@ -180,11 +191,13 @@ export const ParamDefSchema = z.discriminatedUnion('kind', [
 ]);
 export type ParamDef = z.infer<typeof ParamDefSchema>;
 
-export const OriginSchema = z.enum(['feat', 'classFeature', 'race', 'item', 'spell', 'buff', 'condition', 'memory', 'situational', 'monster', 'core']);
-export type Origin = z.infer<typeof OriginSchema>;
-
-export const BindingSchema = z.union([z.enum(['none', 'thisItem', 'thisWeapon']), z.object({ slot: SlotIdSchema })]);
-export type Binding = z.infer<typeof BindingSchema>;
+export const AcquiredSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('feat') }),
+  z.object({ kind: z.literal('class'), classId: z.string().optional(), level: z.number().int().optional() }),
+  z.object({ kind: z.literal('race') }),
+  z.object({ kind: z.literal('dm') }),
+]);
+export type Acquired = z.infer<typeof AcquiredSchema>;
 
 export const WeaponMetaSchema = z.object({
   kind: AttackKindSchema,
@@ -201,7 +214,7 @@ export const WeaponMetaSchema = z.object({
 });
 export type WeaponMeta = z.infer<typeof WeaponMetaSchema>;
 
-/** Item metadata on an ability with origin 'item'. slot 'none' = active while carried (no body slot). */
+/** slot 'none' = active while carried (no body slot); undefined = not equippable. */
 export const ItemMetaSchema = z.object({
   category: ItemCategorySchema,
   slot: z.union([SlotIdSchema, z.literal('none')]).optional(),
@@ -212,28 +225,66 @@ export const ItemMetaSchema = z.object({
 });
 export type ItemMeta = z.infer<typeof ItemMetaSchema>;
 
-export const AbilitySchema = z.object({
+// ---------- records ----------
+const recordBase = {
   id: z.string().min(1),
   name: z.string().min(1),
-  origin: OriginSchema,
-  classId: z.string().optional(),
-  classLevel: z.number().int().optional(),
   text: z.string().optional(),
   sourceRef: z.string().optional(),
-  binding: BindingSchema.default('none'),
-  activation: ActivationSchema.default('passive'),
-  cost: z.array(CostSchema).default([]),
-  duration: DurationSchema.optional(),
-  resources: z.array(ResourceDefSchema).default([]),
-  params: z.record(ParamDefSchema).optional(),
-  grants: z.array(z.string()).default([]),
-  item: ItemMetaSchema.optional(),
-  effects: z.array(EffectBlockSchema).default([]),
-  enabledByDefault: z.boolean().default(true),
   todo: z.string().optional(),
-});
+  /** Passive blocks: apply while the feature is enabled / the item equipped / the status or spell active. */
+  effects: z.array(EffectBlockSchema).default([]),
+};
+
+export const FeatureSchema = z.object({
+  ...recordBase,
+  kind: z.literal('feature'),
+  acquired: AcquiredSchema.default({ kind: 'feat' }),
+  params: z.record(ParamDefSchema).optional(),
+  enabledByDefault: z.boolean().default(true),
+  activations: z.array(ActivationSchema).default([]),
+  pools: z.array(PoolSchema).default([]),
+}).strict();
+export type Feature = z.infer<typeof FeatureSchema>;
+
+export const ItemSchema = z.object({
+  ...recordBase,
+  kind: z.literal('item'),
+  item: ItemMetaSchema,
+  activations: z.array(ActivationSchema).default([]),
+  pools: z.array(PoolSchema).default([]),
+}).strict();
+export type Item = z.infer<typeof ItemSchema>;
+
+export const SpellSchema = z.object({
+  ...recordBase,
+  kind: z.literal('spell'),
+  level: z.number().int().min(0).optional(),
+  castingAction: ActionSchema.default('standard'),
+  duration: DurationSchema.optional(),
+}).strict();
+export type Spell = z.infer<typeof SpellSchema>;
+
+export const StatusSchema = z.object({
+  ...recordBase,
+  kind: z.literal('status'),
+  harmful: z.boolean().default(false),
+  duration: DurationSchema.optional(),
+}).strict();
+export type Status = z.infer<typeof StatusSchema>;
+
+export const AbilitySchema = z.discriminatedUnion('kind', [FeatureSchema, ItemSchema, SpellSchema, StatusSchema]);
 export type Ability = z.infer<typeof AbilitySchema>;
 export type AbilityInput = z.input<typeof AbilitySchema>;
+export type RecordKind = Ability['kind'];
+export const RECORD_KINDS: RecordKind[] = ['feature', 'item', 'spell', 'status'];
+
+export function activationsOf(a: Ability | undefined): Activation[] {
+  return a && (a.kind === 'feature' || a.kind === 'item') ? a.activations : [];
+}
+export function poolsOf(a: Ability | undefined): Pool[] {
+  return a && (a.kind === 'feature' || a.kind === 'item') ? a.pools : [];
+}
 
 // ---------- library docs ----------
 export const TagSchema = z.object({
@@ -365,21 +416,22 @@ export type CharacterInput = z.input<typeof CharacterSchema>;
 
 export const XpTableSchema = z.array(z.object({ level: z.number().int().positive(), xp: z.number().int().nonnegative() }));
 
-export const PackSchema = z.object({
+const PackInnerSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   version: z.number().int().nonnegative(),
   description: z.string().optional(),
   tags: z.array(TagSchema).default([]),
-  /** Packs written in the v1 format are converted on parse. */
-  abilities: z.array(z.preprocess((a) => convertV1(a), AbilitySchema)).default([]),
+  abilities: z.array(AbilitySchema).default([]),
   monsters: z.array(MonsterSchema).default([]),
   skills: z.array(SkillSchema).default([]),
   classTables: z.array(ClassTableSchema).default([]),
   characters: z.array(CharacterSchema).default([]),
   xpTable: XpTableSchema.optional(),
 });
-export type Pack = z.infer<typeof PackSchema>;
+/** Packs written in the v1 or v2 format are converted on parse. */
+export const PackSchema = z.preprocess((raw) => convertPack(raw), PackInnerSchema);
+export type Pack = z.infer<typeof PackInnerSchema>;
 
 // ---------- battle ----------
 export const CombatantSchema = z.object({
@@ -401,8 +453,11 @@ export type Combatant = z.infer<typeof CombatantSchema>;
 export const ActiveBuffSchema = z.object({
   instanceId: z.string().min(1),
   abilityId: z.string().min(1),
+  /** Set when the buff is an activation running (Boots of Speed haste); absent for statuses and grant-verb buffs. */
+  activationId: z.string().optional(),
   owner: z.string().default('self'),
   remainingRounds: z.number().int().optional(),
+  expires: DurationSchema.optional(),
   suppressed: z.boolean().default(false),
   label: z.string().optional(),
 });
@@ -421,6 +476,7 @@ export const LogEventSchema = z.object({
   attackIndex: z.number().int().optional(),
   result: z.enum(['hit', 'miss', 'crit']).optional(),
   abilityId: z.string().optional(),
+  activationId: z.string().optional(),
   damage: z.number().int().optional(),
   text: z.string().optional(),
   editedAt: z.string().optional(),
@@ -437,14 +493,14 @@ export const LogEventSchema = z.object({
 });
 export type LogEvent = z.infer<typeof LogEventSchema>;
 
-export const BattleSchema = z.object({
+const BattleInnerSchema = z.object({
   id: z.string().min(1),
   name: z.string().default('Battle'),
   startedAt: z.string(),
   round: z.number().int().positive().default(1),
   combatants: z.array(CombatantSchema).default([]),
   activeBuffs: z.array(ActiveBuffSchema).default([]),
-  situational: z.array(AbilitySchema).default([]),
+  statuses: z.array(StatusSchema).default([]),
   suppressedAbilities: z.array(z.string()).default([]),
   selfConditions: z.array(z.object({ tag: z.string(), expires: DurationSchema.optional(), appliedRound: z.number().int().optional(), source: z.string().optional() })).default([]),
   toggles: z.record(z.boolean()).default({}),
@@ -456,4 +512,5 @@ export const BattleSchema = z.object({
   log: z.array(LogEventSchema).default([]),
   ended: z.boolean().default(false),
 });
-export type Battle = z.infer<typeof BattleSchema>;
+export const BattleSchema = z.preprocess((raw) => convertBattle(raw), BattleInnerSchema);
+export type Battle = z.infer<typeof BattleInnerSchema>;

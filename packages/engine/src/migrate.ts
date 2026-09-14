@@ -110,3 +110,7 @@ export function convertPackV1<T extends { abilities?: unknown[] }>(pack: T): T {
   if (!Array.isArray(pack.abilities)) return pack;
   return { ...pack, abilities: pack.abilities.map(convertV1) };
 }
+
+// TODO(Task 2): replace these identity stubs with real v1/v2 -> v3 pack/battle conversion.
+export function convertPack<T>(raw: T): T { return raw; }
+export function convertBattle<T>(raw: T): T { return raw; }
