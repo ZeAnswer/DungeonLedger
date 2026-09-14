@@ -210,6 +210,11 @@ const pack: Pack = PackSchema.parse({
         { id: 'hunters-analysis', name: "Hunter's Analysis", action: 'fullRound', onUse: [{ id: 'mark', do: [{ verb: 'tag', to: 'target', tag: 'analyzed', duration: 'encounter' }] }] },
       ],
     },
+    // ---- tombstones: folded into vaelors-manual in v10; kept as inert records so the merge overwrites the v9 copies
+    // that are still in installed libraries (merge never deletes) and any lingering character instance contributes nothing.
+    { id: 'monster-knowledge', name: 'Monster Knowledge (merged)', kind: 'item', item: { category: 'gear', tags: [] }, text: 'Merged into Vaelor\'s Monsters\' Manual.' },
+    { id: 'hunters-analysis', name: "Hunter's Analysis (merged)", kind: 'item', item: { category: 'gear', tags: [] }, text: 'Merged into Vaelor\'s Monsters\' Manual.' },
+    { id: 'hunters-instinct', name: "Hunter's Instinct (merged)", kind: 'item', item: { category: 'gear', tags: [] }, text: 'Merged into Vaelor\'s Monsters\' Manual.' },
     { id: 'gargoyle-hands', name: "Gargoyle's hands", source: 'item', item: { category: 'material' }, text: 'Trophy crafting material (Monstrous humanoid). Crafts: Gargoyle bracers — DR 10/magic, freeze DC +15, +2 Con.', effects: [] },
     { id: 'gorgon-scale', name: "Gorgon's scale", source: 'item', item: { category: 'material' }, text: 'Trophy crafting material (Magical beast). Crafts: Gorgon belt — +2d6 damage when charging, petrifying cone 60 ft 1/day DC +14 Fort negates.', effects: [] },
     // ---- trophies (Monster Hunter) ----

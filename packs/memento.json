@@ -1160,6 +1160,45 @@
       "pools": []
     },
     {
+      "id": "monster-knowledge",
+      "name": "Monster Knowledge (merged)",
+      "text": "Merged into Vaelor's Monsters' Manual.",
+      "effects": [],
+      "kind": "item",
+      "item": {
+        "category": "gear",
+        "tags": []
+      },
+      "activations": [],
+      "pools": []
+    },
+    {
+      "id": "hunters-analysis",
+      "name": "Hunter's Analysis (merged)",
+      "text": "Merged into Vaelor's Monsters' Manual.",
+      "effects": [],
+      "kind": "item",
+      "item": {
+        "category": "gear",
+        "tags": []
+      },
+      "activations": [],
+      "pools": []
+    },
+    {
+      "id": "hunters-instinct",
+      "name": "Hunter's Instinct (merged)",
+      "text": "Merged into Vaelor's Monsters' Manual.",
+      "effects": [],
+      "kind": "item",
+      "item": {
+        "category": "gear",
+        "tags": []
+      },
+      "activations": [],
+      "pools": []
+    },
+    {
       "id": "gargoyle-hands",
       "name": "Gargoyle's hands",
       "text": "Trophy crafting material (Monstrous humanoid). Crafts: Gargoyle bracers — DR 10/magic, freeze DC +15, +2 Con.",

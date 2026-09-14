@@ -1,0 +1,216 @@
+{
+  "id": "memento",
+  "name": "Memento (Ranger 5 / Monster Hunter 1)",
+  "version": 9,
+  "description": "Trimmed copy of memento pack v9 (git 57b1f07): only the records folded into Vaelor's Manual in v10, plus the stored character instances that point at them.",
+  "tags": [
+    {
+      "id": "analyzed",
+      "label": "Analyzed (Hunter's Analysis)",
+      "category": "condition"
+    }
+  ],
+  "skills": [
+    {
+      "id": "knowledge-monsters",
+      "name": "Knowledge (Monsters)",
+      "ability": "wis",
+      "trainedOnly": true,
+      "armorCheck": false
+    }
+  ],
+  "abilities": [
+    {
+      "id": "monster-knowledge",
+      "name": "Monster Knowledge (Vaelor's Manual)",
+      "origin": "item",
+      "text": "Standard action: Knowledge check DC 16 to recall everything in the book about this monster (except HP). Enter the same check as Knowledge Devotion.",
+      "binding": "none",
+      "activation": {
+        "action": "standard"
+      },
+      "cost": [],
+      "resources": [],
+      "grants": [],
+      "effects": [
+        {
+          "id": "reveal",
+          "trigger": "onUse",
+          "when": {
+            "compare": "battle.prompt.knowledge",
+            "op": ">=",
+            "value": 16
+          },
+          "do": [
+            {
+              "verb": "reveal"
+            }
+          ]
+        }
+      ],
+      "enabledByDefault": true
+    },
+    {
+      "id": "hunters-analysis",
+      "name": "Hunter's Analysis (Vaelor's Manual)",
+      "origin": "item",
+      "text": "Spend a full round observing a monster. From your next turn, vs that monster for the rest of the battle: threat range \u00d72 (20 \u2192 19-20). If immune to crits, instead reduce its DR/SR by half your MH level (min 1) for 1 round, or suppress one unique ability for 1 round with Knowledge DC 20.",
+      "binding": "none",
+      "activation": {
+        "action": "fullRound"
+      },
+      "cost": [],
+      "resources": [],
+      "grants": [],
+      "effects": [
+        {
+          "id": "mark",
+          "trigger": "onUse",
+          "when": {
+            "all": []
+          },
+          "do": [
+            {
+              "verb": "tag",
+              "to": "target",
+              "tag": "analyzed",
+              "duration": "encounter"
+            }
+          ]
+        },
+        {
+          "id": "crit",
+          "label": "Analyzed target",
+          "trigger": "always",
+          "when": {
+            "is": "target.condition.analyzed"
+          },
+          "do": [
+            {
+              "verb": "modify",
+              "to": "critRange",
+              "value": 1,
+              "type": "untyped",
+              "mode": "add"
+            },
+            {
+              "verb": "note",
+              "text": "Hunter's Analysis: threat range doubled vs this target (if base is 19-20 use 17-20). If crit-immune: DR/SR -1 for 1 round, or suppress one ability (Knowledge DC 20)."
+            }
+          ]
+        }
+      ],
+      "enabledByDefault": true
+    },
+    {
+      "id": "hunters-instinct",
+      "name": "Hunter's Instinct (Vaelor's Manual)",
+      "origin": "item",
+      "text": "+1 on Knowledge checks to identify monsters.",
+      "binding": "none",
+      "activation": "passive",
+      "cost": [],
+      "resources": [],
+      "grants": [],
+      "effects": [
+        {
+          "id": "k",
+          "trigger": "always",
+          "when": {
+            "all": []
+          },
+          "do": [
+            {
+              "verb": "modify",
+              "to": "skill.knowledge-monsters",
+              "value": 1,
+              "type": "untyped",
+              "mode": "add"
+            }
+          ]
+        }
+      ],
+      "enabledByDefault": true
+    },
+    {
+      "id": "vaelors-manual",
+      "name": "Vaelor's Monsters' Manual",
+      "origin": "item",
+      "text": "Unique artifact, no slot, CL 12. Grants Monster Knowledge, Hunter's Analysis, Hunter's Instinct and the Bestiary Collection.",
+      "binding": "none",
+      "activation": "passive",
+      "cost": [],
+      "resources": [],
+      "grants": [],
+      "item": {
+        "category": "wondrous",
+        "slot": "none",
+        "weight": 5,
+        "tags": []
+      },
+      "effects": [],
+      "enabledByDefault": true
+    }
+  ],
+  "characters": [
+    {
+      "id": "memento",
+      "name": "Memento",
+      "abilityScores": {
+        "str": 12,
+        "dex": 16,
+        "con": 12,
+        "int": 16,
+        "wis": 16,
+        "cha": 11
+      },
+      "size": "medium",
+      "classLevels": [],
+      "hp": {
+        "max": 50,
+        "current": 50,
+        "temp": 0,
+        "nonlethal": 0
+      },
+      "baseArmor": 0,
+      "baseShield": 0,
+      "baseNaturalArmor": 0,
+      "speed": 30,
+      "skills": {
+        "knowledge-monsters": {
+          "ranks": 8
+        }
+      },
+      "abilities": [
+        {
+          "abilityId": "monster-knowledge",
+          "enabled": true,
+          "paramValues": {}
+        },
+        {
+          "abilityId": "hunters-analysis",
+          "enabled": true,
+          "paramValues": {}
+        },
+        {
+          "abilityId": "hunters-instinct",
+          "enabled": true,
+          "paramValues": {}
+        },
+        {
+          "abilityId": "vaelors-manual",
+          "enabled": true,
+          "paramValues": {}
+        }
+      ],
+      "inventory": [
+        {
+          "id": "inv-vaelors-manual",
+          "abilityId": "vaelors-manual",
+          "quantity": 1,
+          "equipped": true
+        }
+      ]
+    }
+  ]
+}
