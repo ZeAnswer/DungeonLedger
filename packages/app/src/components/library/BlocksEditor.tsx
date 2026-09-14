@@ -10,8 +10,14 @@ export const TRIGGERS: { id: Trigger; label: string }[] = [
   { id: 'onDamaged', label: 'When I take damage' }, { id: 'onRoundStart', label: 'At round start' }, { id: 'onRoundEnd', label: 'At round end' },
 ];
 
-export function newBlock(n: number): EffectBlock {
-  return { id: `e${n}`, trigger: 'always', when: { all: [] }, do: [{ verb: 'modify', to: 'attack', value: 1, type: 'untyped', mode: 'add' }] };
+/** `base` if free, else `base-2`, `base-3`, … Ids must not collide: activation ids double as pool ids. */
+export function uniqueId(base: string, taken: string[]): string {
+  if (!taken.includes(base)) return base;
+  for (let n = 2; ; n++) if (!taken.includes(`${base}-${n}`)) return `${base}-${n}`;
+}
+
+export function newBlock(n: number, taken: string[] = []): EffectBlock {
+  return { id: uniqueId(`e${n}`, taken), trigger: 'always', when: { all: [] }, do: [{ verb: 'modify', to: 'attack', value: 1, type: 'untyped', mode: 'add' }] };
 }
 
 /** A list of effect blocks. `showTrigger` false = onUse blocks (trigger is implied). */
@@ -35,7 +41,7 @@ export function BlocksEditor({ value, onChange, showTrigger = true, presets, add
           </div>
         </div>
       ))}
-      <Button onClick={() => onChange([...value, newBlock(value.length + 1)])}>{addLabel}</Button>
+      <Button onClick={() => onChange([...value, newBlock(value.length + 1, value.map((b) => b.id))])}>{addLabel}</Button>
     </div>
   );
 }

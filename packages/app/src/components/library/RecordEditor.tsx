@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AbilitySchema, SLOTS, type Ability, type Condition, type Feature, type Item, type ItemCategory, type Spell, type Status } from '@hl/engine';
 import { Button, Chip, Field, cx, inputCls } from '../ui';
-import { BlocksEditor } from './BlocksEditor';
+import { BlocksEditor, uniqueId } from './BlocksEditor';
 import { ActivationEditor } from './ActivationEditor';
 import { DurationPicker } from './EffectEditor';
 import type { Preset } from './ConditionEditor';
@@ -29,7 +29,12 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
   const set = (patch: Partial<Ability>) => setA({ ...a, ...patch } as Ability);
   const switchTab = (t: 'builder' | 'json') => {
     if (t === 'json') setJson(JSON.stringify(a, null, 2));
-    else { try { setA(AbilitySchema.parse(JSON.parse(json))); setErr(undefined); } catch (e) { setErr((e as Error).message); return; } }
+    else {
+      let parsed: Ability;
+      try { parsed = AbilitySchema.parse(JSON.parse(json)); } catch (e) { setErr((e as Error).message); return; }
+      if (parsed.kind !== initial.kind) { setErr(`This is the ${initial.kind} editor; kind cannot change`); return; }
+      setA(parsed); setErr(undefined);
+    }
     setTab(t);
   };
   const save = () => {
@@ -69,12 +74,15 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">{{ feature: 'Passive effects (while enabled)', item: 'Passive effects (while equipped)', spell: 'Effects (while the spell lasts; instant spells apply them once)', status: 'Effects (while active)' }[a.kind]}</div>
           <BlocksEditor value={a.effects} onChange={(effects) => set({ effects })} presets={presets} />
 
-          {(a.kind === 'feature' || a.kind === 'item') && (
+          {(a.kind === 'feature' || a.kind === 'item') && (() => {
+            /** Activation ids double as pool ids, so a new id of either sort must dodge both lists. */
+            const takenIds = [...a.activations.map((x) => x.id), ...a.pools.map((x) => x.id)];
+            return (
             <div className="mt-4">
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Activations (things you do with it)</div>
               <div className="space-y-3">
                 {a.activations.map((act, i) => <ActivationEditor key={i} value={act} presets={presets} onChange={(n) => set({ activations: a.activations.map((x, j) => (j === i ? n : x)) } as Partial<Ability>)} onRemove={() => set({ activations: a.activations.filter((_, j) => j !== i) } as Partial<Ability>)} />)}
-                <Button onClick={() => set({ activations: [...a.activations, { id: a.activations.length ? `${a.id}-${a.activations.length + 1}` : a.id, action: 'standard', cost: [], onUse: [], whileActive: [] }] } as Partial<Ability>)}>+ add activation</Button>
+                <Button onClick={() => set({ activations: [...a.activations, { id: uniqueId(a.id, takenIds), action: 'standard', cost: [], onUse: [], whileActive: [] }] } as Partial<Ability>)}>+ add activation</Button>
               </div>
               <Field label="Shared pools (only when several activations or records spend the same charges)">
                 {a.pools.map((p, i) => (
@@ -86,10 +94,11 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
                     <button type="button" className="px-2 text-zinc-500" onClick={() => set({ pools: a.pools.filter((_, j) => j !== i) } as Partial<Ability>)}>✕</button>
                   </div>
                 ))}
-                <button type="button" className="text-sm text-amber-300" onClick={() => set({ pools: [...a.pools, { id: `${a.id}-pool`, max: 1, resetOn: 'day' }] } as Partial<Ability>)}>+ add pool</button>
+                <button type="button" className="text-sm text-amber-300" onClick={() => set({ pools: [...a.pools, { id: uniqueId(`${a.id}-pool`, takenIds), max: 1, resetOn: 'day' }] } as Partial<Ability>)}>+ add pool</button>
               </Field>
             </div>
-          )}
+            );
+          })()}
           <Field label="Todo / open question"><input className={inputCls} value={a.todo ?? ''} onChange={(e) => set({ todo: e.target.value || undefined })} /></Field>
         </div>
       )}
