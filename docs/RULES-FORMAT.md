@@ -77,7 +77,7 @@ An **activation** is something the player can do with a record: a row in battle'
 "pools": [{ "id": "wand-charges", "label": "Wand", "max": 50, "resetOn": "never" }]
 ```
 
-Pool ids and activation ids share one namespace; the pack validator rejects an activation id already used elsewhere in the library. `resetOn` is `round | encounter | day | never`: round and encounter counters live on the battle and clear with it, day and never counters live on the character (`resourceState`) and can be nudged by hand on the ability's sheet — v2's `manual` reset is just `never`.
+Pool ids and activation ids share one namespace; the pack validator rejects an activation or pool id already used elsewhere in the library. `resetOn` is `round | encounter | day | never`: round and encounter counters live on the battle and clear with it, day and never counters live on the character (`resourceState`) and can be nudged by hand on the ability's sheet — v2's `manual` reset is just `never`.
 
 ### Durations
 
@@ -91,6 +91,7 @@ The converter is mechanical and idempotent, so a v2 pack can simply be dropped i
 |---|---|
 | `origin: feat \| classFeature \| race \| memory \| core` | `kind: "feature"` with `acquired` = feat / class (carrying `classId`, `classLevel` → `level`) / race / dm |
 | `origin: item \| spell` | `kind: "item"` / `kind: "spell"` |
+| `origin: monster` | `kind: "feature"` with `acquired: { kind: "feat" }` (a monster's own ability; no bundled pack uses it) |
 | `origin: buff \| condition \| situational` | `kind: "status"` (`harmful: true` for conditions) |
 | `activation` (`action`, `atWill`, `declare`) + `cost` + `duration` + `resources[0]` | one entry in `activations` (`declare` → `action: "free"`, `duration: "thisAttack"`) |
 | `activation: passive` and `activation: { reaction: X }` | no activation: blocks stay in `effects`, a reaction's `always` blocks take trigger `X` |

@@ -495,7 +495,7 @@ export function availableActions(ctx: EvalContext): ActionInfo[] {
         for (const b of passing) for (const e of b.do) if (e.verb === 'note') notes.push(interpolate(e.text, vars));
       }
       const duration = act.duration ?? (spell?.kind === 'spell' ? spell.duration : undefined);
-      const active = !!ctx.battle?.activeBuffs.some((b) => b.abilityId === ability.id && b.activationId === act.id && !b.suppressed);
+      const active = !!ctx.battle?.activeBuffs.some((b) => b.owner === 'self' && b.abilityId === ability.id && b.activationId === act.id && !b.suppressed);
       out.push({
         abilityId: ability.id, activationId: act.id, name, recordName: ability.name, kind: ability.kind,
         ...(ability.kind === 'feature' ? { acquired: ability.acquired } : {}),

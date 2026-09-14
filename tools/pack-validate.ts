@@ -34,7 +34,7 @@ const checkSelector = (owner: string, sel: string) => {
   if (p[0] === 'self' && p[1] === 'ability' && !lib.abilities[p.slice(2, -1).join('.')]) problems.push(`${owner}: unknown ability in selector "${sel}"`);
   if (p[0] === 'self' && p[1] === 'class' && !lib.classTables[p.slice(2, -1).join('.')]) problems.push(`${owner}: unknown class in selector "${sel}"`);
 };
-let owner = '';
+let owner = ''; // set before each walk() below; the hoisted walk reads it so selector problems name the record being checked.
 const walk = (c: unknown): void => {
   if (!c || typeof c !== 'object') return;
   const o = c as Record<string, unknown>;
@@ -43,7 +43,7 @@ const walk = (c: unknown): void => {
   for (const k of ['all', 'any', 'none', 'count']) if (Array.isArray(o[k])) (o[k] as unknown[]).forEach(walk);
   if (o.not) walk(o.not);
 };
-const activationIds = new Map<string, string>();
+const resourceIds = new Map<string, string>(); // activation ids and pool ids share one namespace (findResourceDef looks in both)
 for (const a of Object.values(lib.abilities)) {
   owner = `ability ${a.id}`;
   const blocks = [...a.effects, ...activationsOf(a).flatMap((x) => [...x.onUse, ...x.whileActive])];
@@ -56,9 +56,13 @@ for (const a of Object.values(lib.abilities)) {
     }
   }
   const poolIds = new Set(poolsOf(a).map((p) => p.id));
+  for (const p of poolsOf(a)) {
+    const prev = resourceIds.get(p.id);
+    if (prev) problems.push(`${a.id}: pool id "${p.id}" already used by ${prev}`); else resourceIds.set(p.id, a.id);
+  }
   for (const act of activationsOf(a)) {
-    const prev = activationIds.get(act.id);
-    if (prev) problems.push(`${a.id}: activation id "${act.id}" already used by ${prev}`); else activationIds.set(act.id, a.id);
+    const prev = resourceIds.get(act.id);
+    if (prev) problems.push(`${a.id}: activation id "${act.id}" already used by ${prev}`); else resourceIds.set(act.id, a.id);
     if (act.spell && lib.abilities[act.spell]?.kind !== 'spell') problems.push(`${a.id}/${act.id}: spell "${act.spell}" is not a spell record`);
     for (const c of act.cost) {
       if (c.kind === 'charge' && !poolIds.has(c.resourceId) && !Object.values(lib.abilities).some((x) => poolsOf(x).some((p) => p.id === c.resourceId) || activationsOf(x).some((y) => y.id === c.resourceId && y.charges))) problems.push(`${a.id}/${act.id}: charge cost unknown pool "${c.resourceId}"`);
