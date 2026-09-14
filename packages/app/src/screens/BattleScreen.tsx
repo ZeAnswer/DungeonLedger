@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { availableActions, nextRound } from '@hl/engine';
+import { availableActions, listPools, nextRound } from '@hl/engine';
 import { useStore } from '../store/store';
 import { useCtx } from '../store/hooks';
 import { Button, cx } from '../components/ui';
@@ -20,7 +20,11 @@ export function BattleScreen() {
   const [tab, setTab] = useState<'fight' | 'log'>('fight');
   const [buffs, setBuffs] = useState(false);
   const [sit, setSit] = useState(false);
-  const resources = useMemo(() => (ctx ? availableActions(ctx).flatMap((a) => a.resources) : []), [ctx]);
+  const resources = useMemo(() => {
+    if (!ctx) return [];
+    const all = [...availableActions(ctx).flatMap((a) => (a.charges ? [a.charges] : [])), ...listPools(ctx)];
+    return [...new Map(all.map((r) => [r.id, r])).values()];
+  }, [ctx]);
 
   if (!ctx) return <div className="p-4 text-zinc-500">No character loaded. Import a pack in Settings.</div>;
 
@@ -60,7 +64,7 @@ export function BattleScreen() {
 
       <div className="mb-3 flex flex-wrap gap-2 text-xs">
         {resources.map((r) => <span key={r.id} className={cx('rounded-full border px-2 py-1', r.remaining === 0 ? 'border-red-900 text-red-300' : 'border-zinc-700 text-zinc-300')}>{r.label} {r.remaining}/{r.max}</span>)}
-        {battle.activeBuffs.map((b) => <button key={b.instanceId} type="button" onClick={() => setBuffs(true)} className={cx('rounded-full border px-2 py-1', b.suppressed ? 'border-zinc-800 text-zinc-600 line-through' : 'border-emerald-800 text-emerald-300')}>{b.label ?? ctx.library.abilities[b.abilityId]?.name ?? b.abilityId}{b.remainingRounds !== undefined ? ` · ${b.remainingRounds}r` : ''}</button>)}
+        {battle.activeBuffs.map((b) => <button key={b.instanceId} type="button" onClick={() => setBuffs(true)} className={cx('rounded-full border px-2 py-1', b.suppressed ? 'border-zinc-800 text-zinc-600 line-through' : 'border-emerald-800 text-emerald-300')}>{b.label ?? ctx.library.abilities[b.abilityId]?.name ?? battle.statuses.find((s) => s.id === b.abilityId)?.name ?? b.abilityId}{b.remainingRounds !== undefined ? ` · ${b.remainingRounds}r` : ''}</button>)}
         {battle.suppressedAbilities.map((id) => <button key={id} type="button" onClick={() => setBuffs(true)} className="rounded-full border border-red-900 px-2 py-1 text-red-300 line-through">{ctx.library.abilities[id]?.name ?? id}</button>)}
         <button type="button" onClick={() => setBuffs(true)} className="rounded-full border border-dashed border-zinc-600 px-2 py-1 text-zinc-400">+ buff / suppress</button>
         <button type="button" onClick={() => setSit(true)} className="rounded-full border border-dashed border-zinc-600 px-2 py-1 text-zinc-400">+ modifier</button>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  attackProfiles, availableActions, listAttackModes, logAttack, resolveAttack, setPrompt, undoEvent, useAbility, type AttackResult, type BreakdownEntry, type EvalContext,
+  attackProfiles, availableActions, listAttackModes, logAttack, resolveAttack, setPrompt, undoEvent, useAbility, type ActionInfo, type AttackResult, type BreakdownEntry, type EvalContext,
 } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { collectToggles } from '../../store/hooks';
@@ -24,6 +24,7 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
   const result = useMemo(() => (mode && profiles.length ? resolveAttack(ctx, { profileId: effectiveProfileId, modeId: mode.modeId }) : undefined), [ctx, effectiveProfileId, mode, profiles.length]);
   const toggles = useMemo(() => collectToggles(ctx), [ctx]);
   const actions = useMemo(() => availableActions(ctx), [ctx]);
+  const declares = useMemo(() => actions.filter((a) => a.declare), [actions]);
 
   const setToggle = (id: string, v: boolean) => setBattle({ ...battle, toggles: { ...battle.toggles, [id]: v } });
   const record = (a: AttackResult, res: 'hit' | 'miss' | 'crit') => {
@@ -33,23 +34,32 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
     setBattle(r.battle); setCharacter(r.character);
     showToast(`#${a.index} ${res.toUpperCase()} vs ${target.name}`);
   };
-  const use = (abilityId: string) => {
-    const r = useAbility(ctx, { abilityId, ...(target ? { targetId: target.id } : {}) });
+  const use = (a: ActionInfo) => {
+    const r = useAbility(ctx, { abilityId: a.abilityId, activationId: a.activationId, ...(target ? { targetId: target.id } : {}) });
     setBattle(r.battle); setCharacter(r.character);
-    showToast(`Used ${ctx.library.abilities[abilityId]?.name ?? abilityId}`);
+    showToast(`Used ${a.name}`);
   };
 
-  const originLabel = (a: (typeof actions)[number]) => a.grantedBy ? ctx.library.abilities[a.grantedBy]?.name ?? a.grantedBy : a.origin === 'classFeature' ? `${ctx.library.classTables[ctx.library.abilities[a.abilityId]?.classId ?? '']?.name ?? 'class feature'}${ctx.library.abilities[a.abilityId]?.classLevel ? ` ${ctx.library.abilities[a.abilityId]!.classLevel}` : ''}` : a.origin;
+  const originLabel = (a: ActionInfo) => a.kind === 'feature' && a.acquired?.kind === 'class'
+    ? `${ctx.library.classTables[a.acquired.classId ?? '']?.name ?? 'class feature'}${a.acquired.level ? ` ${a.acquired.level}` : ''}`
+    : a.name !== a.recordName ? a.recordName
+    : a.kind === 'feature' ? ({ feat: 'feat', race: 'racial', dm: 'DM' } as Record<string, string>)[a.acquired?.kind ?? 'feat'] ?? 'feature'
+    : a.kind;
   if (!profiles.length) return <p className="text-zinc-500">No weapon equipped. Equip one in Inventory.</p>;
 
   return (
     <div>
       {/* toggles */}
-      {(toggles.length > 0) && (
+      {(toggles.length > 0 || declares.length > 0) && (
         <div className="mb-3 flex flex-wrap gap-2">
           {toggles.map((t) => (
-            <Chip key={t.id} tone={t.declare ? 'red' : 'amber'} active={!!battle.toggles[t.id]} onClick={() => setToggle(t.id, !battle.toggles[t.id])}>
-              {t.declare ? '⚡ ' : ''}{humanize(t.id)}
+            <Chip key={t.id} tone="amber" active={!!battle.toggles[t.id]} onClick={() => setToggle(t.id, !battle.toggles[t.id])}>
+              {humanize(t.id)}
+            </Chip>
+          ))}
+          {declares.map((a) => (
+            <Chip key={a.activationId} tone="red" active={a.active} onClick={() => !a.active && a.usable && use(a)}>
+              ⚡ {a.name}{a.charges ? ` ${a.charges.remaining}/${a.charges.max}` : ''}
             </Chip>
           ))}
         </div>
@@ -141,22 +151,21 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Abilities & charges</div>
           <div className="space-y-2">
             {actions.map((a) => (
-              <div key={a.abilityId} data-ability={a.abilityId} className={cx('flex items-center justify-between gap-2 rounded-xl border px-3 py-2', a.usable ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-800 bg-zinc-950 opacity-70', a.active && 'border-emerald-700')}>
+              <div key={a.activationId} data-ability={a.abilityId} data-activation={a.activationId} className={cx('flex items-center justify-between gap-2 rounded-xl border px-3 py-2', a.usable ? 'border-zinc-700 bg-zinc-900' : 'border-zinc-800 bg-zinc-950 opacity-70', a.active && 'border-emerald-700')}>
                 <div className="min-w-0">
                   <div className="font-medium truncate">{a.name}{a.active ? <span className="ml-2 text-xs text-emerald-300">ACTIVE</span> : null}</div>
                   <div className="truncate text-xs text-zinc-500">{originLabel(a)}</div>
                   <div className="text-xs text-zinc-400">
-                    {a.resources.map((r) => <span key={r.id} className="mr-2">{r.label}: <b className={r.remaining === 0 ? 'text-red-400' : 'text-emerald-300'}>{r.resetTo === 'zero' ? `${r.max - r.remaining}/${r.max}` : `${r.remaining}/${r.max}`}</b> /{r.resetOn}</span>)}
-                    {typeof a.activation === 'object' && 'action' in a.activation && <span className="mr-2">{typeof a.activation.action === 'string' ? a.activation.action : 'long'} action</span>}
-                    {a.activation === 'declare' && <span className="mr-2">declare before roll</span>}
-                    {a.activation === 'atWill' && <span className="mr-2">at will</span>}
+                    {a.charges && <span className="mr-2">{a.charges.label}: <b className={a.charges.remaining === 0 ? 'text-red-400' : 'text-emerald-300'}>{a.charges.remaining}/{a.charges.max}</b> /{a.charges.resetOn}</span>}
+                    <span className="mr-2">{typeof a.action === 'string' ? a.action : 'long'} action</span>
+                    {!a.charges && !a.costText.length && <span className="mr-2">at will</span>}
+                    {a.costText.map((t) => <span key={t} className="mr-2">costs {t}</span>)}
+                    {a.declare && <span className="mr-2">declare before roll</span>}
                   </div>
                   {a.reasons.map((r) => <div key={r} className="text-xs text-amber-300">{r}</div>)}
                   {a.notes.map((n) => <div key={n} className="text-xs text-zinc-300">{n}</div>)}
                 </div>
-                {a.activation !== 'passive' ? (
-                  <Button size="sm" variant={a.active ? 'ghost' : 'default'} disabled={!a.usable || a.active} onClick={() => use(a.abilityId)}>{a.active ? 'Active' : 'Use'}</Button>
-                ) : null}
+                <Button size="sm" variant={a.active ? 'ghost' : 'default'} disabled={!a.usable || a.active} onClick={() => use(a)}>{a.active ? 'Active' : 'Use'}</Button>
               </div>
             ))}
           </div>

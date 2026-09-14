@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addSituational, type BonusType, type Duration, type EvalContext, type StatId } from '@hl/engine';
+import { addStatus, type BonusType, type Duration, type EvalContext, type StatId } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Button, Chip, Field, Sheet, humanize, inputCls } from '../ui';
 import { StatSelect, TagSelect } from '../library/StatSelect';
@@ -17,14 +17,14 @@ export function SituationalSheet({ ctx, open, onClose }: { ctx: EvalContext; ope
   const [bonusType, setBonusType] = useState<BonusType>('untyped');
   const [tag, setTag] = useState('');
   const [suppress, setSuppress] = useState('');
-  const [dur, setDur] = useState<'encounter' | 'rounds' | 'endOfRound'>('encounter');
+  const [dur, setDur] = useState<'encounter' | 'rounds' | 'untilMyNextTurn'>('encounter');
   const [rounds, setRounds] = useState('3');
   const lib = ctx.library;
   const abilities = ctx.character.abilities.map((i) => lib.abilities[i.abilityId]).filter(Boolean);
 
   const save = () => {
-    const duration: Duration = dur === 'rounds' ? { rounds: Math.max(1, Number(rounds) || 1) } : dur === 'endOfRound' ? 'endOfRound' : 'encounter';
-    const b = addSituational(ctx, {
+    const duration: Duration = dur === 'rounds' ? { rounds: Math.max(1, Number(rounds) || 1) } : dur === 'untilMyNextTurn' ? 'untilMyNextTurn' : 'encounter';
+    const b = addStatus(ctx, {
       label: label || (kind === 'bonus' ? `${value} ${stat}` : kind === 'tag' ? humanize(tag) : kind === 'suppress' ? `Suppress ${suppress}` : 'Note'),
       target,
       duration,
@@ -69,7 +69,7 @@ export function SituationalSheet({ ctx, open, onClose }: { ctx: EvalContext; ope
         <div className="flex flex-wrap gap-2">
           <Chip active={dur === 'encounter'} onClick={() => setDur('encounter')}>Whole battle</Chip>
           <Chip active={dur === 'rounds'} onClick={() => setDur('rounds')}>N rounds</Chip>
-          <Chip active={dur === 'endOfRound'} onClick={() => setDur('endOfRound')}>This round</Chip>
+          <Chip active={dur === 'untilMyNextTurn'} onClick={() => setDur('untilMyNextTurn')}>This round</Chip>
         </div>
         {dur === 'rounds' && <input className={inputCls + ' mt-2'} inputMode="numeric" value={rounds} onChange={(e) => setRounds(e.target.value)} />}
       </Field>

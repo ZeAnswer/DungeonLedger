@@ -1,4 +1,4 @@
-import { SLOTS } from '@hl/engine';
+import { activationsOf, SLOTS } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { inputCls } from '../ui';
 
@@ -43,14 +43,14 @@ export const DOMAINS: DomainDef[] = [
     { id: 'kind', label: 'kind (ranged/melee)', kind: 'string' },
     { id: 'weapon.tag', label: 'weapon has tag', kind: 'boolean', key: 'itemTags' },
     { id: 'weapon.category', label: 'weapon category', kind: 'string', key: 'itemCategories' },
-    { id: 'weapon.id', label: 'weapon is', kind: 'string', key: 'items' },
+    { id: 'weapon.id', label: 'weapon is', kind: 'string' },
     { id: 'index', label: 'attack number', kind: 'number' },
     { id: 'isFirstThisRound', label: 'first attack this round', kind: 'boolean' },
     { id: 'mode', label: 'attack mode', kind: 'string' },
     { id: 'exists', label: 'evaluating an attack', kind: 'boolean' },
   ] },
   { id: 'battle', label: 'Battle', fields: [
-    { id: 'toggle', label: 'declared / toggle', kind: 'boolean', key: 'free' },
+    { id: 'toggle', label: 'manual switch', kind: 'boolean', key: 'free' },
     { id: 'prompt', label: 'check entered', kind: 'number', key: 'free' },
     { id: 'round', label: 'round', kind: 'number' },
     { id: 'tag', label: 'environment tag', kind: 'boolean', key: 'tags' },
@@ -94,7 +94,10 @@ export function SelectorPicker({ value, onChange }: { value: string; onChange: (
       case 'tags': return Object.values(lib.tags).map((t) => ({ id: t.id, label: t.label, group: t.category }));
       case 'conditionTags': return Object.values(lib.tags).filter((t) => t.category === 'condition' || t.category === 'custom').map((t) => ({ id: t.id, label: t.label, group: t.category }));
       case 'skills': return Object.values(lib.skills).map((s) => ({ id: s.id, label: s.name }));
-      case 'abilities': return Object.values(lib.abilities).map((a) => ({ id: a.id, label: a.name, group: a.kind }));
+      case 'abilities': return Object.values(lib.abilities).flatMap((a) => [
+        { id: a.id, label: a.name, group: a.kind as string },
+        ...activationsOf(a).map((act) => ({ id: act.id, label: `${a.name} › ${act.name ?? a.name}`, group: 'activation' })),
+      ]);
       case 'items': return Object.values(lib.abilities).flatMap((a) => (a.kind === 'item' ? [{ id: a.id, label: a.name, group: a.item.category }] : []));
       case 'classes': return Object.values(lib.classTables).map((c) => ({ id: c.id, label: c.name }));
       case 'slots': return SLOTS.map((s) => ({ id: s.id, label: s.label }));
