@@ -1,6 +1,6 @@
-import { resolveStat, resolveAttack, availableActions, listAttackModes } from '../src/resolve';
+import { resolveStat, resolveAttack, availableActions, listAttackModes, listPools, activeSources } from '../src/resolve';
 import { makeCtx, makeBattle, makeCombatant, makeAbility, makeCharacter, ev } from './fixtures';
-import type { Ability } from '../src/schema';
+import { AbilitySchema, type Ability } from '../src/schema';
 
 // NOTE: makeAbility (fixtures.ts) only converts v1 -> v2 and no longer parses against the v3 AbilitySchema.
 // These module-level fixtures are slated for a rewrite in a later task (they back the old tests below, which
@@ -252,10 +252,6 @@ test('missing prompt is reported structurally with the target tag label', () => 
   expect(r.warnings[0]).toBe('Knowledge Devotion: needs a Knowledge check vs Aberration');
 });
 
-import { AbilitySchema } from '../src/schema';
-import { availableActions, listPools, activeSources } from '../src/resolve';
-import { makeBattle, makeCharacter, makeCtx } from './fixtures';
-
 test('availableActions lists activations with charges, spell name and declare flag; pools are listed separately', () => {
   const hog = AbilitySchema.parse({ id: 'hog', name: 'Hand of Glory', kind: 'item', item: { category: 'wondrous', slot: 'neck' }, activations: [{ id: 'hog-daylight', spell: 'daylight', charges: { max: 1 } }, { id: 'hog-torch', name: 'Torch' }] });
   const daylight = AbilitySchema.parse({ id: 'daylight', name: 'Daylight', kind: 'spell', duration: { minutes: 50 } });
@@ -276,4 +272,6 @@ test('availableActions lists activations with charges, spell name and declare fl
   const src = activeSources(c).find((s) => s.kind === 'activation');
   expect(src).toMatchObject({ label: 'Daylight', activation: { id: 'hog-daylight' } });
   expect(src!.blocks).toEqual(daylight.effects);
+  c.battle!.suppressedAbilities.push('monster-blow');
+  expect(listPools(c)).toEqual([]);
 });

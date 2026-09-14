@@ -511,8 +511,9 @@ export function availableActions(ctx: EvalContext): ActionInfo[] {
 export function listPools(ctx: EvalContext): PoolInfo[] {
   const out: PoolInfo[] = [];
   const vars = exprVars(ctx);
+  const suppressed = new Set(ctx.battle?.suppressedAbilities ?? []);
   for (const inst of ctx.character.abilities) {
-    if (!inst.enabled) continue;
+    if (!inst.enabled || suppressed.has(inst.abilityId)) continue;
     const ability = ctx.library.abilities[inst.abilityId];
     for (const p of poolsOf(ability)) {
       const max = evalExpr(p.max, vars);
