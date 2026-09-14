@@ -12,6 +12,7 @@ export * from './describe';
 export * from './resolve';
 export * from './battle';
 export * from './hp';
+export * from './rest';
 export * from './pack';
 export * from './vars';
 export { newId } from './ids';

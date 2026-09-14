@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { applyHp, availableActions, derivedFromLevels, effectiveScores, listPools, resolveStat, type Ability, type StatId } from '@hl/engine';
+import { applyHp, availableActions, derivedFromLevels, effectiveScores, listPools, resolveStat, rest, type Ability, type StatId } from '@hl/engine';
 import { useStore } from '../store/store';
 import { useCtx } from '../store/hooks';
 import { Button, Chip, Field, Section, Sheet, cx, inputCls, signed } from '../components/ui';
 import { Breakdown } from '../components/battle/AttackPanel';
 import { AbilitySheet } from '../components/character/AbilitySheet';
 import { LevelLedger } from '../components/character/LevelLedger';
+import { ChargesSheet } from '../components/character/ChargesSheet';
 import { CharacterOverrideSheet, LedgerOverrideSheet, SkillsEditSheet, StatsEditSheet } from '../components/character/EditSheets';
 
 const GROUPS: { id: string; title: string; test: (a: Ability) => boolean }[] = [
@@ -20,12 +21,14 @@ export function CharacterScreen() {
   const setCharacter = useStore((s) => s.setCharacter);
   const battle = useStore((s) => s.battle);
   const setBattle = useStore((s) => s.setBattle);
+  const showToast = useStore((s) => s.showToast);
   const [hpOp, setHpOp] = useState<'damage' | 'heal' | 'temp' | 'nonlethal' | undefined>();
   const [amount, setAmount] = useState('');
   const [stat, setStat] = useState<StatId | undefined>();
   const [abilityId, setAbilityId] = useState<string | undefined>();
   const [allSkills, setAllSkills] = useState(false);
   const [edit, setEdit] = useState<'stats' | 'skills' | 'ledger' | 'character' | undefined>();
+  const [charges, setCharges] = useState(false);
   const derived = useMemo(() => (ctx ? derivedFromLevels(ctx.character, ctx.library) : undefined), [ctx]);
   const actions = useMemo(() => (ctx ? availableActions(ctx) : []), [ctx]);
   const pools = useMemo(() => (ctx ? listPools(ctx) : []), [ctx]);
@@ -44,6 +47,14 @@ export function CharacterScreen() {
     setCharacter({ ...applied, journal: [...applied.journal, { at: new Date().toISOString(), kind: 'hp', text }] });
     if (battle) setBattle({ ...battle, log: [...battle.log, { id: `hp-${Date.now()}`, round: battle.round, seq: (battle.log.at(-1)?.seq ?? 0) + 1, kind: 'hp', actor: 'self', text }] });
     setHpOp(undefined); setAmount('');
+  };
+  const doRest = (kind: 'short' | 'long') => {
+    const what = kind === 'short' ? 'Short rest: refill per-battle charges, heal nonlethal 1/level.' : 'Long rest: refill daily charges, +1 hp per level, clear temp and nonlethal.';
+    if (!confirm(what)) return;
+    const r = rest(ctx, kind);
+    setCharacter(r.character);
+    if (r.battle) setBattle(r.battle);
+    showToast(r.summary);
   };
   const mod = (v: number) => Math.floor((v - 10) / 2);
   const classSkillIds = new Set(c.classLevels.flatMap((l) => ctx.library.classTables[l.classId]?.classSkills ?? []));
@@ -69,6 +80,11 @@ export function CharacterScreen() {
           <Button variant="success" onClick={() => setHpOp('heal')}>Heal</Button>
           <Button onClick={() => setHpOp('temp')}>Temp</Button>
           <Button onClick={() => setHpOp('nonlethal')}>Nonlethal</Button>
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <Button variant="ghost" onClick={() => doRest('short')}>Short rest</Button>
+          <Button variant="ghost" onClick={() => doRest('long')}>Long rest</Button>
+          <Button variant="ghost" onClick={() => setCharges(true)}>Charges</Button>
         </div>
       </div>
 
@@ -128,6 +144,7 @@ export function CharacterScreen() {
       {edit === 'skills' && <SkillsEditSheet ctx={ctx} onClose={() => setEdit(undefined)} />}
       {edit === 'ledger' && <LedgerOverrideSheet ctx={ctx} onClose={() => setEdit(undefined)} />}
       {edit === 'character' && <CharacterOverrideSheet ctx={ctx} onClose={() => setEdit(undefined)} />}
+      {charges && <ChargesSheet ctx={ctx} onClose={() => setCharges(false)} />}
       {abilityId && ctx.library.abilities[abilityId] && <AbilitySheet ctx={ctx} ability={ctx.library.abilities[abilityId]!} onClose={() => setAbilityId(undefined)} />}
 
       <Sheet open={!!hpOp} onClose={() => setHpOp(undefined)} title={hpOp ? hpOp[0]!.toUpperCase() + hpOp.slice(1) : ''}>
