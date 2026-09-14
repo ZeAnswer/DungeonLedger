@@ -4,30 +4,46 @@ import { Chip, inputCls } from '../ui';
 import { StatSelect } from './StatSelect';
 
 type Verb = Effect['verb'];
-const VERBS: { verb: Verb; label: string; group: string }[] = [
-  { verb: 'modify', label: 'Change a number (bonus / penalty / set / multiply)', group: 'Numbers' },
-  { verb: 'dice', label: 'Extra damage dice', group: 'Numbers' },
-  { verb: 'attack', label: 'Extra attacks / attack mode / natural attack', group: 'Numbers' },
-  { verb: 'flag', label: 'Set a flag (ignore concealment, never flat-footed, immunity…)', group: 'State' },
-  { verb: 'tag', label: 'Apply a condition / tag', group: 'State' },
-  { verb: 'grant', label: 'Grant an ability (buff, feature, spell-like)', group: 'State' },
-  { verb: 'suppress', label: 'Suppress an ability', group: 'State' },
-  { verb: 'slot', label: 'Extra equipment slot', group: 'State' },
-  { verb: 'resource', label: 'Spend / restore charges', group: 'Bookkeeping' },
-  { verb: 'hp', label: 'Damage / heal / temp HP', group: 'Bookkeeping' },
-  { verb: 'prompt', label: 'Ask for a value (a check result)', group: 'Bookkeeping' },
-  { verb: 'note', label: 'Reminder note (with DC formula)', group: 'Bookkeeping' },
-  { verb: 'reveal', label: 'Reveal target lore', group: 'Bookkeeping' },
-];
+/** Which family of effects a block can hold: `while` blocks contribute as long as they hold, `when` blocks happen once. */
+export type EffectFamily = 'while' | 'when';
+/** Menu entry id: the verb, plus a target variant for `tag` (target vs me). */
+type MenuId = Verb | 'tag:target' | 'tag:self';
+type MenuEntry = { id: MenuId; label: string; group: string };
+const MENUS: Record<EffectFamily, MenuEntry[]> = {
+  while: [
+    { id: 'modify', label: 'Bonus or penalty to a stat (or set / multiply)', group: 'My numbers' },
+    { id: 'dice', label: 'Extra damage dice', group: 'My numbers' },
+    { id: 'attack', label: 'Extra attack / attack mode / natural attack', group: 'My attacks' },
+    { id: 'flag', label: 'Ignore concealment, never flat-footed, immunity, sense…', group: 'My attacks' },
+    { id: 'slot', label: 'Extra equipment slot', group: 'Gear' },
+    { id: 'note', label: 'Reminder note (with DC formula)', group: 'Screen' },
+  ],
+  when: [
+    { id: 'tag:target', label: 'Target gains a condition', group: 'Target' },
+    { id: 'reveal', label: 'Reveal target lore', group: 'Target' },
+    { id: 'tag:self', label: 'I gain a condition', group: 'Me' },
+    { id: 'hp', label: 'Heal / damage / temp HP', group: 'Me' },
+    { id: 'grant', label: 'Activate a status or feature on me', group: 'Me' },
+    { id: 'suppress', label: 'Suppress one of my abilities', group: 'Me' },
+    { id: 'resource', label: 'Spend / restore charges', group: 'Charges' },
+    { id: 'prompt', label: 'Ask for a check result', group: 'Screen' },
+  ],
+};
+const ALL_ENTRIES: MenuEntry[] = [...MENUS.while, ...MENUS.when];
+function menuIdOf(e: Effect): MenuId {
+  return e.verb === 'tag' ? (e.to === 'self' ? 'tag:self' : 'tag:target') : e.verb;
+}
+
 const TYPES: BonusType[] = ['untyped', 'enhancement', 'insight', 'morale', 'competence', 'circumstance', 'dodge', 'luck', 'sacred', 'profane', 'racial', 'size', 'deflection', 'natural', 'armor', 'shield', 'resistance', 'alchemical', 'inherent'];
 
-function defaultFor(verb: Verb): Effect {
+function defaultFor(id: MenuId): Effect {
+  const verb = (id === 'tag:target' || id === 'tag:self' ? 'tag' : id) as Verb;
   switch (verb) {
     case 'modify': return { verb, to: 'attack', value: 1, type: 'untyped', mode: 'add' };
     case 'dice': return { verb, dice: '1d6' };
     case 'attack': return { verb, extraAttacks: 1, penaltyAll: 0, appliesToBase: 'full' };
     case 'flag': return { verb, flag: 'ignoreConcealment', value: true };
-    case 'tag': return { verb, to: 'target', tag: 'flanked', duration: 'untilMyNextTurn' };
+    case 'tag': return { verb, to: id === 'tag:self' ? 'self' : 'target', tag: 'flanked', duration: 'untilMyNextTurn' };
     case 'grant': return { verb, ability: '' };
     case 'suppress': return { verb, ability: '' };
     case 'slot': return { verb, slot: 'ring', count: 1 };
@@ -51,7 +67,7 @@ export function DurationPicker({ value, onChange }: { value: Duration; onChange:
   );
 }
 
-export function EffectEditor({ value, onChange, onRemove }: { value: Effect; onChange: (e: Effect) => void; onRemove: () => void }) {
+export function EffectEditor({ value, onChange, onRemove, family = 'while' }: { value: Effect; onChange: (e: Effect) => void; onRemove: () => void; family?: EffectFamily }) {
   const tags = useStore((s) => s.library.tags);
   const abilities = useStore((s) => s.library.abilities);
   const set = (patch: Record<string, unknown>) => onChange({ ...value, ...patch } as Effect);
@@ -108,7 +124,7 @@ export function EffectEditor({ value, onChange, onRemove }: { value: Effect; onC
       break;
     }
     case 'flag': body = <div className="flex gap-1"><input className={inputCls} list="flag-names" placeholder="ignoreConcealment, neverFlatFooted, immune.fear, sense.darkvision…" value={value.flag} onChange={(e) => set({ flag: e.target.value })} /><datalist id="flag-names"><option value="ignoreConcealment" /><option value="neverFlatFooted" /><option value="immune.fear" /><option value="immune.paralysis" /><option value="sense.darkvision" /><option value="sense.scent" /><option value="canFly" /></datalist><select className={inputCls + ' w-auto'} value={String(value.value)} onChange={(e) => set({ value: e.target.value === 'true' })}><option value="true">on</option><option value="false">off</option></select></div>; break;
-    case 'tag': body = <div className="space-y-1"><div className="flex gap-1">{(['target', 'self', 'allEnemies'] as const).map((t) => <Chip key={t} active={value.to === t} onClick={() => set({ to: t })}>{{ target: 'target', self: 'me', allEnemies: 'all enemies' }[t]}</Chip>)}</div><select className={inputCls} value={value.tag} onChange={(e) => set({ tag: e.target.value })}>{Object.values(tags).filter((t) => t.category === 'condition' || t.category === 'custom').sort((a, b) => a.label.localeCompare(b.label)).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select><DurationPicker value={value.duration} onChange={(d) => set({ duration: d })} /></div>; break;
+    case 'tag': body = <div className="space-y-1">{value.to !== 'self' && <div className="flex gap-1">{(['target', 'allEnemies'] as const).map((t) => <Chip key={t} active={value.to === t} onClick={() => set({ to: t })}>{{ target: 'the target', allEnemies: 'all enemies' }[t]}</Chip>)}</div>}<select className={inputCls} value={value.tag} onChange={(e) => set({ tag: e.target.value })}>{Object.values(tags).filter((t) => t.category === 'condition' || t.category === 'custom').sort((a, b) => a.label.localeCompare(b.label)).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select><DurationPicker value={value.duration} onChange={(d) => set({ duration: d })} /></div>; break;
     case 'grant': body = <div className="space-y-1">{abilitySelect(value.ability, (v) => set({ ability: v }), (x) => x.kind === 'status' || x.kind === 'feature')}<div className="text-xs text-zinc-500">Duration: {value.duration ? '' : "the granted ability's own"}</div>{value.duration && <DurationPicker value={value.duration} onChange={(d) => set({ duration: d })} />}{!value.duration && <button type="button" className="text-sm text-amber-300" onClick={() => set({ duration: { rounds: 5 } })}>+ override duration</button>}</div>; break;
     case 'suppress': body = abilitySelect(value.ability, (v) => set({ ability: v })); break;
     case 'slot': body = <div className="flex items-center gap-2 text-xs text-zinc-400"><select className={inputCls} value={value.slot} onChange={(e) => set({ slot: e.target.value })}>{SLOTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select> +<input className={inputCls + ' w-16'} inputMode="numeric" value={value.count} onChange={(e) => set({ count: Number(e.target.value) || 1 })} /></div>; break;
@@ -121,9 +137,16 @@ export function EffectEditor({ value, onChange, onRemove }: { value: Effect; onC
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-2">
       <div className="mb-1 flex items-center gap-2">
-        <select className={inputCls + ' flex-1 py-1.5 text-sm'} value={value.verb} onChange={(e) => onChange(defaultFor(e.target.value as Verb))}>
-          {[...new Set(VERBS.map((v) => v.group))].map((g) => <optgroup key={g} label={g}>{VERBS.filter((v) => v.group === g).map((v) => <option key={v.verb} value={v.verb}>{v.label}</option>)}</optgroup>)}
-        </select>
+        {(() => {
+          const cur = menuIdOf(value);
+          const entries = MENUS[family].some((m) => m.id === cur) ? MENUS[family] : [...MENUS[family], { ...(ALL_ENTRIES.find((m) => m.id === cur) ?? { id: cur, label: cur }), group: 'Other (not for this timing)' }];
+          const groups = [...new Set(entries.map((m) => m.group))];
+          return (
+            <select data-role="effect-menu" className={inputCls + ' flex-1 py-1.5 text-sm'} value={cur} onChange={(e) => onChange(defaultFor(e.target.value as MenuId))}>
+              {groups.map((g) => <optgroup key={g} label={g}>{entries.filter((m) => m.group === g).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</optgroup>)}
+            </select>
+          );
+        })()}
         <button type="button" className="px-2 text-zinc-500" onClick={onRemove}>✕</button>
       </div>
       {body}
