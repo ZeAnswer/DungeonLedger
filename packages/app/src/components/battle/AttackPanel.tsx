@@ -58,7 +58,7 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
             </Chip>
           ))}
           {declares.map((a) => (
-            <Chip key={a.activationId} tone="red" active={a.active} onClick={() => !a.active && a.usable && use(a)}>
+            <Chip key={a.activationId} tone="red" active={a.active} className={cx(!a.usable && 'opacity-60')} onClick={() => !a.active && a.usable && use(a)}>
               ⚡ {a.name}{a.charges ? ` ${a.charges.remaining}/${a.charges.max}` : ''}
             </Chip>
           ))}
@@ -157,7 +157,7 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
                   <div className="truncate text-xs text-zinc-500">{originLabel(a)}</div>
                   <div className="text-xs text-zinc-400">
                     {a.charges && <span className="mr-2">{a.charges.label}: <b className={a.charges.remaining === 0 ? 'text-red-400' : 'text-emerald-300'}>{a.charges.remaining}/{a.charges.max}</b> /{a.charges.resetOn}</span>}
-                    <span className="mr-2">{typeof a.action === 'string' ? a.action : 'long'} action</span>
+                    <span className="mr-2">{typeof a.action === 'string' ? humanize(a.action) : 'long'} action</span>
                     {!a.charges && !a.costText.length && <span className="mr-2">at will</span>}
                     {a.costText.map((t) => <span key={t} className="mr-2">costs {t}</span>)}
                     {a.declare && <span className="mr-2">declare before roll</span>}

@@ -130,7 +130,7 @@ export function Stepper({ value, onChange, min = 0, max = 99 }: { value: number;
 }
 
 export function humanize(id: string) {
-  return id.replace(/[-_]+/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+  return id.replace(/[-_]+/g, ' ').replace(/([a-z0-9])([A-Z])/g, (_m, a: string, b: string) => `${a} ${b.toLowerCase()}`).replace(/^\w/, (c) => c.toUpperCase());
 }
 
 export function signed(n: number) { return n >= 0 ? `+${n}` : `${n}`; }

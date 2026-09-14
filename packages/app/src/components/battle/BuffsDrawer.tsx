@@ -25,6 +25,12 @@ export function BuffsDrawer({ ctx, open, onClose }: { ctx: EvalContext; open: bo
   };
   const patch = (instanceId: string, p: Partial<(typeof battle.activeBuffs)[number]>) => setBattle({ ...battle, activeBuffs: battle.activeBuffs.map((b) => (b.instanceId === instanceId ? { ...b, ...p } : b)) });
   const remove = (instanceId: string) => setBattle({ ...battle, activeBuffs: battle.activeBuffs.filter((b) => b.instanceId !== instanceId) });
+  /** Save an edited status back into the battle; the id may have changed, so re-point the running buffs too. */
+  const saveEdit = (prevId: string, s: Status) => setBattle({
+    ...battle,
+    statuses: battle.statuses.map((x) => (x.id === prevId ? s : x)),
+    activeBuffs: battle.activeBuffs.map((b) => (b.abilityId === prevId ? { ...b, abilityId: s.id, label: s.name } : b)),
+  });
   const keep = (s: Status) => {
     setLibrary({ ...library, abilities: { ...library.abilities, [s.id]: s } });
     setBattle({ ...battle, statuses: battle.statuses.filter((x) => x.id !== s.id) });
@@ -76,7 +82,7 @@ export function BuffsDrawer({ ctx, open, onClose }: { ctx: EvalContext; open: bo
           <RecordEditor
             key={editing.id}
             initial={editing}
-            onSave={(s) => { setBattle({ ...battle, statuses: battle.statuses.map((x) => (x.id === s.id ? (s as Status) : x)) }); setEditing(undefined); }}
+            onSave={(s) => { saveEdit(editing.id, s as Status); setEditing(undefined); }}
             onCancel={() => setEditing(undefined)}
           />
         )}
