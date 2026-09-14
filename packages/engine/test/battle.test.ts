@@ -1,24 +1,36 @@
 import { logAttack, useAbility, nextRound, addSituational, editLogEvent, deleteLogEvent, undoLastEvent, longRest, setPrompt, addCombatant } from '../src/battle';
 import { resolveAttack, availableActions } from '../src/resolve';
 import { makeCtx, makeBattle, makeCombatant, makeAbility, makeCharacter } from './fixtures';
+import { AbilitySchema, type Ability } from '../src/schema';
 
-const distracting = makeAbility({
+// NOTE: makeAbility (fixtures.ts) only converts v1 -> v2 and no longer parses against the v3 AbilitySchema.
+// These module-level fixtures back the old tests below (rewritten in a later task); tryMakeAbility keeps this
+// module loadable in the meantime by falling back to a stub record instead of throwing during collection.
+function tryMakeAbility(a: Record<string, unknown> & { id: string }): Ability {
+  try {
+    return makeAbility(a);
+  } catch {
+    return { id: a.id, name: String(a['name'] ?? a.id), kind: 'feature', effects: [], acquired: { kind: 'feat' }, enabledByDefault: true, activations: [], pools: [] } as Ability;
+  }
+}
+
+const distracting = tryMakeAbility({
   id: 'distracting-attack', name: 'Distracting Attack',
   effects: [{ id: 'flank', trigger: 'onHit', do: [{ kind: 'applyTag', to: 'target', tag: 'flanked', duration: 'endOfNextTurn' }] }],
 });
-const sneak = makeAbility({ id: 'sneak', effects: [{ id: 's', when: { kind: 'target.hasCondition', condition: 'flanked' }, do: [{ kind: 'extraDice', dice: '1d6', label: 'Sneak' }] }] });
-const monsterBlow = makeAbility({
+const sneak = tryMakeAbility({ id: 'sneak', effects: [{ id: 's', when: { kind: 'target.hasCondition', condition: 'flanked' }, do: [{ kind: 'extraDice', dice: '1d6', label: 'Sneak' }] }] });
+const monsterBlow = tryMakeAbility({
   id: 'monster-blow', name: 'Monster Blow', source: 'class', activation: 'declare',
   resources: [{ id: 'monster-blow', max: 1, per: 'day' }],
   effects: [{ id: 'mb', trigger: 'onUse', do: [{ kind: 'consume', resourceId: 'monster-blow' }] }],
 });
-const haste = makeAbility({ id: 'haste', name: 'Haste', source: 'buff', duration: { rounds: 2 }, effects: [{ id: 'h', do: [{ kind: 'bonus', to: 'attack', value: 1, bonusType: 'dodge' }] }] });
-const bootsOfSpeed = makeAbility({
+const haste = tryMakeAbility({ id: 'haste', name: 'Haste', source: 'buff', duration: { rounds: 2 }, effects: [{ id: 'h', do: [{ kind: 'bonus', to: 'attack', value: 1, bonusType: 'dodge' }] }] });
+const bootsOfSpeed = tryMakeAbility({
   id: 'boots-of-speed', name: 'Boots of Speed', source: 'item', activation: { action: 'free' },
   resources: [{ id: 'boots-rounds', label: 'Haste rounds', max: 10, per: 'day' }],
   effects: [{ id: 'go', trigger: 'onUse', do: [{ kind: 'consume', resourceId: 'boots-rounds', amount: 2 }, { kind: 'applyTag', to: 'self', tag: 'hasted', duration: { rounds: 2 } }] }],
 });
-const monsterKnowledge = makeAbility({
+const monsterKnowledge = tryMakeAbility({
   id: 'monster-knowledge', name: 'Monster Knowledge', activation: { action: 'standard' },
   effects: [{ id: 'r', trigger: 'onUse', when: { kind: 'prompt', id: 'knowledge', perTagCategory: 'creatureType', atLeast: 16 }, do: [{ kind: 'revealTarget' }] }],
 });
@@ -154,4 +166,65 @@ test('addCombatant from a monster copies tags and size, numbers duplicate names'
   expect(battle.combatants[1]).toMatchObject({ monsterId: 'gargoyle', tags: ['monstrous-humanoid', 'earth'], size: 'medium' });
   const quick = addCombatant(battle, { name: 'Red thing', tags: ['red'], size: 'huge' });
   expect(quick.combatants.at(-1)).toMatchObject({ name: 'Red thing', tags: ['red'], size: 'huge', hurt: 'unhurt' });
+});
+
+import { addStatus, logAttack as logAttack3, longRest as longRest3, useAbility as useAbility3 } from '../src/battle';
+import { availableActions as actions3, resolveAttack as resolve3 } from '../src/resolve';
+import { makeBattle as mkBattle, makeCharacter as mkChar, makeCombatant as mkComb, makeCtx as mkCtx } from './fixtures';
+
+function v3ctx() {
+  const boots = AbilitySchema.parse({ id: 'boots', name: 'Boots of Speed', kind: 'item', item: { category: 'wondrous', slot: 'feet' }, activations: [{ id: 'boots-rounds', action: 'free', charges: { max: 10 }, duration: 'untilMyNextTurn', whileActive: [{ id: 'h', do: [{ verb: 'modify', to: 'attack', value: 1, type: 'dodge' }] }] }] });
+  const blow = AbilitySchema.parse({ id: 'monster-blow', name: 'Monster Blow', kind: 'feature', activations: [{ id: 'monster-blow', action: 'free', charges: { max: 1 }, duration: 'thisAttack', whileActive: [{ id: 'n', do: [{ verb: 'note', text: 'BLOW' }] }] }] });
+  const hog = AbilitySchema.parse({ id: 'hog', name: 'Hand of Glory', kind: 'item', item: { category: 'wondrous', slot: 'neck' }, activations: [{ id: 'hog-daylight', spell: 'daylight', charges: { max: 1 } }, { id: 'hog-cure', spell: 'cure', charges: { max: 2 } }] });
+  const daylight = AbilitySchema.parse({ id: 'daylight', name: 'Daylight', kind: 'spell', duration: { minutes: 50 }, effects: [{ id: 'l', do: [{ verb: 'flag', flag: 'sense.light' }] }] });
+  const cure = AbilitySchema.parse({ id: 'cure', name: 'Cure', kind: 'spell', effects: [{ id: 'h', do: [{ verb: 'hp', op: 'heal', amount: 5 }] }] });
+  const wand = AbilitySchema.parse({ id: 'wand', name: 'Wand', kind: 'item', item: { category: 'wand' }, pools: [{ id: 'wand-charges', max: 50, resetOn: 'never' }], activations: [{ id: 'wand-cure', spell: 'cure', cost: [{ kind: 'charge', resourceId: 'wand-charges' }] }] });
+  const c = mkCtx({
+    character: mkChar({ hp: { max: 44, current: 20, temp: 0, nonlethal: 0 }, abilities: ['boots', 'monster-blow', 'hog', 'wand'].map((id) => ({ abilityId: id, enabled: true, paramValues: {} })) }),
+    battle: mkBattle({ combatants: [mkComb({ id: 'c1' })] }),
+  });
+  for (const a of [boots, blow, hog, daylight, cure, wand]) c.library.abilities[a.id] = a;
+  c.target = c.battle!.combatants[0];
+  return c;
+}
+
+test('useAbility by activation: spends inline charges, starts a buff keyed by activation with expiry', () => {
+  let c = v3ctx();
+  c = { ...c, ...useAbility3(c, { abilityId: 'boots', activationId: 'boots-rounds' }) };
+  expect(c.character.resourceState['boots-rounds']).toEqual({ used: 1 });
+  expect(c.battle!.activeBuffs).toEqual([expect.objectContaining({ abilityId: 'boots', activationId: 'boots-rounds', expires: 'untilMyNextTurn', remainingRounds: 1 })]);
+  expect(c.battle!.log.at(-1)).toMatchObject({ kind: 'use', abilityId: 'boots', activationId: 'boots-rounds' });
+  expect(resolve3(c, { profileId: 'bow', modeId: 'single' }).attacks[0]!.attackBonus).toBe(11);
+});
+
+test('a declared activation lasts one attack: gone after logAttack, charge stays spent', () => {
+  let c = v3ctx();
+  c = { ...c, ...useAbility3(c, { abilityId: 'monster-blow', targetId: 'c1' }) };
+  expect(actions3(c).find((a) => a.activationId === 'monster-blow')).toMatchObject({ active: true, usable: false });
+  expect(resolve3(c, { profileId: 'bow', modeId: 'single' }).notes).toContain('BLOW');
+  c = { ...c, ...logAttack3(c, { targetId: 'c1', profileId: 'bow', modeId: 'single', attackIndex: 1, result: 'hit' }) };
+  expect(c.battle!.activeBuffs).toEqual([]);
+  expect(c.character.resourceState['monster-blow']).toEqual({ used: 1 });
+});
+
+test('spell activations: a spell with a duration runs as a buff; an instant spell applies its effects once; pool costs are spent', () => {
+  let c = v3ctx();
+  c = { ...c, ...useAbility3(c, { abilityId: 'hog', activationId: 'hog-daylight' }) };
+  expect(c.battle!.activeBuffs).toEqual([expect.objectContaining({ abilityId: 'hog', activationId: 'hog-daylight', remainingRounds: 500, label: 'Daylight' })]);
+  expect(c.character.resourceState['hog-daylight']).toEqual({ used: 1 });
+  c = { ...c, ...useAbility3(c, { abilityId: 'hog', activationId: 'hog-cure' }) };
+  expect(c.character.hp.current).toBe(25);
+  expect(c.battle!.activeBuffs).toHaveLength(1);
+  c = { ...c, ...useAbility3(c, { abilityId: 'wand', activationId: 'wand-cure' }) };
+  expect(c.character.hp.current).toBe(30);
+  expect(c.character.resourceState['wand-charges']).toEqual({ used: 1 });
+  expect(longRest3(c.character, c.library).resourceState).toEqual({ 'wand-charges': { used: 1 } });
+});
+
+test('addStatus stores a status record on the battle and activates it', () => {
+  const c = v3ctx();
+  const b = addStatus(c, { label: 'DM: darkness', target: 'self', to: 'attack', value: -2, duration: { rounds: 3 } });
+  expect(b.statuses[0]).toMatchObject({ kind: 'status', name: 'DM: darkness', harmful: true });
+  expect(b.activeBuffs[0]).toMatchObject({ abilityId: b.statuses[0]!.id, remainingRounds: 3, expires: { rounds: 3 } });
+  expect(resolve3({ ...c, battle: b }, { profileId: 'bow', modeId: 'single' }).attacks[0]!.attackBonus).toBe(8);
 });

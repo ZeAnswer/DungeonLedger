@@ -173,10 +173,10 @@ export function convertV2(a: unknown, lookup: (id: string) => Any | undefined = 
   const isDeclare = a.activation === 'declare';
   const isReaction = isObj(a.activation) && 'reaction' in a.activation;
   const reactionTrigger = isReaction ? (a.activation as Any).reaction : undefined;
-  let passive = blocks.filter((b) => !ON_USE_TRIGGERS.has((b.trigger as string) ?? 'always') && b.trigger !== 'onDeactivate').map(withBind).map((b) => ({ ...b, when: isDeclare ? stripToggle(b.when, id) : b.when }));
+  let passive: Any[] = blocks.filter((b) => !ON_USE_TRIGGERS.has((b.trigger as string) ?? 'always') && b.trigger !== 'onDeactivate').map(withBind).map((b) => ({ ...b, when: isDeclare ? stripToggle(b.when, id) : b.when }));
   // A reaction ability is passive in v3: its passive blocks fire on the reaction's trigger instead of always.
   if (isReaction && V3_TRIGGERS.has(reactionTrigger as string)) {
-    passive = passive.map((b) => (((b.trigger as string) ?? 'always') === 'always' ? { ...b, trigger: reactionTrigger } : b));
+    passive = passive.map((b: Any) => (((b.trigger as string) ?? 'always') === 'always' ? { ...b, trigger: reactionTrigger } : b));
   }
   const onUse = blocks.filter((b) => ON_USE_TRIGGERS.has(b.trigger as string)).map((b) => { const { trigger: _t, ...rest } = b; return rest; });
   const base: Any = { id, name: a.name, kind, ...(a.text !== undefined ? { text: a.text } : {}), ...(a.sourceRef !== undefined ? { sourceRef: a.sourceRef } : {}), ...(a.todo !== undefined ? { todo: a.todo } : {}) };
