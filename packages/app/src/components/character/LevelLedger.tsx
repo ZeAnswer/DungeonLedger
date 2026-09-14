@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { derivedFromLevels, levelSlots, maxRanks, type AbilityKey, type EvalContext, type LevelRecord } from '@hl/engine';
+import { derivedFromLevels, levelSlots, maxRanks, type AbilityKey, type EvalContext, type Feature, type LevelRecord } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Button, Chip, Field, Sheet, cx, inputCls } from '../ui';
 
@@ -98,7 +98,7 @@ function LevelSheet({ ctx, classes, initial, isNew, onClose, onSave, onDelete }:
   const points = cls ? (Math.max(1, cls.skillPointsPerLevel + intMod) + ctx.character.extraSkillPointsPerLevel) * (r.level === 1 ? 4 : 1) : 0;
   const spent = Object.values(r.skillPointsSpent).reduce((a, b) => a + b, 0);
   const skills = Object.values(ctx.library.skills).filter((s) => !skillQ || s.name.toLowerCase().includes(skillQ.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name));
-  const feats = Object.values(ctx.library.abilities).filter((a) => a.origin === 'feat' || a.origin === 'classFeature').sort((a, b) => a.name.localeCompare(b.name));
+  const feats = Object.values(ctx.library.abilities).filter((a): a is Feature => a.kind === 'feature').sort((a, b) => a.name.localeCompare(b.name));
   return (
     <Sheet open onClose={onClose} title={`Level ${r.level}`} tall>
       <Field label="Class"><div className="flex flex-wrap gap-1">{classes.map((k) => <Chip key={k.id} active={r.classId === k.id} onClick={() => setClass(k.id)}>{k.name} (d{k.hitDie})</Chip>)}</div></Field>
@@ -122,8 +122,8 @@ function LevelSheet({ ctx, classes, initial, isNew, onClose, onSave, onDelete }:
           ); })}
         </div>
       </Field>
-      <Field label={`General feats chosen (${r.featsTaken.length}/${slots.feats})`}><div className="flex flex-wrap gap-1">{feats.filter((f) => f.origin === 'feat').map((f) => <Chip key={f.id} active={r.featsTaken.includes(f.id)} onClick={() => setR({ ...r, featsTaken: r.featsTaken.includes(f.id) ? r.featsTaken.filter((x) => x !== f.id) : [...r.featsTaken, f.id] })}>{f.name}</Chip>)}</div></Field>
-      <Field label="Class features gained (auto from class table, adjust if needed)"><div className="flex flex-wrap gap-1">{feats.filter((f) => f.origin === 'classFeature' || autoFeatures.includes(f.id) || r.featuresGained.includes(f.id)).map((f) => <Chip key={f.id} tone="blue" active={r.featuresGained.includes(f.id)} onClick={() => setR({ ...r, featuresGained: r.featuresGained.includes(f.id) ? r.featuresGained.filter((x) => x !== f.id) : [...r.featuresGained, f.id] })}>{f.name}</Chip>)}</div></Field>
+      <Field label={`General feats chosen (${r.featsTaken.length}/${slots.feats})`}><div className="flex flex-wrap gap-1">{feats.filter((f) => f.acquired.kind === 'feat').map((f) => <Chip key={f.id} active={r.featsTaken.includes(f.id)} onClick={() => setR({ ...r, featsTaken: r.featsTaken.includes(f.id) ? r.featsTaken.filter((x) => x !== f.id) : [...r.featsTaken, f.id] })}>{f.name}</Chip>)}</div></Field>
+      <Field label="Class features gained (auto from class table, adjust if needed)"><div className="flex flex-wrap gap-1">{feats.filter((f) => f.acquired.kind === 'class' || autoFeatures.includes(f.id) || r.featuresGained.includes(f.id)).map((f) => <Chip key={f.id} tone="blue" active={r.featuresGained.includes(f.id)} onClick={() => setR({ ...r, featuresGained: r.featuresGained.includes(f.id) ? r.featuresGained.filter((x) => x !== f.id) : [...r.featuresGained, f.id] })}>{f.name}</Chip>)}</div></Field>
       <Field label="Notes"><input className={inputCls} value={r.notes ?? ''} onChange={(e) => setR({ ...r, notes: e.target.value || undefined })} /></Field>
       <div className="flex gap-2"><Button variant="primary" onClick={() => onSave(r)}>Save</Button>{onDelete && <Button variant="danger" className="ml-auto" onClick={onDelete}>Delete</Button>}</div>
     </Sheet>

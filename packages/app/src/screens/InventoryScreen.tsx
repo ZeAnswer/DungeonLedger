@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react';
-import { SLOTS, addItemInstance, equipItem, itemAbility, removeItemInstance, slotCapacity, slotOccupants, slotOf, unequipItem, type Ability, type EvalContext, type InventoryEntry, type ItemCategory, type SlotId } from '@hl/engine';
+import { SLOTS, activationsOf, addItemInstance, equipItem, itemAbility, removeItemInstance, slotCapacity, slotOccupants, slotOf, unequipItem, type Ability, type EvalContext, type InventoryEntry, type Item, type ItemCategory, type SlotId } from '@hl/engine';
 import { useStore } from '../store/store';
 import { useCtx } from '../store/hooks';
 import { Button, Chip, Field, Sheet, cx, humanize, inputCls } from '../components/ui';
-import { AbilityEditor } from '../components/library/AbilityEditor';
+import { RecordEditor, freshRecord } from '../components/library/RecordEditor';
 import { AbilitySheet } from '../components/character/AbilitySheet';
 
 const CATEGORIES: ItemCategory[] = ['weapon', 'armor', 'shield', 'ammunition', 'wondrous', 'potion', 'scroll', 'wand', 'tool', 'trophy', 'material', 'gear'];
 
 function entryName(ctx: EvalContext, e: InventoryEntry) { return itemAbility(ctx, e)?.name ?? e.name ?? '(unknown item)'; }
-function entryCategory(ctx: EvalContext, e: InventoryEntry) { return itemAbility(ctx, e)?.item?.category ?? (e.category as ItemCategory | undefined) ?? 'gear'; }
+function entryCategory(ctx: EvalContext, e: InventoryEntry) { const a = itemAbility(ctx, e); return (a?.kind === 'item' ? a.item.category : undefined) ?? (e.category as ItemCategory | undefined) ?? 'gear'; }
 
 export function InventoryScreen() {
   const ctx = useCtx();
@@ -36,7 +36,6 @@ export function InventoryScreen() {
     setCharacter(r.character); showToast(`${entryName(ctx, e)} equipped`);
   };
   const doUnequip = (e: InventoryEntry) => { setCharacter(unequipItem(ctx, e.id).character); showToast(`${entryName(ctx, e)} unequipped`); };
-  const fresh = (): Ability => ({ id: `item-${Date.now().toString(36)}`, name: '', origin: 'item', binding: 'none', activation: 'passive', cost: [], resources: [], grants: [], enabledByDefault: true, effects: [], item: { category: 'gear', tags: [] } });
   const saveNew = (a: Ability) => {
     setLibrary({ ...library, abilities: { ...library.abilities, [a.id]: a } });
     setCharacter(addItemInstance(c, a.id));
@@ -57,7 +56,7 @@ export function InventoryScreen() {
     <div className="p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Inventory</h1>
-        <div className="flex gap-1"><Button size="sm" onClick={() => setPickFor('any')}>From library</Button><Button size="sm" variant="primary" onClick={() => setCreating(fresh())}>+ New item</Button></div>
+        <div className="flex gap-1"><Button size="sm" onClick={() => setPickFor('any')}>From library</Button><Button size="sm" variant="primary" onClick={() => setCreating(freshRecord('item'))}>+ New item</Button></div>
       </div>
       <div className="mb-3 flex gap-1 rounded-xl bg-zinc-900 p-1">
         {(['equipped', 'storage'] as const).map((t) => <button key={t} type="button" onClick={() => setTab(t)} className={cx('flex-1 rounded-lg py-1.5 text-sm', tab === t ? 'bg-zinc-700 text-white' : 'text-zinc-400')}>{t === 'equipped' ? 'Equipped' : `All items (${c.inventory.length})`}</button>)}
@@ -117,12 +116,12 @@ export function InventoryScreen() {
       {/* item instance sheet */}
       {open && (() => { const e = c.inventory.find((i) => i.id === open.id); if (!e) return null; const a = itemAbility(ctx, e); const slot = slotOf(a); return (
         <Sheet open onClose={() => setOpen(undefined)} title={entryName(ctx, e)}>
-          <div className="mb-2 text-xs text-zinc-500">{humanize(entryCategory(ctx, e))}{slot ? ` · ${slot === 'none' ? 'no slot' : SLOTS.find((s) => s.id === slot)?.label}` : ' · not equippable'}{a?.item?.weight !== undefined ? ` · ${a.item.weight} lb` : ''}{a?.item?.price ? ` · ${a.item.price}` : ''}</div>
+          <div className="mb-2 text-xs text-zinc-500">{humanize(entryCategory(ctx, e))}{slot ? ` · ${slot === 'none' ? 'no slot' : SLOTS.find((s) => s.id === slot)?.label}` : ' · not equippable'}{a?.kind === 'item' && a.item.weight !== undefined ? ` · ${a.item.weight} lb` : ''}{a?.kind === 'item' && a.item.price ? ` · ${a.item.price}` : ''}</div>
           {a?.text && <p className="mb-3 whitespace-pre-wrap text-sm text-zinc-300">{a.text}</p>}
           {a?.todo && <p className="mb-3 rounded-xl border border-amber-900 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">⚑ {a.todo}</p>}
           <div className="mb-3 flex flex-wrap gap-2">
             {slot && (e.equipped ? <Button variant="ghost" onClick={() => doUnequip(e)}>{slot === 'none' ? 'Deactivate' : 'Unequip'}</Button> : <Button variant="primary" onClick={() => doEquip(e)}>{slot === 'none' ? 'Activate' : 'Equip'}</Button>)}
-            {a && a.effects.length > 0 && <Button onClick={() => setViewRules(a)}>Rules & charges</Button>}
+            {a && (a.effects.length > 0 || activationsOf(a).length > 0) && <Button onClick={() => setViewRules(a)}>Rules & charges</Button>}
             {a && <Button onClick={() => setEditingRules(a)}>Edit item</Button>}
           </div>
           <Field label="Quantity"><input className={inputCls + ' w-24'} inputMode="numeric" value={e.quantity} onChange={(ev) => setCharacter({ ...c, inventory: c.inventory.map((i) => (i.id === e.id ? { ...i, quantity: Number(ev.target.value) || 0 } : i)) })} /></Field>
@@ -132,13 +131,13 @@ export function InventoryScreen() {
       ); })()}
 
       {/* pick from library / storage for a slot */}
-      {pickFor && <PickSheet ctx={ctx} slot={pickFor} onClose={() => setPickFor(undefined)} onEquipExisting={(e) => { doEquip(e); setPickFor(undefined); }} onAddFromLibrary={(a, equip) => { let next = addItemInstance(c, a.id); if (equip) { const r = equipItem({ ...ctx, character: next }, next.inventory.at(-1)!.id, { replace: true }); next = r.character; } setCharacter(next); showToast(`${a.name} added`); setPickFor(undefined); }} onCreate={() => { setPickFor(undefined); setCreating({ ...fresh(), item: { category: pickFor === 'any' ? 'gear' : 'wondrous', tags: [], ...(pickFor !== 'any' ? { slot: pickFor } : {}) } }); }} />}
+      {pickFor && <PickSheet ctx={ctx} slot={pickFor} onClose={() => setPickFor(undefined)} onEquipExisting={(e) => { doEquip(e); setPickFor(undefined); }} onAddFromLibrary={(a, equip) => { let next = addItemInstance(c, a.id); if (equip) { const r = equipItem({ ...ctx, character: next }, next.inventory.at(-1)!.id, { replace: true }); next = r.character; } setCharacter(next); showToast(`${a.name} added`); setPickFor(undefined); }} onCreate={() => { setPickFor(undefined); setCreating(freshRecord('item', { category: pickFor === 'any' ? 'gear' : 'wondrous', ...(pickFor !== 'any' ? { slot: pickFor } : {}) })); }} />}
 
       <Sheet open={!!creating} onClose={() => setCreating(undefined)} title="New item" tall>
-        {creating && <AbilityEditor key={creating.id} initial={creating} onSave={saveNew} onCancel={() => setCreating(undefined)} />}
+        {creating && <RecordEditor key={creating.id} initial={creating} onSave={saveNew} onCancel={() => setCreating(undefined)} />}
       </Sheet>
       <Sheet open={!!editingRules} onClose={() => setEditingRules(undefined)} title={editingRules?.name} tall>
-        {editingRules && <AbilityEditor key={editingRules.id} initial={editingRules} onSave={saveRules} onCancel={() => setEditingRules(undefined)} />}
+        {editingRules && <RecordEditor key={editingRules.id} initial={editingRules} onSave={saveRules} onCancel={() => setEditingRules(undefined)} />}
       </Sheet>
       {viewRules && <AbilitySheet ctx={ctx} ability={viewRules} onClose={() => setViewRules(undefined)} />}
     </div>
@@ -151,7 +150,7 @@ function PickSheet({ ctx, slot, onClose, onEquipExisting, onAddFromLibrary, onCr
   const fits = (a: Ability | undefined) => !!a && (slot === 'any' || slotOf(a) === slot);
   const owned = ctx.character.inventory.filter((e) => !e.equipped && fits(itemAbility(ctx, e)) && (!q || entryName(ctx, e).toLowerCase().includes(q.toLowerCase())));
   const ownedIds = new Set(ctx.character.inventory.map((e) => e.abilityId));
-  const libraryItems = Object.values(ctx.library.abilities).filter((a) => a.origin === 'item' && fits(a) && (!cat || a.item?.category === cat) && (!q || a.name.toLowerCase().includes(q.toLowerCase()))).sort((a, b) => a.name.localeCompare(b.name));
+  const libraryItems = Object.values(ctx.library.abilities).filter((a): a is Item => a.kind === 'item' && fits(a) && (!cat || a.item.category === cat) && (!q || a.name.toLowerCase().includes(q.toLowerCase()))).sort((a, b) => a.name.localeCompare(b.name));
   const label = slot === 'any' ? 'Add item' : `Equip: ${SLOTS.find((s) => s.id === slot)?.label}`;
   return (
     <Sheet open onClose={onClose} title={label} tall>
@@ -167,7 +166,7 @@ function PickSheet({ ctx, slot, onClose, onEquipExisting, onAddFromLibrary, onCr
         <div className="max-h-[40vh] space-y-1 overflow-y-auto">
           {libraryItems.map((a) => (
             <div key={a.id} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2">
-              <div className="min-w-0"><div className="truncate">{a.name}{ownedIds.has(a.id) ? <span className="ml-1 text-xs text-zinc-500">(owned)</span> : null}</div><div className="text-xs text-zinc-500">{humanize(a.item?.category ?? 'gear')}{a.item?.slot ? ` · ${a.item.slot === 'none' ? 'no slot' : SLOTS.find((s) => s.id === a.item!.slot)?.label}` : ''}</div></div>
+              <div className="min-w-0"><div className="truncate">{a.name}{ownedIds.has(a.id) ? <span className="ml-1 text-xs text-zinc-500">(owned)</span> : null}</div><div className="text-xs text-zinc-500">{humanize(a.item.category)}{a.item.slot ? ` · ${a.item.slot === 'none' ? 'no slot' : SLOTS.find((s) => s.id === a.item.slot)?.label}` : ''}</div></div>
               <div className="flex gap-1"><Button size="sm" onClick={() => onAddFromLibrary(a, false)}>Add</Button>{slot !== 'any' && <Button size="sm" variant="primary" onClick={() => onAddFromLibrary(a, true)}>Add & equip</Button>}</div>
             </div>
           ))}

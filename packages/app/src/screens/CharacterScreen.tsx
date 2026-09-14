@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { applyHp, availableActions, derivedFromLevels, effectiveScores, resolveStat, type Ability, type StatId } from '@hl/engine';
+import { applyHp, availableActions, derivedFromLevels, effectiveScores, listPools, resolveStat, type Ability, type StatId } from '@hl/engine';
 import { useStore } from '../store/store';
 import { useCtx } from '../store/hooks';
 import { Button, Chip, Field, Section, Sheet, cx, inputCls, signed } from '../components/ui';
@@ -8,11 +8,11 @@ import { AbilitySheet } from '../components/character/AbilitySheet';
 import { LevelLedger } from '../components/character/LevelLedger';
 import { CharacterOverrideSheet, LedgerOverrideSheet, SkillsEditSheet, StatsEditSheet } from '../components/character/EditSheets';
 
-const GROUPS: { id: string; title: string; sources: Ability['origin'][] }[] = [
-  { id: 'feats', title: 'Feats', sources: ['feat'] },
-  { id: 'class', title: 'Class abilities', sources: ['classFeature', 'core', 'race'] },
-  { id: 'memories', title: 'Memories & DM grants', sources: ['memory'] },
-  { id: 'spells', title: 'Spells', sources: ['spell'] },
+const GROUPS: { id: string; title: string; test: (a: Ability) => boolean }[] = [
+  { id: 'feats', title: 'Feats', test: (a) => a.kind === 'feature' && a.acquired.kind === 'feat' },
+  { id: 'class', title: 'Class abilities', test: (a) => a.kind === 'feature' && (a.acquired.kind === 'class' || a.acquired.kind === 'race') },
+  { id: 'memories', title: 'Memories & DM grants', test: (a) => a.kind === 'feature' && a.acquired.kind === 'dm' },
+  { id: 'spells', title: 'Spells', test: (a) => a.kind === 'spell' },
 ];
 
 export function CharacterScreen() {
@@ -28,6 +28,7 @@ export function CharacterScreen() {
   const [edit, setEdit] = useState<'stats' | 'skills' | 'ledger' | 'character' | undefined>();
   const derived = useMemo(() => (ctx ? derivedFromLevels(ctx.character, ctx.library) : undefined), [ctx]);
   const actions = useMemo(() => (ctx ? availableActions(ctx) : []), [ctx]);
+  const pools = useMemo(() => (ctx ? listPools(ctx) : []), [ctx]);
   if (!ctx || !derived) return <div className="p-4 text-zinc-500">No character.</div>;
   const c = ctx.character;
   const hpMax = resolveStat(ctx, 'hp.max').total;
@@ -48,7 +49,7 @@ export function CharacterScreen() {
   const classSkillIds = new Set(c.classLevels.flatMap((l) => ctx.library.classTables[l.classId]?.classSkills ?? []));
   const isClassSkill = (id: string) => classSkillIds.has(id) || !!c.skills[id]?.classSkillOverride;
   const skillRows = Object.values(ctx.library.skills).filter((s) => allSkills || isClassSkill(s.id) || (c.skills[s.id]?.ranks ?? 0) > 0).sort((a, b) => a.name.localeCompare(b.name));
-  const abilitiesOf = (sources: Ability['origin'][]) => c.abilities.map((inst) => ({ inst, a: ctx.library.abilities[inst.abilityId] })).filter((x): x is { inst: typeof x.inst; a: Ability } => !!x.a && sources.includes(x.a.origin));
+  const abilitiesOf = (test: (a: Ability) => boolean) => c.abilities.map((inst) => ({ inst, a: ctx.library.abilities[inst.abilityId] })).filter((x): x is { inst: typeof x.inst; a: Ability } => !!x.a && test(x.a));
 
   return (
     <div className="p-4">
@@ -95,18 +96,18 @@ export function CharacterScreen() {
         </div>
       </Section>
 
-      {GROUPS.map((g) => { const list = abilitiesOf(g.sources); return list.length ? (
+      {GROUPS.map((g) => { const list = abilitiesOf(g.test); return list.length ? (
         <Section key={g.id} id={g.id} title={g.title} count={list.length}>
           <div className="space-y-1">
-            {list.map(({ inst, a }) => { const act = actions.find((x) => x.abilityId === a.id); return (
+            {list.map(({ inst, a }) => (
               <button key={a.id} type="button" onClick={() => setAbilityId(a.id)} className="flex w-full items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2 text-left">
                 <div className="min-w-0">
                   <div className="truncate">{a.name}{a.todo ? <span className="ml-1 text-amber-400" title={a.todo}>⚑</span> : null}</div>
-                  <div className="truncate text-xs text-zinc-500">{a.sourceRef ?? a.origin}{act?.resources.map((r) => ` · ${r.label} ${r.remaining}/${r.max}`)}{Object.entries(inst.paramValues).map(([k, v]) => ` · ${k}: ${v.map((t) => ctx.library.tags[t]?.label ?? t).join(', ')}`)}{a.params && Object.keys(a.params).some((k) => !inst.paramValues[k]?.length) ? ' · ⚠ choose types' : ''}</div>
+                  <div className="truncate text-xs text-zinc-500">{a.sourceRef ?? a.kind}{actions.filter((x) => x.abilityId === a.id && x.charges).map((x) => ` · ${x.charges!.label} ${x.charges!.remaining}/${x.charges!.max}`)}{pools.filter((p) => p.abilityId === a.id).map((p) => ` · ${p.label} ${p.remaining}/${p.max}`)}{Object.entries(inst.paramValues).map(([k, v]) => ` · ${k}: ${v.map((t) => ctx.library.tags[t]?.label ?? t).join(', ')}`)}{a.kind === 'feature' && a.params && Object.keys(a.params).some((k) => !inst.paramValues[k]?.length) ? ' · ⚠ choose types' : ''}</div>
                 </div>
                 <span className="text-zinc-600">›</span>
               </button>
-            ); })}
+            ))}
           </div>
         </Section>
       ) : null; })}
