@@ -1,6 +1,5 @@
 import type { Library } from './context';
 import { AbilitySchema, type Pack } from './schema';
-import { convertV1 } from './migrate';
 
 export type PackItemMeta = { packId: string; version: number };
 export type LibraryWithMeta = Library & { meta: Record<string, PackItemMeta> };
@@ -44,7 +43,7 @@ export function mergePack(library: Library & { meta?: Record<string, PackItemMet
   }
 
   for (const t of pack.tags) put('tag', lib.tags, t);
-  for (const a of pack.abilities) put('ability', lib.abilities, AbilitySchema.parse(convertV1(a)));
+  for (const a of pack.abilities) put('ability', lib.abilities, AbilitySchema.parse(a));
   for (const s of pack.skills) put('skill', lib.skills, s);
   for (const c of pack.classTables) put('class', lib.classTables, c);
   const l = lib as LibraryWithMeta & { monsters: Record<string, Pack['monsters'][number]>; characters: Record<string, Pack['characters'][number]> };

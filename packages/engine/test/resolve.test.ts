@@ -2,27 +2,15 @@ import { resolveStat, resolveAttack, availableActions, listAttackModes, listPool
 import { makeCtx, makeBattle, makeCombatant, makeAbility, makeCharacter, ev } from './fixtures';
 import { AbilitySchema, type Ability } from '../src/schema';
 
-// NOTE: makeAbility (fixtures.ts) only converts v1 -> v2 and no longer parses against the v3 AbilitySchema.
-// These module-level fixtures are slated for a rewrite in a later task (they back the old tests below, which
-// will fail until then); tryMakeAbility keeps this module loadable in the meantime by falling back to a stub
-// record instead of throwing during collection.
-function tryMakeAbility(a: Record<string, unknown> & { id: string }): Ability {
-  try {
-    return makeAbility(a);
-  } catch {
-    return { id: a.id, name: String(a['name'] ?? a.id), kind: 'feature', effects: [], acquired: { kind: 'feat' }, enabledByDefault: true, activations: [], pools: [] } as Ability;
-  }
-}
-
 // ---- content used across tests ----
-const aqua = tryMakeAbility({
+const aqua = makeAbility({
   id: 'memento-aqua', name: 'Memento Aqua', source: 'memory',
   effects: [
     { id: 'atk', when: { kind: 'target.hasTag', tag: 'aquatic' }, do: [{ kind: 'bonus', to: 'attack', value: 2 }, { kind: 'bonus', to: 'damage', value: 2 }] },
     { id: 'swim', do: [{ kind: 'bonus', to: 'skill.swim', value: 2 }] },
   ],
 });
-const woodland = tryMakeAbility({
+const woodland = makeAbility({
   id: 'woodland-archer', name: 'Woodland Archer',
   effects: [
     {
@@ -33,12 +21,12 @@ const woodland = tryMakeAbility({
     { id: 'sniper', label: 'Moving Sniper', do: [{ kind: 'note', text: 'After a successful sniping attack you may move once before re-hiding.' }] },
   ],
 });
-const favored = tryMakeAbility({
+const favored = makeAbility({
   id: 'favored-enemy', name: 'Favored Enemy',
   params: { types: { kind: 'tags', category: 'creatureType' } },
   effects: [{ id: 'dmg', when: { kind: 'param', name: 'types', includesTargetTag: true }, do: [{ kind: 'bonus', to: 'damage', value: 2 }] }],
 });
-const knowledgeDevotion = tryMakeAbility({
+const knowledgeDevotion = makeAbility({
   id: 'knowledge-devotion', name: 'Knowledge Devotion',
   effects: [{
     id: 'kd', do: [
@@ -47,21 +35,21 @@ const knowledgeDevotion = tryMakeAbility({
     ],
   }],
 });
-const bracers = tryMakeAbility({ id: 'bracers-archery', name: 'Bracers of Archery', source: 'item', effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'attack', value: 1, bonusType: 'competence', attackKind: 'ranged' }] }] });
-const bracers2 = tryMakeAbility({ id: 'bracers-archery-greater', name: 'Greater Bracers', source: 'item', effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'attack', value: 2, bonusType: 'competence', attackKind: 'ranged' }] }] });
-const ringProt = tryMakeAbility({ id: 'ring-protection', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'deflection' }] }] });
-const bracersArmor = tryMakeAbility({ id: 'bracers-armor', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'armor' }] }] });
-const ringSwim = tryMakeAbility({ id: 'ring-swimming', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'skill.swim', value: 5, bonusType: 'competence' }] }] });
-const formido = tryMakeAbility({
+const bracers = makeAbility({ id: 'bracers-archery', name: 'Bracers of Archery', source: 'item', effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'attack', value: 1, bonusType: 'competence', attackKind: 'ranged' }] }] });
+const bracers2 = makeAbility({ id: 'bracers-archery-greater', name: 'Greater Bracers', source: 'item', effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'attack', value: 2, bonusType: 'competence', attackKind: 'ranged' }] }] });
+const ringProt = makeAbility({ id: 'ring-protection', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'deflection' }] }] });
+const bracersArmor = makeAbility({ id: 'bracers-armor', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'armor' }] }] });
+const ringSwim = makeAbility({ id: 'ring-swimming', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'skill.swim', value: 5, bonusType: 'competence' }] }] });
+const formido = makeAbility({
   id: 'memento-formido', source: 'memory', params: { types: { kind: 'tags' } },
   effects: [{ id: 'w', when: { kind: 'param', name: 'types', includesTargetTag: true }, do: [{ kind: 'bonus', to: 'save.will', value: 2 }] }],
 });
-const rapidShot = tryMakeAbility({ id: 'rapid-shot', effects: [{ id: 'm', do: [{ kind: 'attackMode', modeId: 'rapid-shot', label: 'Rapid Shot', base: 'full', extraAttacksAtTop: 1, penalty: -2, attackKind: 'ranged' }] }] });
-const haste = tryMakeAbility({
+const rapidShot = makeAbility({ id: 'rapid-shot', effects: [{ id: 'm', do: [{ kind: 'attackMode', modeId: 'rapid-shot', label: 'Rapid Shot', base: 'full', extraAttacksAtTop: 1, penalty: -2, attackKind: 'ranged' }] }] });
+const haste = makeAbility({
   id: 'haste', source: 'buff', duration: { rounds: 10 },
   effects: [{ id: 'h', do: [{ kind: 'extraAttack', appliesToBase: 'full' }, { kind: 'bonus', to: 'attack', value: 1, bonusType: 'dodge' }, { kind: 'bonus', to: 'ac', value: 1, bonusType: 'dodge' }] }],
 });
-const monsterBlow = tryMakeAbility({
+const monsterBlow = makeAbility({
   id: 'monster-blow', name: 'Monster Blow', source: 'class', activation: 'declare',
   params: { types: { kind: 'tags', category: 'creatureType' } },
   resources: [{ id: 'monster-blow', max: 1, per: 'day' }],
@@ -70,7 +58,7 @@ const monsterBlow = tryMakeAbility({
     do: [{ kind: 'note', text: 'On hit: Fort save DC = damage + MH level + Wis mod or die.' }],
   }],
 });
-const flaming = tryMakeAbility({ id: 'flaming', source: 'item', effects: [{ id: 'f', do: [{ kind: 'extraDice', dice: '1d6', damageType: 'fire', label: 'Flaming' }] }] });
+const flaming = makeAbility({ id: 'flaming', source: 'item', effects: [{ id: 'f', do: [{ kind: 'extraDice', dice: '1d6', damageType: 'fire', label: 'Flaming' }] }] });
 
 const chuul = makeCombatant({ id: 'c1', name: 'Chuul', tags: ['aberration', 'aquatic'], size: 'large', hurt: 'bloodied' });
 const gargoyle = makeCombatant({ id: 'g1', name: 'Gargoyle', tags: ['monstrous-humanoid'] });
@@ -185,9 +173,11 @@ test('suppressed or disabled abilities contribute nothing', () => {
   expect(resolveAttack(d, { profileId: 'bow', modeId: 'single' }).attacks[0]!.attackBonus).toBe(10);
 });
 
-test('situational modifier in battle applies like any ability', () => {
+test('a status record stored on the battle applies like any ability', () => {
   const c = ctxWith([]);
-  c.battle!.situational.push(makeAbility({ id: 'sit-1', name: 'DM: darkness', source: 'situational', effects: [{ id: 'x', do: [{ kind: 'bonus', to: 'attack', value: -2 }] }] }));
+  const sit = makeAbility({ id: 'sit-1', name: 'DM: darkness', source: 'situational', effects: [{ id: 'x', do: [{ kind: 'bonus', to: 'attack', value: -2 }] }] });
+  if (sit.kind !== 'status') throw new Error('expected a status record');
+  c.battle!.statuses.push(sit);
   c.battle!.activeBuffs.push({ instanceId: 'b1', abilityId: 'sit-1', owner: 'self', suppressed: false });
   const r = resolveAttack(c, { profileId: 'bow', modeId: 'single' }).attacks[0]!;
   expect(r.attackBonus).toBe(8);
@@ -233,7 +223,7 @@ test('initiative and hp.max', () => {
 test('availableActions reports charges and eligibility reasons', () => {
   const c = ctxWith([monsterBlow], {}, { 'monster-blow': { types: ['aberration'] } });
   const [mb] = availableActions(c);
-  expect(mb).toMatchObject({ abilityId: 'monster-blow', usable: true, eligible: true, resources: [{ id: 'monster-blow', remaining: 1, max: 1, resetOn: 'day' }] });
+  expect(mb).toMatchObject({ abilityId: 'monster-blow', activationId: 'monster-blow', usable: true, eligible: true, charges: { id: 'monster-blow', remaining: 1, max: 1, resetOn: 'day' } });
 
   const spent = ctxWith([monsterBlow], {}, { 'monster-blow': { types: ['aberration'] } });
   spent.character.resourceState['monster-blow'] = { used: 1 };

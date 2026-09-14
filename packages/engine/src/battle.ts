@@ -3,7 +3,7 @@ import { findResourceDef, promptKey, resourceUsed, type ResetOn } from './contex
 import { evalCondition } from './conditions';
 import { evalExpr } from './expr';
 import { newId } from './ids';
-import { activationsOf, poolsOf, type Ability, type Activation, type Battle, type BonusType, type Character, type Combatant, type Duration, type Effect, type LogEvent, type Monster, type Size, type StatId, type Status, type Trigger } from './schema';
+import { activationsOf, type Ability, type Activation, type Battle, type BonusType, type Character, type Combatant, type Duration, type Effect, type LogEvent, type Monster, type Size, type StatId, type Status, type Trigger } from './schema';
 import { activeSources } from './resolve';
 import { exprVars } from './vars';
 

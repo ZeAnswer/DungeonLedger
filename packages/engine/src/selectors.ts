@@ -52,7 +52,7 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
         case 'resource': {
           const id = p.slice(2, -1).join('.'); const what = p[p.length - 1];
           const def = findResourceDef(ctx, id); if (!def) return undefined;
-          const max = evalExpr(def.def.max, exprVarsRaw(ctx)); const used = resourceUsed(ctx, id, def.def.resetOn);
+          const max = evalExpr(def.def.max, exprVarsRaw(ctx)); const used = resourceUsed(ctx, def.def.id, def.def.resetOn);
           return what === 'max' ? max : what === 'used' ? used : max - used;
         }
         case 'equipped': {

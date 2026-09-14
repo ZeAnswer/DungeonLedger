@@ -13,9 +13,14 @@ const boots = makeAbility({
   resources: [{ id: 'boots-rounds', label: 'Haste rounds', max: 10, resetOn: 'day' }], cost: [{ kind: 'charge', resourceId: 'boots-rounds' }],
   effects: [{ id: 'haste', do: [{ verb: 'attack', extraAttacks: 1, appliesToBase: 'full' }, { verb: 'modify', to: 'attack', value: 1, type: 'dodge' }] }],
 });
-const hog = makeAbility({ id: 'hog', name: 'Hand of Glory', origin: 'item', item: { category: 'wondrous', slot: 'neck' }, grants: ['hog-daylight', 'hog-see-invis'], effects: [{ id: 's', do: [{ verb: 'slot', slot: 'ring' }] }] });
-const daylight = makeAbility({ id: 'hog-daylight', name: 'Daylight', origin: 'spell', activation: { action: 'standard' }, resources: [{ id: 'hog-daylight', max: 1, resetOn: 'day' }] });
-const seeInvis = makeAbility({ id: 'hog-see-invis', name: 'See Invisibility', origin: 'spell', activation: { action: 'standard' }, resources: [{ id: 'hog-see-invis', max: 1, resetOn: 'day' }] });
+// v3 directly: makeAbility has no sibling lookup, so the granted spells become explicit activations here.
+const hog = makeAbility({
+  id: 'hog', name: 'Hand of Glory', kind: 'item', item: { category: 'wondrous', slot: 'neck' },
+  effects: [{ id: 's', do: [{ verb: 'slot', slot: 'ring' }] }],
+  activations: [{ id: 'hog-daylight', spell: 'hog-daylight', charges: { max: 1 } }, { id: 'hog-see-invis', spell: 'hog-see-invis', charges: { max: 1 } }],
+});
+const daylight = makeAbility({ id: 'hog-daylight', name: 'Daylight', kind: 'spell' });
+const seeInvis = makeAbility({ id: 'hog-see-invis', name: 'See Invisibility', kind: 'spell' });
 const horror = makeAbility({ id: 'horror', name: 'Monster Horror', origin: 'classFeature', effects: [{ id: 'h', when: { in: 'target.tags', param: 'types' }, do: [{ verb: 'modify', to: 'attack', value: 'max(2, 2 * sel(self.equipped.count.tag.trophy-aberration))' }] }] });
 const gloves = makeAbility({ id: 'gloves', name: 'Chuul gloves', origin: 'item', item: { category: 'trophy', slot: 'hands', tags: ['trophy-aberration'] } });
 const rage = makeAbility({ id: 'rage', name: 'Rage', origin: 'buff', duration: { rounds: 5 }, effects: [{ id: 'r', do: [{ verb: 'modify', to: 'ability.str', value: 4, type: 'morale' }] }] });
@@ -25,12 +30,12 @@ const revenge = makeAbility({ id: 'revenge', name: 'Revenge', origin: 'feat', ef
 
 function ctxWith(abilities: Ability[], opts: { equipped?: string[]; params?: Record<string, Record<string, string[]>> } = {}) {
   const equipped = new Set(opts.equipped ?? []);
-  const items = abilities.filter((a) => a.item);
+  const items = abilities.filter((a) => a.kind === 'item');
   const c = makeCtx({
     character: makeCharacter({
       hp: { max: 44, current: 20, temp: 0, nonlethal: 0 },
       attackProfiles: [],
-      abilities: abilities.filter((a) => a.origin !== 'buff' && a.origin !== 'spell').map((a) => ({ abilityId: a.id, enabled: !a.item || equipped.has(a.id), paramValues: opts.params?.[a.id] ?? {} })),
+      abilities: abilities.filter((a) => a.kind !== 'status' && a.kind !== 'spell').map((a) => ({ abilityId: a.id, enabled: a.kind !== 'item' || equipped.has(a.id), paramValues: opts.params?.[a.id] ?? {} })),
       inventory: items.map((a) => ({ id: `i-${a.id}`, abilityId: a.id, quantity: 1, equipped: equipped.has(a.id) })),
     }),
     battle: makeBattle({ combatants: [makeCombatant({ id: 'c1', tags: ['aberration'], distanceFeet: 20 })] }),
@@ -78,11 +83,11 @@ test('per-round charged ability: Use spends a charge and the effect lasts this r
   expect(availableActions(c).find((a) => a.abilityId === 'boots')?.usable).toBe(false);
 });
 
-test('granted abilities appear as separate actions with their granter, each with its own charges', () => {
+test('a record with several activations lists one action per activation, each with its own charges', () => {
   const c = ctxWith([hog, daylight, seeInvis], { equipped: ['hog'] });
   const actions = availableActions(c);
-  expect(actions.map((a) => [a.abilityId, a.grantedBy])).toEqual([['hog-daylight', 'hog'], ['hog-see-invis', 'hog']]);
-  const after = useAbility(c, { abilityId: 'hog-daylight' });
+  expect(actions.map((a) => [a.activationId, a.abilityId])).toEqual([['hog-daylight', 'hog'], ['hog-see-invis', 'hog']]);
+  const after = useAbility(c, { abilityId: 'hog', activationId: 'hog-daylight' });
   expect(after.character.resourceState).toEqual({ 'hog-daylight': { used: 1 } });
 });
 
