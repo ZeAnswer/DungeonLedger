@@ -35,8 +35,8 @@ export function SettingsScreen() {
 
       <Section title="Export" defaultOpen>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => storage().exportFile(`hunters-ledger-library-${stamp()}.json`, s.exportLibraryText())}>Export library pack</Button>
-          <Button onClick={() => storage().exportFile(`hunters-ledger-backup-${stamp()}.json`, s.exportBackupText())}>Full backup</Button>
+          <Button onClick={() => storage().exportFile(`dungeon-ledger-library-${stamp()}.json`, s.exportLibraryText())}>Export library pack</Button>
+          <Button onClick={() => storage().exportFile(`dungeon-ledger-backup-${stamp()}.json`, s.exportBackupText())}>Full backup</Button>
         </div>
         <p className="mt-2 text-xs text-zinc-500">Library pack = every ability/tag/monster/skill + your character, importable anywhere. Full backup also includes the current battle and history.</p>
       </Section>

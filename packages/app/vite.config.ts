@@ -22,8 +22,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: "Hunter's Ledger",
-        short_name: 'Ledger',
+        name: "Dungeon Ledger",
+        short_name: 'Dungeon',
         description: 'D&D 3.5e battle assistant',
         theme_color: '#09090b',
         background_color: '#09090b',

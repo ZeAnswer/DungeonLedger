@@ -1,4 +1,4 @@
-# Hunter's Ledger
+# Dungeon Ledger
 
 D&D 3.5e battle assistant. Computes per-attack bonuses from modular JSON "packs" (feats, items, buffs, tags, monsters) with nested conditions and battle memory. Runs as a web app and as an Android app (Capacitor).
 
