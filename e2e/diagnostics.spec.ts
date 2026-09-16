@@ -54,7 +54,7 @@ test('an activation script that fails when actually used is reported inline in i
   const actEditor = sheet.locator('.border-amber-900\\/60');
   await actEditor.getByRole('button', { name: '+ add script' }).click();
   // Run it on `use` (the activation's own "Use" button), not the compute pass's `always`.
-  await actEditor.locator('[data-role="script-events"]').getByRole('button', { name: 'use', exact: true }).click();
+  await actEditor.locator('[data-role="script-event"]').selectOption({ label: 'When used' });
   await actEditor.locator('[data-role="script-source"] .cm-content').click();
   await page.keyboard.type('player.mod.cha += 1');
   await sheet.getByRole('button', { name: 'Save' }).click();

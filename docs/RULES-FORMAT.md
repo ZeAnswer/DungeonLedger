@@ -97,9 +97,9 @@ Script = {
 }
 ```
 
-A script is the same shape wherever it appears: in a record's `scripts` or in an activation's. `events` is a multi-select beside the code, not a registration inside it — the engine has to pick the relevant scripts without executing them.
+A script is the same shape wherever it appears: in a record's `scripts` or in an activation's. `events` holds one entry the engine has to be able to pick without executing the script; the app's row writes it from a single dropdown, not a registration inside the code.
 
-In the app, this is Library › the record's tab › the record, "Scripts": the label, the events multi-select, the enabled switch, the priority and the source box are the fields of this object, and the JSON tab shows exactly what is stored. A script's errors appear under its box and as a red dot on the record in the list.
+In the app, this is Library › the record's tab › the record, "Scripts": one dropdown says when the script runs (`Always`, `When I hit`, …, `Custom…`, which reveals a name box and stores `custom:<name>`); a legacy script with more than one event shows the first and a "+N more" hint until re-saved. The code (or, for a script that calls a library function, the function form) and "Right now" sit below it. Label, id, the enabled switch, the priority and the code/"call a function" switch fold behind a `⋯` button, closed by default even for a brand-new row; a small link under the code or form ("use a function instead" / "write code instead") reaches the switch without opening `⋯`. A script's errors appear under its box and as a red dot on the record in the list.
 
 | Event | When it runs |
 |---|---|
@@ -255,9 +255,9 @@ fn.trophy({ stat: 'init', base: 4 });                    // in a script's source
 
 `k: 'lit'` is a literal value, `ref` a path, `expr` a JavaScript expression; both are spliced into `fn["trophy"]({ … })` before compiling.
 
-**Where a function may live.** Functions merge into one library namespace, but a pack has to work when it is the only one installed alongside core, so a record may only call a function defined in **its own pack** or in **`core-3.5e`**; the validator rejects anything else. The bundled functions are `haste()` and `favoredEnemy({ types, amount })` in `packs/core-3.5e.json` (core records call them) and `trophy({ stat, base, type })` in `packs/memento.json` (only Monster Hunter trophies use it).
+**Where a function may live.** Functions merge into one library namespace, but a pack has to work when it is the only one installed alongside core, so a record may only call a function defined in **its own pack** or in **`core-3.5e`**; the validator rejects anything else. `packs/core-3.5e.json` ships `haste()`, `favoredEnemy({ types, amount })` and seven form-only helpers for the common "just a bonus" shapes — `addToAbility`, `addToStat` (with an optional ranged/melee guard), `addToSkill`, `bonusVsType`, `bonusWhenSwitch`, `markTarget` and `reminder`; `packs/memento.json` ships `trophy({ stat, base, type })` (only Monster Hunter trophies use it).
 
-Library › Functions edits these: name, description, a parameter table (name, type, label, required) and the body. The same screen lists the records that call each function — through `script.call.fn` or a `fn.<id>(…)` in a source. A record's script switches between "code" and "call a function" with the chips above its box; the call form renders one control per parameter type and an ƒx switch that turns any box into a raw expression (`{ "k": "expr" }`); a `path` or `ref` parameter stores `{ "k": "ref" }`.
+Library › Functions edits these: name, description, a parameter table (name, type, label, required) and the body. The same screen lists the records that call each function — through `script.call.fn` or a `fn.<id>(…)` in a source. A record's script switches between "code" and "call a function" with the switch behind the row's `⋯` (or the small link under the box); a row that calls a function shows no code box at all, just the typed form and "Right now". The call form renders one control per parameter type and an ƒx switch that turns any box into a raw expression (`{ "k": "expr" }`); a `path` or `ref` parameter stores `{ "k": "ref" }`.
 
 ## Globals
 
