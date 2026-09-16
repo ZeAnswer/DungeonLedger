@@ -14,7 +14,7 @@ function entryCategory(ctx: EvalContext, e: InventoryEntry) { const a = itemAbil
 export function InventoryScreen() {
   const ctx = useCtx();
   const setCharacter = useStore((s) => s.setCharacter);
-  const setBattle = useStore((s) => s.setBattle);
+  const applyState = useStore((s) => s.applyState);
   const library = useStore((s) => s.library);
   const setLibrary = useStore((s) => s.setLibrary);
   const showToast = useStore((s) => s.showToast);
@@ -31,12 +31,12 @@ export function InventoryScreen() {
   const doEquip = (e: InventoryEntry) => {
     const r = equipItem(ctx, e.id);
     if (!r.ok) {
-      if (confirm(`${r.reason}. Replace what is there?`)) { const r2 = equipItem(ctx, e.id, { replace: true }); setCharacter(r2.character); if (r2.battle) setBattle(r2.battle); showToast(`${entryName(ctx, e)} equipped`); }
+      if (confirm(`${r.reason}. Replace what is there?`)) { const r2 = equipItem(ctx, e.id, { replace: true }); applyState(r2); showToast(`${entryName(ctx, e)} equipped`); }
       return;
     }
-    setCharacter(r.character); if (r.battle) setBattle(r.battle); showToast(`${entryName(ctx, e)} equipped`);
+    applyState(r); showToast(`${entryName(ctx, e)} equipped`);
   };
-  const doUnequip = (e: InventoryEntry) => { const r = unequipItem(ctx, e.id); setCharacter(r.character); if (r.battle) setBattle(r.battle); showToast(`${entryName(ctx, e)} unequipped`); };
+  const doUnequip = (e: InventoryEntry) => { const r = unequipItem(ctx, e.id); applyState(r); showToast(`${entryName(ctx, e)} unequipped`); };
   const saveNew = (a: Ability) => {
     setLibrary({ ...library, abilities: { ...library.abilities, [a.id]: a } });
     setCharacter(addItemInstance(c, a.id));
@@ -134,12 +134,12 @@ export function InventoryScreen() {
           </div>
           <Field label="Quantity"><input className={inputCls + ' w-24'} inputMode="numeric" value={e.quantity} onChange={(ev) => setCharacter({ ...c, inventory: c.inventory.map((i) => (i.id === e.id ? { ...i, quantity: Number(ev.target.value) || 0 } : i)) })} /></Field>
           <Field label="Notes (this copy)"><textarea className={inputCls} value={e.notes ?? ''} onChange={(ev) => setCharacter({ ...c, inventory: c.inventory.map((i) => (i.id === e.id ? { ...i, notes: ev.target.value || undefined } : i)) })} /></Field>
-          <Button variant="danger" onClick={() => { if (confirm(`Remove ${entryName(ctx, e)} from ${c.name}? (stays in the library)`)) { const r = removeItemInstance(ctx, e.id); setCharacter(r.character); if (r.battle) setBattle(r.battle); setOpen(undefined); } }}>Remove from character</Button>
+          <Button variant="danger" onClick={() => { if (confirm(`Remove ${entryName(ctx, e)} from ${c.name}? (stays in the library)`)) { const r = removeItemInstance(ctx, e.id); applyState(r); setOpen(undefined); } }}>Remove from character</Button>
         </Sheet>
       ); })()}
 
       {/* pick from library / storage for a slot */}
-      {pickFor && <PickSheet ctx={ctx} slot={pickFor} onClose={() => setPickFor(undefined)} onEquipExisting={(e) => { doEquip(e); setPickFor(undefined); }} onAddFromLibrary={(a, equip) => { let next = addItemInstance(c, a.id); if (equip) { const r = equipItem({ ...ctx, character: next }, next.inventory.at(-1)!.id, { replace: true }); next = r.character; if (r.battle) setBattle(r.battle); } setCharacter(next); showToast(`${a.name} added`); setPickFor(undefined); }} onCreate={() => { setPickFor(undefined); setCreating(freshRecord('item', { category: pickFor === 'any' ? 'gear' : 'wondrous', ...(pickFor !== 'any' ? { slot: pickFor } : {}) })); }} />}
+      {pickFor && <PickSheet ctx={ctx} slot={pickFor} onClose={() => setPickFor(undefined)} onEquipExisting={(e) => { doEquip(e); setPickFor(undefined); }} onAddFromLibrary={(a, equip) => { const next = addItemInstance(c, a.id); if (equip) { applyState(equipItem({ ...ctx, character: next }, next.inventory.at(-1)!.id, { replace: true })); } else { applyState({ character: next }); } showToast(`${a.name} added`); setPickFor(undefined); }} onCreate={() => { setPickFor(undefined); setCreating(freshRecord('item', { category: pickFor === 'any' ? 'gear' : 'wondrous', ...(pickFor !== 'any' ? { slot: pickFor } : {}) })); }} />}
 
       <Sheet open={!!creating} onClose={() => setCreating(undefined)} title="New item" tall>
         {creating && <RecordEditor key={creating.id} initial={creating} onSave={saveNew} onCancel={() => setCreating(undefined)} />}

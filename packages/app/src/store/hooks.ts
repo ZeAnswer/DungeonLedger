@@ -1,17 +1,18 @@
 import { useMemo } from 'react';
 import { activationsOf, compile, type EvalContext } from '@hl/engine';
-import { useStore } from './store';
+import { ctxLibrary, useStore } from './store';
 
 export function useCtx(): EvalContext | undefined {
   const character = useStore((s) => s.character);
   const library = useStore((s) => s.library);
+  const globals = useStore((s) => s.globals);
   const battle = useStore((s) => s.battle);
   const targetId = useStore((s) => s.targetId);
   return useMemo(() => {
     if (!character) return undefined;
     const target = battle?.combatants.find((c) => c.id === targetId);
-    return { character, library, ...(battle ? { battle } : {}), ...(target ? { target } : {}) };
-  }, [character, library, battle, targetId]);
+    return { character, library: ctxLibrary({ library, globals }), ...(battle ? { battle } : {}), ...(target ? { target } : {}) };
+  }, [character, library, globals, battle, targetId]);
 }
 
 /**

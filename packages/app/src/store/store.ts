@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import {
   AbilitySchema, BattleSchema, CharacterSchema, PackSchema, convertToV3, convertBattle, emptyLibrary, mergePack, libraryToPack, newBattle, activationsOf,
-  type Battle, type Character, type EvalContext, type LibraryWithMeta, type MergeReport, type Monster, type MonsterOverlay, type Pack,
+  type Battle, type Character, type EvalContext, type LibraryWithMeta, type MergeReport, type Monster, type MonsterOverlay, type Pack, type VarValue,
 } from '@hl/engine';
 import { storage } from '../storage';
 import { defaultPacks } from '../data/defaultPacks';
@@ -13,6 +13,7 @@ export type Screen = 'battle' | 'character' | 'inventory' | 'library' | 'setting
 type State = {
   hydrated: boolean;
   library: FullLibrary;
+  globals: Record<string, VarValue>;
   character: Character | undefined;
   battle: Battle | undefined;
   pastBattles: Battle[];
@@ -27,6 +28,9 @@ type Actions = {
   setTarget(id: string | undefined): void;
   setCharacter(c: Character): void;
   setBattle(b: Battle | undefined): void;
+  setGlobals(g: Record<string, VarValue>): void;
+  /** Apply what an engine call handed back (character, battle and any globals its scripts wrote). */
+  applyState(r: { character?: Character; battle?: Battle; globals?: Record<string, VarValue> }): void;
   startBattle(name?: string): void;
   endBattle(): void;
   setLibrary(l: FullLibrary): void;
@@ -45,7 +49,7 @@ type Actions = {
 
 export type Store = State & Actions;
 
-const KEYS = { library: 'hl.library', character: 'hl.character', battle: 'hl.battle', past: 'hl.pastBattles', screen: 'hl.screen' } as const;
+const KEYS = { library: 'hl.library', globals: 'hl.globals', character: 'hl.character', battle: 'hl.battle', past: 'hl.pastBattles', screen: 'hl.screen' } as const;
 
 function fullEmpty(): FullLibrary {
   return { ...emptyLibrary(), monsters: {}, characters: {}, monsterOverlay: {} };
@@ -75,6 +79,7 @@ function loadPastBattles(raw: unknown, lib: FullLibrary): Battle[] {
 export const useStore = create<Store>((set, get) => ({
   hydrated: false,
   library: fullEmpty(),
+  globals: {},
   character: undefined,
   battle: undefined,
   pastBattles: [],
@@ -84,14 +89,14 @@ export const useStore = create<Store>((set, get) => ({
 
   async hydrate() {
     const s = storage();
-    const [library, character, battle, past, screen] = await Promise.all([
-      s.get<FullLibrary>(KEYS.library), s.get<Character>(KEYS.character), s.get<Battle>(KEYS.battle), s.get<Battle[]>(KEYS.past), s.get<Screen>(KEYS.screen),
+    const [library, globals, character, battle, past, screen] = await Promise.all([
+      s.get<FullLibrary>(KEYS.library), s.get<Record<string, VarValue>>(KEYS.globals), s.get<Character>(KEYS.character), s.get<Battle>(KEYS.battle), s.get<Battle[]>(KEYS.past), s.get<Screen>(KEYS.screen),
     ]);
     if (!library) {
       let lib = fullEmpty();
       for (const p of defaultPacks) lib = { ...lib, ...(mergePack(lib, p).library as FullLibrary) };
       const ch = Object.values(lib.characters)[0];
-      set({ library: lib, character: ch, hydrated: true, screen: 'battle' });
+      set({ library: lib, globals: lib.globals, character: ch, hydrated: true, screen: 'battle' });
       return;
     }
     // Built-in packs newer than what this install has seen get merged in (same-pack newer version wins; user edits to other packs untouched).
@@ -103,6 +108,7 @@ export const useStore = create<Store>((set, get) => ({
     }
     set({
       library: lib,
+      globals: globals ?? lib.globals,
       character: character ? CharacterSchema.parse(character) : Object.values(library.characters ?? {})[0],
       battle: battle ? loadBattle(battle, lib) : undefined,
       pastBattles: loadPastBattles(past, lib),
@@ -116,6 +122,8 @@ export const useStore = create<Store>((set, get) => ({
   setTarget: (targetId) => set({ targetId }),
   setCharacter: (character) => set({ character }),
   setBattle: (battle) => set({ battle }),
+  setGlobals: (globals) => set({ globals }),
+  applyState: (r) => set({ ...(r.character ? { character: r.character } : {}), ...(r.battle ? { battle: r.battle } : {}), ...(r.globals ? { globals: r.globals } : {}) }),
   startBattle: (name) => set({ battle: newBattle(name ?? `Battle ${new Date().toLocaleDateString()}`), targetId: undefined }),
   endBattle: () => {
     const { battle, pastBattles } = get();
@@ -126,12 +134,14 @@ export const useStore = create<Store>((set, get) => ({
   setMonsterOverlay: (monsterId, overlay) => set((s) => ({ library: { ...s.library, monsterOverlay: { ...s.library.monsterOverlay, [monsterId]: overlay } } })),
 
   importPack(pack, opts) {
-    const { library, character } = get();
-    const m = mergePack(library, pack, opts);
+    const { library, character, globals } = get();
+    // Diff the pack's globals against the live globals slice (not the stale library.globals blob), so
+    // the MergeReport's added/updated/conflicts counts reflect what the player actually has right now.
+    const m = mergePack({ ...library, globals }, pack, opts);
     const lib = { ...fullEmpty(), ...library, ...m.library } as FullLibrary;
     // If the pack carries the active character (or we have none), refresh it.
     const incoming = pack.characters.find((c) => c.id === character?.id) ?? (character ? undefined : pack.characters[0]);
-    set({ library: lib, ...(incoming && (opts?.overwrite || !character || !m.report.conflicts.some((c) => c.key === `character:${incoming.id}`)) ? { character: incoming } : {}) });
+    set({ library: lib, globals: m.library.globals, ...(incoming && (opts?.overwrite || !character || !m.report.conflicts.some((c) => c.key === `character:${incoming.id}`)) ? { character: incoming } : {}) });
     return m.report;
   },
 
@@ -147,14 +157,14 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   exportLibraryText() {
-    const { library, character } = get();
-    const lib = character ? { ...library, characters: { ...library.characters, [character.id]: character } } : library;
+    const { library, globals, character } = get();
+    const lib = { ...library, globals, ...(character ? { characters: { ...library.characters, [character.id]: character } } : {}) };
     return JSON.stringify(libraryToPack(lib, { id: 'library-export', name: 'Library export', version: Date.now() }), null, 2);
   },
 
   exportBackupText() {
-    const { library, character, battle, pastBattles } = get();
-    return JSON.stringify({ kind: 'hl-backup', version: 1, library, character, battle, pastBattles }, null, 2);
+    const { library, globals, character, battle, pastBattles } = get();
+    return JSON.stringify({ kind: 'hl-backup', version: 2, library, globals, character, battle, pastBattles }, null, 2);
   },
 
   restoreBackupText(text) {
@@ -164,6 +174,7 @@ export const useStore = create<Store>((set, get) => ({
       const lib: FullLibrary = { ...fullEmpty(), ...raw.library, abilities: convertAbilities(raw.library?.abilities as Record<string, unknown> | undefined) };
       set({
         library: lib,
+        globals: (raw.globals as Record<string, VarValue> | undefined) ?? lib.globals ?? {},
         character: raw.character ? CharacterSchema.parse(raw.character) : undefined,
         battle: raw.battle ? loadBattle(raw.battle, lib) : undefined,
         pastBattles: loadPastBattles(raw.pastBattles, lib),
@@ -189,7 +200,7 @@ export const useStore = create<Store>((set, get) => ({
   async resetToDefaults() {
     const s = storage();
     for (const k of Object.values(KEYS)) await s.remove(k);
-    set({ hydrated: false, library: fullEmpty(), character: undefined, battle: undefined, pastBattles: [], targetId: undefined });
+    set({ hydrated: false, library: fullEmpty(), globals: {}, character: undefined, battle: undefined, pastBattles: [], targetId: undefined });
     await get().hydrate();
   },
 
@@ -214,6 +225,7 @@ function flush() {
   if (Object.keys(changed).length === 0) return;
   const st = storage();
   if ('library' in changed) void st.set(KEYS.library, changed.library);
+  if ('globals' in changed) void st.set(KEYS.globals, changed.globals);
   if ('character' in changed) void (changed.character ? st.set(KEYS.character, changed.character) : st.remove(KEYS.character));
   if ('battle' in changed) void (changed.battle ? st.set(KEYS.battle, changed.battle) : st.remove(KEYS.battle));
   if ('pastBattles' in changed) void st.set(KEYS.past, changed.pastBattles);
@@ -224,11 +236,12 @@ useStore.subscribe((s) => {
   if (!s.hydrated) return;
   const changed: Partial<State> = {};
   if (s.library !== last.library) changed.library = s.library;
+  if (s.globals !== last.globals) changed.globals = s.globals;
   if (s.character !== last.character) changed.character = s.character;
   if (s.battle !== last.battle) changed.battle = s.battle;
   if (s.pastBattles !== last.pastBattles) changed.pastBattles = s.pastBattles;
   if (s.screen !== last.screen) changed.screen = s.screen;
-  last = { library: s.library, character: s.character, battle: s.battle, pastBattles: s.pastBattles, screen: s.screen };
+  last = { library: s.library, globals: s.globals, character: s.character, battle: s.battle, pastBattles: s.pastBattles, screen: s.screen };
   if (Object.keys(changed).length === 0) return;
   pending = { ...pending, ...changed };
   const now = Date.now();
@@ -245,9 +258,23 @@ if (typeof window !== 'undefined') {
 /** Force pending saves to disk now (e.g. before export). */
 export const flushStorage = flush;
 
+/**
+ * `EvalContext.library` with the globals slice spread over it. Memoized by identity because the engine's
+ * compute-pass cache keys on the library object: a fresh object every render would defeat it.
+ */
+let libIn: FullLibrary | undefined;
+let globalsIn: Record<string, VarValue> | undefined;
+let libOut: FullLibrary | undefined;
+export function ctxLibrary(s: { library: FullLibrary; globals: Record<string, VarValue> }): FullLibrary {
+  if (s.library !== libIn || s.globals !== globalsIn || !libOut) {
+    libIn = s.library; globalsIn = s.globals; libOut = { ...s.library, globals: s.globals };
+  }
+  return libOut;
+}
+
 /** Evaluation context for the engine from current store state. */
 export function selectCtx(s: Store): EvalContext | undefined {
   if (!s.character) return undefined;
   const target = s.battle?.combatants.find((c) => c.id === s.targetId);
-  return { character: s.character, library: s.library, ...(s.battle ? { battle: s.battle } : {}), ...(target ? { target } : {}) };
+  return { character: s.character, library: ctxLibrary(s), ...(s.battle ? { battle: s.battle } : {}), ...(target ? { target } : {}) };
 }

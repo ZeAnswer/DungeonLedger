@@ -4,19 +4,16 @@ import { Button, Sheet, cx } from '../ui';
 
 /** Every charge pool at a glance: what is left, −/+ to correct, reset per row or all at once. */
 export function ChargesSheet({ ctx, onClose }: { ctx: EvalContext; onClose: () => void }) {
-  const setCharacter = useStore((s) => s.setCharacter);
-  const setBattle = useStore((s) => s.setBattle);
+  const applyState = useStore((s) => s.applyState);
   const rows = listCharges(ctx);
   const apply = (id: string, used: number) => {
     const r = setChargesUsed(ctx, id, used);
-    setCharacter(r.character);
-    if (r.battle) setBattle(r.battle);
+    applyState(r);
   };
   const resetAll = () => {
     let cur = ctx;
     for (const r of rows) { const n = setChargesUsed(cur, r.id, 0); cur = { ...cur, character: n.character, ...(n.battle ? { battle: n.battle } : {}) }; }
-    setCharacter(cur.character);
-    if (cur.battle) setBattle(cur.battle);
+    applyState({ character: cur.character, ...(cur.battle ? { battle: cur.battle } : {}) });
   };
   const perLabel = { round: 'per round', encounter: 'per battle', day: 'per day', never: 'no reset' } as const;
   return (

@@ -21,6 +21,7 @@ export function CharacterScreen() {
   const setCharacter = useStore((s) => s.setCharacter);
   const battle = useStore((s) => s.battle);
   const setBattle = useStore((s) => s.setBattle);
+  const applyState = useStore((s) => s.applyState);
   const showToast = useStore((s) => s.showToast);
   const [hpOp, setHpOp] = useState<'damage' | 'heal' | 'temp' | 'nonlethal' | undefined>();
   const [amount, setAmount] = useState('');
@@ -52,8 +53,7 @@ export function CharacterScreen() {
     const what = kind === 'short' ? 'Short rest: refill per-battle charges, heal nonlethal 1/level.' : 'Long rest: refill daily charges, +1 hp per level, clear temp and nonlethal.';
     if (!confirm(what)) return;
     const r = rest(ctx, kind);
-    setCharacter(r.character);
-    if (r.battle) setBattle(r.battle);
+    applyState(r);
     showToast(r.summary);
   };
   const mod = (v: number) => Math.floor((v - 10) / 2);

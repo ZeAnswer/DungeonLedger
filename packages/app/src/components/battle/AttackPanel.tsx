@@ -8,7 +8,7 @@ import { Button, Chip, Field, Sheet, cx, humanize, inputCls, signed } from '../u
 
 export function AttackPanel({ ctx }: { ctx: EvalContext }) {
   const setBattle = useStore((s) => s.setBattle);
-  const setCharacter = useStore((s) => s.setCharacter);
+  const applyState = useStore((s) => s.applyState);
   const showToast = useStore((s) => s.showToast);
   const battle = ctx.battle!;
   const target = ctx.target;
@@ -31,12 +31,12 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
     if (!target) return;
     const damageText = `${a.damage.dice.map((d) => d.dice).join(' + ')}${a.damage.flat ? ` ${signed(a.damage.flat)}` : ''}`;
     const r = logAttack(ctx, { targetId: target.id, profileId: effectiveProfileId, modeId: mode!.modeId, attackIndex: a.index, result: res }, { attackBonus: a.attackBonus, damageText });
-    setBattle(r.battle); setCharacter(r.character);
+    applyState(r);
     showToast(`#${a.index} ${res.toUpperCase()} vs ${target.name}`);
   };
   const use = (a: ActionInfo) => {
     const r = useAbility(ctx, { abilityId: a.abilityId, activationId: a.activationId, ...(target ? { targetId: target.id } : {}) });
-    setBattle(r.battle); setCharacter(r.character);
+    applyState(r);
     showToast(`Used ${a.name}`);
   };
 
@@ -100,7 +100,7 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
                     <span className={cx('ml-2 font-bold', logged.result === 'miss' ? 'text-red-300' : 'text-emerald-300')}>{logged.result!.toUpperCase()}</span>
                     {logged.snapshot && <span className="ml-3 text-sm text-zinc-400">{signed(logged.snapshot.attackBonus)} · {logged.snapshot.damageText}</span>}
                   </span>
-                  <Button size="sm" variant="ghost" onClick={() => { const r = undoEvent(ctx, logged.id); setBattle(r.battle); setCharacter(r.character); showToast(`Undid attack #${a.index}`); }}>Undo</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { const r = undoEvent(ctx, logged.id); applyState(r); showToast(`Undid attack #${a.index}`); }}>Undo</Button>
                 </div>
               );
             }
