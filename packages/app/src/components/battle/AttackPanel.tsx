@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import {
-  attackProfiles, availableActions, listAttackModes, logAttack, resolveAttack, setPrompt, undoEvent, useAbility, type ActionInfo, type AttackResult, type BreakdownEntry, type EvalContext,
+  attackProfiles, availableActions, listAttackModes, logAttack, resolveAttack, setPrompt, undoEvent, useAbility, type ActionInfo, type AttackResult, type BreakdownEntry, type EvalContext, type PromptRequest,
 } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { collectToggles } from '../../store/hooks';
+import { usePathLongPress } from '../../hooks/usePathLongPress';
 import { Button, Chip, Field, Sheet, cx, humanize, inputCls, signed } from '../ui';
 
 export function AttackPanel({ ctx }: { ctx: EvalContext }) {
@@ -52,11 +53,7 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
       {/* toggles */}
       {(toggles.length > 0 || declares.length > 0) && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {toggles.map((t) => (
-            <Chip key={t.id} tone="amber" active={!!battle.toggles[t.id]} onClick={() => setToggle(t.id, !battle.toggles[t.id])}>
-              {humanize(t.id)}
-            </Chip>
-          ))}
+          {toggles.map((t) => <ToggleChip key={t.id} id={t.id} on={!!battle.toggles[t.id]} onToggle={() => setToggle(t.id, !battle.toggles[t.id])} />)}
           {declares.map((a) => (
             <Chip key={a.activationId} tone="red" active={a.active} className={cx(!a.usable && 'opacity-60')} onClick={() => !a.active && a.usable && use(a)}>
               ⚡ {a.name}{a.charges ? ` ${a.charges.remaining}/${a.charges.max}` : ''}
@@ -77,11 +74,7 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
 
       {result && result.promptsNeeded.length > 0 && (
         <div className="mb-3 space-y-1">
-          {result.promptsNeeded.map((p) => (
-            <button key={p.source + p.promptId} type="button" disabled={!!p.perTagCategory && !p.tag} onClick={() => setPromptOpen({ id: p.promptId, category: p.perTagCategory })} className="block w-full rounded-xl border border-amber-800 bg-amber-950/40 px-3 py-2 text-left text-sm text-amber-200 disabled:opacity-60">
-              🎲 {p.sourceName}: roll {humanize(p.promptId)}{p.tag ? ` vs ${ctx.library.tags[p.tag]?.label ?? p.tag}` : ''} <span className="underline">enter result</span>
-            </button>
-          ))}
+          {result.promptsNeeded.map((p) => <PromptRow key={p.source + p.promptId} request={p} label={`${p.sourceName}: roll ${humanize(p.promptId)}${p.tag ? ` vs ${ctx.library.tags[p.tag]?.label ?? p.tag}` : ''}`} disabled={!!p.perTagCategory && !p.tag} onOpen={() => setPromptOpen({ id: p.promptId, ...(p.perTagCategory ? { category: p.perTagCategory } : {}) })} />)}
         </div>
       )}
       {result && result.warnings.filter((w) => !result.promptsNeeded.some((p) => w.startsWith(p.sourceName))).map((w) => <div key={w} className="mb-2 rounded-xl border border-amber-900 px-3 py-2 text-sm text-amber-200">⚠️ {w}</div>)}
@@ -174,6 +167,20 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
 
       {prompt && <PromptSheet ctx={ctx} id={prompt.id} category={prompt.category} onClose={() => setPromptOpen(undefined)} />}
     </div>
+  );
+}
+
+function ToggleChip({ id, on, onToggle }: { id: string; on: boolean; onToggle: () => void }) {
+  const press = usePathLongPress(`battle.toggles.${id}`);
+  return <span {...press}><Chip tone="amber" active={on} onClick={onToggle}>{humanize(id)}</Chip></span>;
+}
+
+function PromptRow({ request, label, disabled, onOpen }: { request: PromptRequest; label: string; disabled: boolean; onOpen: () => void }) {
+  const press = usePathLongPress(`battle.prompts.${request.promptId}`);
+  return (
+    <button type="button" {...press} disabled={disabled} onClick={onOpen} className="block w-full rounded-xl border border-amber-800 bg-amber-950/40 px-3 py-2 text-left text-sm text-amber-200 disabled:opacity-60">
+      🎲 {label} <span className="underline">enter result</span>
+    </button>
   );
 }
 

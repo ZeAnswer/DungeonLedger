@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { SLOTS, activationsOf, addItemInstance, equipItem, itemAbility, removeItemInstance, slotCapacity, slotOccupants, slotOf, twoHandedInMainHand, unequipItem, type Ability, type EvalContext, type InventoryEntry, type Item, type ItemCategory, type SlotId } from '@hl/engine';
 import { useStore } from '../store/store';
 import { useCtx } from '../store/hooks';
+import { usePathLongPress } from '../hooks/usePathLongPress';
 import { Button, Chip, Field, Sheet, cx, humanize, inputCls } from '../components/ui';
 import { RecordEditor, freshRecord } from '../components/library/RecordEditor';
 import { AbilitySheet } from '../components/character/AbilitySheet';
@@ -10,6 +11,12 @@ const CATEGORIES: ItemCategory[] = ['weapon', 'armor', 'shield', 'ammunition', '
 
 function entryName(ctx: EvalContext, e: InventoryEntry) { return itemAbility(ctx, e)?.name ?? e.name ?? '(unknown item)'; }
 function entryCategory(ctx: EvalContext, e: InventoryEntry) { const a = itemAbility(ctx, e); return (a?.kind === 'item' ? a.item.category : undefined) ?? (e.category as ItemCategory | undefined) ?? 'gear'; }
+
+/** The item's name, long-pressable for the path a script checks it with. */
+function ItemName({ abilityId, name }: { abilityId?: string; name: string }) {
+  const press = usePathLongPress(`player.wearing('${abilityId ?? ''}')`, name);
+  return <span {...(abilityId ? press : {})} className="truncate">{name}</span>;
+}
 
 export function InventoryScreen() {
   const ctx = useCtx();
@@ -81,7 +88,7 @@ export function InventoryScreen() {
                 <div key={`${s.id}-${idx}`} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2">
                   <div className="w-24 shrink-0 text-xs uppercase tracking-wide text-zinc-500">{s.label}{n > 1 ? ` ${idx + 1}` : ''}</div>
                   {e ? (
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setOpen(e)}><span className="truncate">{entryName(ctx, e)}</span>{itemAbility(ctx, e)?.scripts.length ? <span className="ml-1 text-amber-400">✦</span> : null}</button>
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setOpen(e)}><ItemName abilityId={e.abilityId} name={entryName(ctx, e)} />{itemAbility(ctx, e)?.scripts.length ? <span className="ml-1 text-amber-400">✦</span> : null}</button>
                   ) : (
                     <button type="button" className="min-w-0 flex-1 text-left text-zinc-600" onClick={() => setPickFor(s.id)}>— empty —</button>
                   )}
@@ -110,7 +117,7 @@ export function InventoryScreen() {
               <div className="space-y-1">
                 {g.items.map((e) => { const a = itemAbility(ctx, e); const slot = slotOf(a); return (
                   <button key={e.id} type="button" onClick={() => setOpen(e)} className="flex w-full items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2 text-left">
-                    <span className="min-w-0 flex-1 truncate"><span className={cx('mr-2', e.equipped ? 'text-emerald-400' : 'text-zinc-700')}>{e.equipped ? '✓' : '○'}</span>{entryName(ctx, e)}{e.quantity !== 1 ? <span className="ml-1 text-zinc-400">×{e.quantity}</span> : null}{a?.scripts.length ? <span className="ml-1 text-amber-400">✦</span> : null}</span>
+                    <span className="min-w-0 flex-1 truncate"><span className={cx('mr-2', e.equipped ? 'text-emerald-400' : 'text-zinc-700')}>{e.equipped ? '✓' : '○'}</span><ItemName abilityId={e.abilityId} name={entryName(ctx, e)} />{e.quantity !== 1 ? <span className="ml-1 text-zinc-400">×{e.quantity}</span> : null}{a?.scripts.length ? <span className="ml-1 text-amber-400">✦</span> : null}</span>
                     <span className="shrink-0 text-xs text-zinc-500">{slot && slot !== 'none' ? SLOTS.find((s) => s.id === slot)?.label : slot === 'none' ? 'no slot' : ''}</span>
                   </button>
                 ); })}

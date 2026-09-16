@@ -6,6 +6,7 @@ import { LibraryScreen } from './screens/LibraryScreen';
 import { InventoryScreen } from './screens/InventoryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { cx } from './components/ui';
+import { PathToast } from './components/PathToast';
 import { bootSucceeded, setSafeMode } from './boot';
 
 const TABS = [
@@ -47,6 +48,7 @@ export default function App() {
         {screen === 'settings' && <SettingsScreen />}
       </main>
       {toast && <div className="fixed left-1/2 top-3 z-50 -translate-x-1/2 rounded-full bg-zinc-100 px-4 py-2 text-sm text-zinc-900 shadow-lg">{toast}</div>}
+      <PathToast />
       <nav className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-zinc-800 bg-zinc-950/95 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {TABS.map((t) => (
           <button key={t.id} type="button" onClick={() => setScreen(t.id)} className={cx('flex flex-1 flex-col items-center gap-0.5 py-2 text-xs select-none touch-manipulation', screen === t.id ? 'text-amber-400' : 'text-zinc-500')}>

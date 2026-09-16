@@ -23,6 +23,7 @@ type State = {
   scriptErrors: ScriptError[];
   safeMode: boolean;
   safeModeAuto: boolean;
+  pathToast: { path: string; label?: string } | undefined;
 };
 
 type Actions = {
@@ -52,6 +53,8 @@ type Actions = {
   refreshDiagnostics(): void;
   clearScriptErrors(recordId?: string): void;
   setSafeModeState(on: boolean, auto?: boolean): void;
+  showPath(path: string, label?: string): void;
+  hidePath(): void;
 };
 
 export type Store = State & Actions;
@@ -96,6 +99,7 @@ export const useStore = create<Store>((set, get) => ({
   scriptErrors: [],
   safeMode: false,
   safeModeAuto: false,
+  pathToast: undefined,
 
   async hydrate() {
     const s = storage();
@@ -244,6 +248,8 @@ export const useStore = create<Store>((set, get) => ({
     set({ scriptErrors: diagnostics.errors() });
   },
   setSafeModeState: (safeMode, safeModeAuto = false) => set({ safeMode, safeModeAuto }),
+  showPath: (path, label) => set({ pathToast: { path, ...(label ? { label } : {}) } }),
+  hidePath: () => set({ pathToast: undefined }),
 }));
 
 // ---- persistence: save changed slices, debounced (300ms trailing, 1s max wait), flushed on page hide ----
