@@ -11,8 +11,21 @@ import { FunctionCallForm } from './FunctionCallForm';
 const ScriptEditor = lazy(() => import('./ScriptEditor').then((m) => ({ default: m.ScriptEditor })));
 const EDITOR_FALLBACK = <div className="flex h-16 items-center justify-center rounded-xl border border-zinc-700 text-sm text-zinc-500">loading editor…</div>;
 
-/** Events a script may listen to. `always` is the compute phase and cannot be combined with the others. */
-export const EVENTS = ['always', 'hit', 'miss', 'crit', 'damaged', 'roundStart', 'roundEnd', 'use', 'equip', 'unequip'] as const;
+/** The one event a script runs on, as the row's dropdown shows it. `always` is the compute phase and
+ * cannot be combined with the others; `custom` reveals a name box and stores `custom:<name>`. */
+export const EVENT_OPTIONS = [
+  { value: 'always', label: 'Always' },
+  { value: 'hit', label: 'When I hit' },
+  { value: 'miss', label: 'When I miss' },
+  { value: 'crit', label: 'When I crit' },
+  { value: 'damaged', label: "When I'm hit" },
+  { value: 'roundStart', label: 'Round start' },
+  { value: 'roundEnd', label: 'Round end' },
+  { value: 'use', label: 'When used' },
+  { value: 'equip', label: 'When equipped' },
+  { value: 'unequip', label: 'When unequipped' },
+  { value: 'custom', label: 'Custom…' },
+] as const;
 
 /** `base` if free, else `base-2`, `base-3`, … Ids must not collide: activation ids double as pool ids. */
 export function uniqueId(base: string, taken: string[]): string {
@@ -24,18 +37,17 @@ export function newScript(taken: string[]): Script {
   return { id: uniqueId('s1', taken), events: ['always'], source: '', enabled: true, priority: 0 };
 }
 
+/** The dropdown's own value for a script's `events`: `custom` when the first event is `custom:<name>`, else the first event (default `always`). */
+const dropdownValue = (events: string[]): string => {
+  const first = events[0] ?? 'always';
+  return first.startsWith('custom:') ? 'custom' : first;
+};
+
 export function ScriptsEditor({ value, onChange, addLabel = '+ add script', errors = [], ability }: { value: Script[]; onChange: (s: Script[]) => void; addLabel?: string; errors?: ScriptError[]; ability?: Ability }) {
   const functions = useStore((s) => s.library.functions);
   // Ids stay unique across the whole record (its own scripts and every activation's), so an error line names one script only.
   const takenIds = ability ? [...ability.scripts, ...activationsOf(ability).flatMap((x) => x.scripts), ...value].map((s) => s.id) : value.map((s) => s.id);
   const set = (i: number, patch: Partial<Script>) => onChange(value.map((s, j) => (j === i ? { ...s, ...patch } : s)));
-  const toggleEvent = (i: number, ev: string) => {
-    const s = value[i]!;
-    const next = ev === 'always'
-      ? ['always']
-      : s.events.includes(ev) ? s.events.filter((x) => x !== ev) : [...s.events.filter((x) => x !== 'always'), ev];
-    set(i, { events: next.length ? next : ['always'] });
-  };
   // Switching back to code must not lose the call: synthesize its `fn.<id>({...})` text into `source`.
   const dropCall = (i: number) => {
     const s = value[i]!;
@@ -54,33 +66,72 @@ export function ScriptsEditor({ value, onChange, addLabel = '+ add script', erro
   return (
     <div className="space-y-3">
       {value.map((s, i) => (
-        <div key={i} data-role="script" className="rounded-2xl border border-zinc-800 bg-zinc-900 p-2">
-          <div className="mb-2 flex items-center gap-2">
-            <input className={inputCls + ' flex-1 py-1.5'} placeholder="label (names the bonus in the breakdown)" value={s.label ?? ''} onChange={(e) => set(i, { label: e.target.value || undefined })} />
-            <input className={inputCls + ' w-24 py-1.5'} placeholder="id" value={s.id} onChange={(e) => set(i, { id: e.target.value.trim() })} />
-            <button type="button" className="px-2 text-zinc-500" onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>
-          </div>
-          <div className="mb-2 flex flex-wrap gap-1" data-role="script-events">
-            {EVENTS.map((ev) => <Chip key={ev} tone={ev === 'always' ? 'amber' : 'blue'} active={s.events.includes(ev)} onClick={() => toggleEvent(i, ev)}>{ev}</Chip>)}
-            {s.events.filter((e) => e.startsWith('custom:')).map((ev) => <Chip key={ev} tone="green" active onClick={() => toggleEvent(i, ev)}>{ev}</Chip>)}
-            <CustomEvent onAdd={(name) => set(i, { events: [...s.events.filter((x) => x !== 'always'), `custom:${name}`] })} />
-          </div>
-          <div className="mb-1 flex gap-1">
-            <Chip active={!s.call} onClick={() => dropCall(i)}>code</Chip>
-            <Chip active={!!s.call} onClick={() => toCall(i)}>call a function</Chip>
-          </div>
-          {s.call
-            ? <FunctionCallForm value={s.call} onChange={(call) => set(i, { call })} />
-            : <Suspense fallback={EDITOR_FALLBACK}><ScriptEditor value={s.source} onChange={(source) => set(i, { source })} errors={errors.filter((e) => e.scriptId === s.id)} /></Suspense>}
-          {errors.filter((e) => e.scriptId === s.id).map((e) => <div key={e.message} className="mt-1 rounded-lg border border-red-900 bg-red-950/40 px-2 py-1 text-xs text-red-200">{e.phase === 'compile' ? 'Does not compile' : 'Failed'}{e.line !== undefined ? ` (line ${e.line})` : ''}: {e.message}</div>)}
-          {ability && <ScriptPreview ability={ability} script={s} />}
-          <div className="mt-1 flex items-center gap-4 text-xs text-zinc-400">
-            <label className="flex items-center gap-1"><input type="checkbox" checked={s.enabled} onChange={(e) => set(i, { enabled: e.target.checked })} /> enabled</label>
-            <label className="flex items-center gap-1">priority <PriorityInput value={s.priority} onCommit={(n) => set(i, { priority: n })} /></label>
-          </div>
-        </div>
+        <ScriptRow
+          key={i}
+          script={s}
+          set={(patch) => set(i, patch)}
+          onRemove={() => onChange(value.filter((_, j) => j !== i))}
+          onDropCall={() => dropCall(i)}
+          onToCall={() => toCall(i)}
+          errors={errors.filter((e) => e.scriptId === s.id)}
+          ability={ability}
+        />
       ))}
       <Button onClick={() => onChange([...value, newScript(takenIds)])}>{addLabel}</Button>
+    </div>
+  );
+}
+
+/** One script row: `[ event ▾ ]  ⋯  ✕`, then the code (or call form) and "Right now". Label, id, enabled,
+ * priority and the code/call switch fold behind `⋯`, closed by default for every row (including a new one). */
+function ScriptRow({ script: s, set, onRemove, onDropCall, onToCall, errors, ability }: {
+  script: Script; set: (patch: Partial<Script>) => void; onRemove: () => void; onDropCall: () => void; onToCall: () => void; errors: ScriptError[]; ability?: Ability;
+}) {
+  const [open, setOpen] = useState(false);
+  const dropdown = dropdownValue(s.events);
+  const legacyExtra = s.events.length - 1;
+  const onEventChange = (v: string) => {
+    if (v === 'custom') {
+      const existing = s.events.find((e) => e.startsWith('custom:'));
+      set({ events: [existing ?? 'custom:'] });
+    } else {
+      set({ events: [v] });
+    }
+  };
+  const setCustomName = (name: string) => set({ events: [`custom:${name.replace(/[^A-Za-z0-9_-]/g, '')}`] });
+  return (
+    <div data-role="script" className="rounded-2xl border border-zinc-800 bg-zinc-900 p-2">
+      <div className="mb-2 flex items-center gap-2">
+        <select data-role="script-event" className={inputCls + ' flex-1 py-1.5'} value={dropdown} onChange={(e) => onEventChange(e.target.value)}>
+          {EVENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {legacyExtra > 0 && <span className="shrink-0 text-xs text-zinc-500">+{legacyExtra} more</span>}
+        <button type="button" data-role="script-more" className="shrink-0 rounded-lg border border-zinc-700 px-2 py-1 text-zinc-400" onClick={() => setOpen((v) => !v)}>⋯</button>
+        <button type="button" className="shrink-0 px-2 text-zinc-500" onClick={onRemove}>✕</button>
+      </div>
+      {dropdown === 'custom' && (
+        <input className={inputCls + ' mb-2 py-1.5'} placeholder="event name" value={s.events[0]?.startsWith('custom:') ? s.events[0].slice(7) : ''} onChange={(e) => setCustomName(e.target.value)} />
+      )}
+      {open && (
+        <div className="mb-2 space-y-2 rounded-xl border border-zinc-800 bg-zinc-950 p-2">
+          <input className={inputCls + ' py-1.5'} placeholder="label (names the bonus in the breakdown)" value={s.label ?? ''} onChange={(e) => set({ label: e.target.value || undefined })} />
+          <div className="text-xs text-zinc-500">id: <span className="font-mono text-zinc-400">{s.id}</span></div>
+          <div className="flex items-center gap-4 text-xs text-zinc-400">
+            <label className="flex items-center gap-1"><input type="checkbox" checked={s.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> enabled</label>
+            <label className="flex items-center gap-1">priority <PriorityInput value={s.priority} onCommit={(n) => set({ priority: n })} /></label>
+          </div>
+          <div className="flex gap-1">
+            <Chip active={!s.call} onClick={onDropCall}>code</Chip>
+            <Chip active={!!s.call} onClick={onToCall}>call a function</Chip>
+          </div>
+        </div>
+      )}
+      {s.call
+        ? <FunctionCallForm value={s.call} onChange={(call) => set({ call })} />
+        : <Suspense fallback={EDITOR_FALLBACK}><ScriptEditor value={s.source} onChange={(source) => set({ source })} errors={errors} /></Suspense>}
+      <button type="button" className="mt-1 text-xs text-zinc-500 underline" onClick={s.call ? onDropCall : onToCall}>{s.call ? 'write code instead' : 'use a function instead'}</button>
+      {errors.map((e) => <div key={e.message} className="mt-1 rounded-lg border border-red-900 bg-red-950/40 px-2 py-1 text-xs text-red-200">{e.phase === 'compile' ? 'Does not compile' : 'Failed'}{e.line !== undefined ? ` (line ${e.line})` : ''}: {e.message}</div>)}
+      {ability && <ScriptPreview ability={ability} script={s} />}
     </div>
   );
 }
@@ -107,17 +158,5 @@ function PriorityInput({ value, onCommit }: { value: number; onCommit: (n: numbe
       onBlur={() => { focused.current = false; commit(); }}
       onKeyDown={(e) => { if (e.key === 'Enter') { commit(); (e.target as HTMLInputElement).blur(); } }}
     />
-  );
-}
-
-function CustomEvent({ onAdd }: { onAdd: (name: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  if (!open) return <Chip tone="green" onClick={() => setOpen(true)}>+ custom…</Chip>;
-  return (
-    <span className="flex items-center gap-1">
-      <input autoFocus className={inputCls + ' w-32 py-1'} placeholder="event name" value={name} onChange={(e) => setName(e.target.value.replace(/[^A-Za-z0-9_-]/g, ''))} />
-      <Chip tone="green" onClick={() => { if (name) onAdd(name); setName(''); setOpen(false); }}>add</Chip>
-    </span>
   );
 }
