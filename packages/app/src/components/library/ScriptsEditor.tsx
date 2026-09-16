@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Script, ScriptError } from '@hl/engine';
 import { Button, Chip, inputCls } from '../ui';
+import { ScriptEditor } from './ScriptEditor';
 
 /** Events a script may listen to. `always` is the compute phase and cannot be combined with the others. */
 export const EVENTS = ['always', 'hit', 'miss', 'crit', 'damaged', 'roundStart', 'roundEnd', 'use', 'equip', 'unequip'] as const;
@@ -38,7 +39,7 @@ export function ScriptsEditor({ value, onChange, addLabel = '+ add script', erro
             {s.events.filter((e) => e.startsWith('custom:')).map((ev) => <Chip key={ev} tone="green" active onClick={() => toggleEvent(i, ev)}>{ev}</Chip>)}
             <CustomEvent onAdd={(name) => set(i, { events: [...s.events.filter((x) => x !== 'always'), `custom:${name}`] })} />
           </div>
-          <textarea data-role="script-source" className={inputCls + ' h-40 font-mono text-xs'} spellCheck={false} placeholder="bonus('attack', 1)" value={s.source} onChange={(e) => set(i, { source: e.target.value })} />
+          <ScriptEditor value={s.source} onChange={(source) => set(i, { source })} errors={errors.filter((e) => e.scriptId === s.id)} />
           {errors.filter((e) => e.scriptId === s.id).map((e) => <div key={e.message} className="mt-1 rounded-lg border border-red-900 bg-red-950/40 px-2 py-1 text-xs text-red-200">{e.phase === 'compile' ? 'Does not compile' : 'Failed'}{e.line !== undefined ? ` (line ${e.line})` : ''}: {e.message}</div>)}
           <div className="mt-1 flex items-center gap-4 text-xs text-zinc-400">
             <label className="flex items-center gap-1"><input type="checkbox" checked={s.enabled} onChange={(e) => set(i, { enabled: e.target.checked })} /> enabled</label>

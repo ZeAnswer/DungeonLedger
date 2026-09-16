@@ -8,7 +8,8 @@ test('a script that writes to a read-only value is reported on the record and in
   await sheet.getByLabel('Name').fill('Test Broken');
   await sheet.getByLabel(/^Id/).fill('test-broken');
   await sheet.getByRole('button', { name: '+ add script' }).click();
-  await sheet.locator('[data-role="script-source"]').fill('player.mod.cha += 1');
+  await sheet.locator('[data-role="script-source"] .cm-content').click();
+  await page.keyboard.type('player.mod.cha += 1');
   await sheet.getByRole('button', { name: 'Save' }).click();
   // put it on the sheet so the compute pass runs it
   await page.locator('[data-record="test-broken"]').getByRole('button', { name: 'add' }).click();

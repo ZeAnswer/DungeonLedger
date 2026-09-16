@@ -8,7 +8,8 @@ test('script editor: a new feature stores its source and defaults to always', as
   await sheet.getByLabel('Name').fill('Test Archer');
   await sheet.getByLabel(/^Id/).fill('test-archer');
   await sheet.getByRole('button', { name: '+ add script' }).click();
-  await sheet.locator('[data-role="script-source"]').fill("if (attack.isRanged) bonus('attack', 4)");
+  await sheet.locator('[data-role="script-source"] .cm-content').click();
+  await page.keyboard.type("if (attack.isRanged) bonus('attack', 4)");
   await sheet.getByRole('button', { name: 'JSON' }).click();
   const json = JSON.parse(await sheet.locator('textarea').inputValue());
   expect(json).toMatchObject({
@@ -53,7 +54,8 @@ test('script editor: events are a multi-select and always is exclusive', async (
   await sheet.getByLabel('Name').fill('Test Trigger');
   await sheet.getByLabel(/^Id/).fill('test-trigger');
   await sheet.getByRole('button', { name: '+ add script' }).click();
-  await sheet.locator('[data-role="script-source"]').fill("target.mark('shaken', 3 * ROUND)");
+  await sheet.locator('[data-role="script-source"] .cm-content').click();
+  await page.keyboard.type("target.mark('shaken', 3 * ROUND)");
   const events = sheet.locator('[data-role="script-events"]');
   await events.getByRole('button', { name: 'hit', exact: true }).click();
   await events.getByRole('button', { name: 'crit', exact: true }).click();
