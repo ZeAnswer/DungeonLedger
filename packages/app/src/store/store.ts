@@ -24,6 +24,8 @@ type State = {
   scriptErrors: ScriptError[];
   safeMode: boolean;
   safeModeAuto: boolean;
+  /** What the last failed load threw (set at boot from localStorage; cleared when scripts run again). */
+  bootError?: string;
   pathToast: { path: string; label?: string } | undefined;
 };
 
@@ -99,6 +101,7 @@ export const useStore = create<Store>((set, get) => ({
   scriptErrors: [],
   safeMode: false,
   safeModeAuto: false,
+  bootError: undefined,
   pathToast: undefined,
 
   async hydrate() {
@@ -224,7 +227,7 @@ export const useStore = create<Store>((set, get) => ({
     // `hl.safeMode`/`hl.bootFails` live outside the KEYS above (see boot.ts): without this, a factory
     // reset performed while safe mode is on (or mid boot-loop) comes right back in safe mode on reload.
     clearBootState();
-    set({ hydrated: false, library: fullEmpty(), globals: {}, character: undefined, battle: undefined, pastBattles: [], targetId: undefined, safeMode: false, safeModeAuto: false });
+    set({ hydrated: false, library: fullEmpty(), globals: {}, character: undefined, battle: undefined, pastBattles: [], targetId: undefined, safeMode: false, safeModeAuto: false, bootError: undefined });
     await get().hydrate();
   },
 
@@ -242,7 +245,7 @@ export const useStore = create<Store>((set, get) => ({
     clearComputeCache();
     set({ scriptErrors: diagnostics.errors() });
   },
-  setSafeModeState: (safeMode, safeModeAuto = false) => set({ safeMode, safeModeAuto }),
+  setSafeModeState: (safeMode, safeModeAuto = false) => set({ safeMode, safeModeAuto, ...(safeMode ? {} : { bootError: undefined }) }),
   showPath: (path, label) => set({ pathToast: { path, ...(label ? { label } : {}) } }),
   hidePath: () => set({ pathToast: undefined }),
 }));

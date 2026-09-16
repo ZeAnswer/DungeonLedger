@@ -7,10 +7,11 @@ import { useStore } from './store/store';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { closeTopSheet } from './components/ui';
-import { armBootGuard } from './boot';
+import { armBootGuard, lastBootError, recordBootErrors } from './boot';
 
+recordBootErrors();
 const boot = armBootGuard();
-useStore.setState({ safeMode: boot.safeMode, safeModeAuto: boot.autoTripped });
+useStore.setState({ safeMode: boot.safeMode, safeModeAuto: boot.autoTripped, bootError: boot.safeMode ? lastBootError() : undefined });
 void useStore.getState().hydrate();
 
 if (Capacitor.isNativePlatform()) {

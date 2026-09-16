@@ -72,6 +72,7 @@ export function SettingsScreen() {
           <Button variant={s.safeMode ? 'default' : 'primary'} onClick={() => { setSafeMode(false); s.setSafeModeState(false); }}>Run scripts</Button>
           <Button variant={s.safeMode ? 'primary' : 'default'} onClick={() => { setSafeMode(true); s.setSafeModeState(true); }}>Safe mode (scripts off)</Button>
         </div>
+        {s.bootError && <div className="mt-3"><div className="text-xs uppercase tracking-wide text-zinc-500">Last failed start threw</div><pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-950 p-2 text-xs text-red-300">{s.bootError}</pre></div>}
       </Section>
 
       <Section title="Script errors" defaultOpen={s.scriptErrors.length > 0} count={s.scriptErrors.length}>

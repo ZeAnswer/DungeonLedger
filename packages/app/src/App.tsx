@@ -26,6 +26,7 @@ export default function App() {
   const refreshDiagnostics = useStore((s) => s.refreshDiagnostics);
   const safeMode = useStore((s) => s.safeMode);
   const safeModeAuto = useStore((s) => s.safeModeAuto);
+  const bootError = useStore((s) => s.bootError);
   const setSafeModeState = useStore((s) => s.setSafeModeState);
   useEffect(() => { refreshDiagnostics(); });
   useEffect(() => { if (hydrated) bootSucceeded(); }, [hydrated]);
@@ -38,6 +39,7 @@ export default function App() {
         {safeMode && (
           <div data-role="safe-banner" className="m-3 rounded-2xl border border-amber-800 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
             <div>Scripts are off (safe mode).{safeModeAuto ? ' The app failed to start twice, so they were switched off for you.' : ''} Numbers show base values only.</div>
+            {bootError && <pre data-role="boot-error" className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-950/60 p-2 text-xs text-red-300">{bootError}</pre>}
             <button type="button" className="mt-2 rounded-xl bg-amber-500 px-3 py-1.5 text-sm font-semibold text-zinc-950" onClick={() => { setSafeMode(false); setSafeModeState(false); }}>Turn scripts back on</button>
           </div>
         )}
