@@ -112,11 +112,12 @@ export type RunOutcome = 'ok' | 'skipped' | 'error';
  */
 export function runOne(ctx: EvalContext, run: RunContext, sink: Sink, patches: Patch[]): RunOutcome {
   const key = [run.source.ability.id, run.source.activation?.id, run.script.id].filter(Boolean).join('/');
-  if (diagnostics.quarantined(key)) return 'error';
+  if (!run.probe && diagnostics.quarantined(key)) return 'error';
   const near = (failed: string) => sink.skipped.push({ source: run.source.ability.id, sourceName: run.source.label, label: run.script.label ?? run.source.label, summary: '', failed });
   const fail = (phase: 'compile' | 'run', message: string, line?: number) => {
     const e = { recordId: run.source.ability.id, scriptId: run.script.id, label: run.script.label ?? run.source.label, phase, message, ...(line !== undefined ? { line } : {}) };
     sink.errors.push(e);
+    if (run.probe) return; // a probe run is not the script's real turn: it must not quarantine it
     diagnostics.record(e);
     diagnostics.noteFailure(key);
   };

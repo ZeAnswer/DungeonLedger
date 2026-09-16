@@ -49,23 +49,24 @@ export type EquipResult = { ok: boolean; reason?: string; character: Character; 
 /**
  * Run the item's `equip` / `unequip` scripts. They queue patches, and patches land on a battle, so
  * without one in the context the scripts are skipped entirely (documented limitation: gear changes
- * outside combat do not fire them).
+ * outside combat do not fire them). `globals` is threaded in, not re-read from the library, so a
+ * swap (unequip A, equip B) accumulates both scripts' `setVar` writes.
  */
-function runItemEvent(ctx: EvalContext, character: Character, battle: Battle | undefined, kind: 'equip' | 'unequip', abilityId: string | undefined): { character: Character; battle?: Battle; globals?: Record<string, VarValue> } {
+function runItemEvent(ctx: EvalContext, character: Character, battle: Battle | undefined, kind: 'equip' | 'unequip', abilityId: string | undefined, globals: Record<string, VarValue> = ctx.library.globals ?? {}): { character: Character; battle?: Battle; globals?: Record<string, VarValue> } {
   const ability = abilityId ? ctx.library.abilities[abilityId] : undefined;
   if (!ability || !battle) return { character };
-  const ectx: EvalContext = { ...ctx, character, battle };
+  const ectx: EvalContext = { ...ctx, character, battle, library: { ...ctx.library, globals } };
   const r = runEventScripts(ectx, { kind, abilityId: ability.id }, { only: { abilityId: ability.id } });
   if (!r.patches.length) return { character, battle };
-  const st = applyPatches(ectx, { battle, character, globals: ctx.library.globals }, r.patches, ability);
+  const st = applyPatches(ectx, { battle, character, globals }, r.patches, ability);
   return { character: st.character, battle: st.battle, globals: st.globals };
 }
 
-export function unequipItem(ctx: EvalContext, itemId: string): EquipResult {
+export function unequipItem(ctx: EvalContext, itemId: string, carried?: Record<string, VarValue>): EquipResult {
   const entry = ctx.character.inventory.find((i) => i.id === itemId);
   if (!entry) return { ok: false, reason: 'No such item', character: ctx.character };
   // While the item is still equipped, so its scripts are still an active source.
-  const ev = runItemEvent(ctx, ctx.character, ctx.battle, 'unequip', entry.abilityId);
+  const ev = runItemEvent(ctx, ctx.character, ctx.battle, 'unequip', entry.abilityId, carried ?? ctx.library.globals ?? {});
   let c: Character = { ...ev.character, inventory: ev.character.inventory.map((i) => (i.id === itemId ? { ...i, equipped: false, slotIndex: undefined } : i)) };
   c = setAbilityEnabled(c, entry.abilityId, false);
   return { ok: true, character: c, ...(ev.battle ? { battle: ev.battle } : {}), ...(ev.globals ? { globals: ev.globals } : {}) };
@@ -79,10 +80,11 @@ export function equipItem(ctx: EvalContext, itemId: string, opts: { replace?: bo
   const slot = slotOf(ability);
   let c = ctx.character;
   let battle = ctx.battle;
-  let globals: Record<string, VarValue> | undefined;
+  const globals0: Record<string, VarValue> = ctx.library.globals ?? {};
+  let globals = globals0;
   /** Take an item off, carrying its `unequip` scripts' effects along. */
   const takeOff = (id: string) => {
-    const r = unequipItem({ ...ctx, character: c, ...(battle ? { battle } : {}) }, id);
+    const r = unequipItem({ ...ctx, character: c, ...(battle ? { battle } : {}) }, id, globals);
     c = r.character;
     if (r.battle) battle = r.battle;
     if (r.globals) globals = r.globals;
@@ -117,11 +119,11 @@ export function equipItem(ctx: EvalContext, itemId: string, opts: { replace?: bo
   c = { ...c, inventory: c.inventory.map((i) => (i.id === itemId ? { ...i, equipped: true, ...(slotIndex !== undefined ? { slotIndex } : { slotIndex: undefined }) } : i)) };
   c = setAbilityEnabled(c, entry.abilityId, true);
   // After enabling, so the item's own scripts are an active source when its `equip` scripts run.
-  const ev = runItemEvent({ ...ctx, ...(battle ? { battle } : {}) }, c, battle, 'equip', entry.abilityId);
+  const ev = runItemEvent({ ...ctx, ...(battle ? { battle } : {}) }, c, battle, 'equip', entry.abilityId, globals);
   c = ev.character;
   if (ev.battle) battle = ev.battle;
   if (ev.globals) globals = ev.globals;
-  return { ok: true, character: c, ...(battle && battle !== ctx.battle ? { battle } : {}), ...(globals ? { globals } : {}) };
+  return { ok: true, character: c, ...(battle && battle !== ctx.battle ? { battle } : {}), ...(globals !== globals0 ? { globals } : {}) };
 }
 
 /** Add an instance of a library item to the character. */
@@ -129,9 +131,11 @@ export function addItemInstance(character: Character, abilityId: string, opts: {
   return { ...character, inventory: [...character.inventory, { id: newId('item'), abilityId, quantity: opts.quantity ?? 1, equipped: false, ...(opts.notes ? { notes: opts.notes } : {}) }] };
 }
 
-export function removeItemInstance(ctx: EvalContext, itemId: string): Character {
-  const c = unequipItem(ctx, itemId).character;
-  return { ...c, inventory: c.inventory.filter((i) => i.id !== itemId) };
+/** Unequip (running the item's `unequip` scripts) and drop the entry; the scripts' battle and globals come back too. */
+export function removeItemInstance(ctx: EvalContext, itemId: string): EquipResult {
+  const r = unequipItem(ctx, itemId);
+  const c = r.character;
+  return { ...r, character: { ...c, inventory: c.inventory.filter((i) => i.id !== itemId) } };
 }
 
 export { SLOT_IDS };

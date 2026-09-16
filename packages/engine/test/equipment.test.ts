@@ -1,4 +1,4 @@
-import { equipItem, unequipItem, slotCapacity, slotOf, SLOTS } from '../src/equipment';
+import { equipItem, unequipItem, removeItemInstance, slotCapacity, slotOf, SLOTS } from '../src/equipment';
 import { makeBattle, makeCtx, makeCharacter, makeAbility } from './fixtures';
 import type { Ability } from '../src/schema';
 
@@ -8,6 +8,8 @@ const ring3 = makeAbility({ id: 'ring-c', kind: 'item', item: { category: 'wondr
 const handOfGlory = makeAbility({ id: 'hog', kind: 'item', item: { category: 'wondrous', slot: 'neck' }, scripts: [{ id: 's', source: "slot('ring', 1)" }] });
 const bracersA = makeAbility({ id: 'bracers-a', kind: 'item', item: { category: 'wondrous', slot: 'arms' } });
 const bracersB = makeAbility({ id: 'bracers-b', kind: 'item', item: { category: 'wondrous', slot: 'arms' } });
+const markA = makeAbility({ id: 'mark-a', kind: 'item', item: { category: 'wondrous', slot: 'arms' }, scripts: [{ id: 'off', events: ['unequip'], source: "setVar('offMark', 1)" }] });
+const markB = makeAbility({ id: 'mark-b', kind: 'item', item: { category: 'wondrous', slot: 'arms' }, scripts: [{ id: 'on', events: ['equip'], source: "setVar('onMark', 1)" }] });
 const potion = makeAbility({ id: 'potion', kind: 'item', item: { category: 'potion' } });
 const manual = makeAbility({ id: 'manual', kind: 'item', item: { category: 'wondrous', slot: 'none' } });
 const cursed = makeAbility({
@@ -118,4 +120,25 @@ test('equip / unequip scripts run when a battle is in the context, and are skipp
   const removed = unequipItem(worn, 'i1');
   expect(removed.battle!.selfConditions.map((x) => x.tag)).toEqual(['cursed', 'shaken']);
   expect(removed.character.abilities.find((a) => a.abilityId === 'cursed-band')?.enabled).toBe(false);
+});
+
+test('a replace swap keeps both scripts\' global writes', () => {
+  const c = {
+    ...ctxWith([markA, markB], [{ id: 'a', abilityId: 'mark-a', equipped: true }, { id: 'b', abilityId: 'mark-b' }]),
+    battle: makeBattle(),
+  };
+  c.character.abilities = [{ abilityId: 'mark-a', enabled: true, paramValues: {} }];
+  const r = equipItem(c, 'b', { replace: true });
+  expect(r.ok).toBe(true);
+  expect(r.globals).toEqual({ offMark: 1, onMark: 1 });
+  expect(r.character.inventory.map((i) => i.equipped)).toEqual([false, true]);
+});
+
+test('removeItemInstance returns the unequip scripts\' battle and globals, not just the character', () => {
+  const c = { ...ctxWith([markA], [{ id: 'a', abilityId: 'mark-a', equipped: true }]), battle: makeBattle() };
+  c.character.abilities = [{ abilityId: 'mark-a', enabled: true, paramValues: {} }];
+  const r = removeItemInstance(c, 'a');
+  expect(r.character.inventory).toEqual([]);
+  expect(r.globals).toEqual({ offMark: 1 });
+  expect(r.battle).toBeDefined();
 });

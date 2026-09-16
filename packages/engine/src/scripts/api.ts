@@ -35,6 +35,8 @@ export type RunContext = {
   fns?: Record<string, (args: Record<string, unknown>) => void>;
   /** Eligibility probe (`availableActions`): pretend the source's activation is running, so `active` is non-null. */
   probeActive?: boolean;
+  /** A throwaway run (preview, eligibility probe): errors stay in the sink, out of diagnostics and the quarantine count. */
+  probe?: boolean;
 };
 
 /** Thrown by `need()`: not an error, the script simply does not apply and says why. */

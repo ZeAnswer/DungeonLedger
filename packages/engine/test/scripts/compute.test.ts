@@ -1,6 +1,7 @@
 import type { AttackCtx, EvalContext } from '../../src/context';
 import { AbilitySchema, type Ability, type FunctionDef } from '../../src/schema';
-import { clearComputeCache, computePass } from '../../src/scripts/compute';
+import { clearComputeCache, computePass, runOne } from '../../src/scripts/compute';
+import { newSink } from '../../src/scripts/sink';
 import { diagnostics } from '../../src/scripts/diagnostics';
 import { setStatResolver } from '../../src/scripts/registry';
 import { makeBattle, makeCharacter, makeCombatant, makeCtx } from '../fixtures';
@@ -52,6 +53,21 @@ test('a throwing script is reported, quarantined after three passes, and never b
     c = { ...c, character: { ...c.character } };
   }
   expect(diagnostics.quarantined('bad/s')).toBe(true);
+});
+
+test('a probe run reports its error in the sink but never quarantines the script', () => {
+  diagnostics.clear();
+  const bad = AbilitySchema.parse({ id: 'probe-bad', name: 'Probe Bad', kind: 'feature', scripts: [{ id: 's', source: 'player.mod.cha += 1' }] });
+  const c = ctxWith([bad]);
+  const src = { ability: bad, instance: c.character.abilities[0]!, label: bad.name };
+  for (let i = 0; i < 5; i++) {
+    const sink = newSink();
+    expect(runOne(c, { phase: 'always', source: src, script: bad.scripts[0]!, probe: true }, sink, [])).toBe('error');
+    expect(sink.errors[0]).toMatchObject({ recordId: 'probe-bad', message: expect.stringMatching(/read-only/) });
+  }
+  expect(diagnostics.quarantined('probe-bad/s')).toBe(false);
+  expect(diagnostics.errors()).toEqual([]);
+  diagnostics.clear();
 });
 
 test('library functions are callable with named args and share the budget', () => {

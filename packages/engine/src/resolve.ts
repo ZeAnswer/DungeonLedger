@@ -366,7 +366,7 @@ export function availableActions(ctx: EvalContext): ActionInfo[] {
       const notes: string[] = [];
       if (always.length) {
         const source = { ability, instance: inst, activation: act, label: name };
-        for (const script of always) runOne(ctx, { phase: 'always', source, script, probeActive: true }, probe, []);
+        for (const script of always) runOne(ctx, { phase: 'always', source, script, probeActive: true, probe: true }, probe, []);
         eligible = probe.skipped.length === 0 || sinkEmitted(probe);
         if (!eligible) for (const s of probe.skipped) reasons.push(`Needs: ${s.failed}`);
         notes.push(...new Set(probe.notes.map((n) => n.text)));
