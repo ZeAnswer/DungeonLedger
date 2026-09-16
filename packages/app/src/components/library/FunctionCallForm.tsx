@@ -8,10 +8,29 @@ type Call = NonNullable<Script['call']>;
 const EVENTS = ['always', 'hit', 'miss', 'crit', 'damaged', 'roundStart', 'roundEnd', 'use', 'equip', 'unequip'];
 
 const litOf = (a: ArgValue | undefined, fallback: number | string | boolean | string[]) => (a?.k === 'lit' ? a.v : fallback);
+const refOf = (a: ArgValue | undefined, fallback: string) => (a?.k === 'ref' ? a.v : fallback);
+
+/** The zero-ish value for a param's type, used when neither an arg nor a `default` is set. */
+const zeroOf = (type: string): number | string | boolean | string[] => (type === 'number' ? 0 : type === 'bool' ? false : type === 'tags' ? [] : '');
+
+/** Does a JSON-parsed expression's shape match what this param's `lit` value should be? */
+function litMatches(type: string, v: unknown): v is number | string | boolean | string[] {
+  switch (type) {
+    case 'number': return typeof v === 'number';
+    case 'bool': return typeof v === 'boolean';
+    case 'tags': return Array.isArray(v) && v.every((x) => typeof x === 'string');
+    case 'duration': return typeof v === 'number' || typeof v === 'string';
+    default: return typeof v === 'string';
+  }
+}
 
 /**
  * A stored `script.call`: the function's typed parameters as form controls, each with an ƒx switch that
- * turns the box into a raw expression (`{ k: 'expr' }`). `path`-typed parameters store `{ k: 'ref' }`.
+ * turns the box into a raw expression (`{ k: 'expr' }`). `path`/`ref`-typed parameters default instead to
+ * a bare reference (`{ k: 'ref' }`, e.g. `player.mod.str`) — the ƒx switch is what turns those into `expr`.
+ * Toggling ƒx on a typed (`lit`) param seeds the expression box with a JSON-valid literal (quoted strings,
+ * arrays, booleans; bare digits for numbers); toggling back tries to parse that text as JSON and keep it if
+ * its shape still matches the param's type, else falls back to the param's default.
  */
 export function FunctionCallForm({ value, onChange }: { value: Call; onChange: (c: Call) => void }) {
   const functions = useStore((s) => s.library.functions);
@@ -32,17 +51,32 @@ export function FunctionCallForm({ value, onChange }: { value: Call; onChange: (
       {def?.description && <p className="mt-1 text-xs text-zinc-500">{def.description}</p>}
       {def?.params.map((p) => {
         const arg = value.args[p.name];
-        const raw = arg?.k === 'expr' || arg?.k === 'ref';
-        const kind = p.type === 'path' || p.type === 'ref' ? 'ref' as const : 'expr' as const;
+        const isRef = p.type === 'path' || p.type === 'ref';
+        const expr = arg?.k === 'expr';
+        const toExpr = () => {
+          const text = isRef
+            ? refOf(arg, '')
+            : (() => { const v = litOf(arg, p.default ?? zeroOf(p.type)); return typeof v === 'number' ? String(v) : JSON.stringify(v); })();
+          setArg(p.name, { k: 'expr', v: text });
+        };
+        const toTyped = () => {
+          const text = arg?.k === 'expr' ? arg.v : '';
+          if (isRef) { setArg(p.name, { k: 'ref', v: text }); return; }
+          let parsed: unknown;
+          try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+          setArg(p.name, { k: 'lit', v: litMatches(p.type, parsed) ? parsed : (p.default ?? zeroOf(p.type)) });
+        };
         return (
           <div key={p.name} data-role={`arg-${p.name}`} className="mt-2">
             <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
               <span>{p.label ?? p.name}{p.required ? ' *' : ''}</span>
               <span className="text-zinc-600">{p.type}</span>
-              <button type="button" onClick={() => setArg(p.name, raw ? { k: 'lit', v: (p.default ?? (p.type === 'number' ? 0 : '')) } : { k: kind, v: String(litOf(arg, '')) })} className={cx('ml-auto rounded-full border px-2 py-0.5', raw ? 'border-amber-500 text-amber-300' : 'border-zinc-700 text-zinc-400')}>ƒx</button>
+              <button type="button" onClick={expr ? toTyped : toExpr} className={cx('ml-auto rounded-full border px-2 py-0.5', expr ? 'border-amber-500 text-amber-300' : 'border-zinc-700 text-zinc-400')}>ƒx</button>
             </div>
-            {raw ? (
-              <input className={inputCls + ' font-mono text-sm'} list="hl-paths" placeholder="player.mod.str" value={String(arg.v)} onChange={(e) => setArg(p.name, { k: kind, v: e.target.value })} />
+            {expr ? (
+              <input className={inputCls + ' font-mono text-sm'} list="hl-paths" placeholder="player.mod.str" value={arg.v} onChange={(e) => setArg(p.name, { k: 'expr', v: e.target.value })} />
+            ) : isRef ? (
+              <input className={inputCls + ' font-mono text-sm'} list="hl-paths" placeholder="player.mod.str" value={refOf(arg, '')} onChange={(e) => setArg(p.name, { k: 'ref', v: e.target.value })} />
             ) : p.type === 'number' ? (
               <input className={inputCls} inputMode="numeric" value={String(litOf(arg, p.default ?? 0))} onChange={(e) => setArg(p.name, { k: 'lit', v: Number(e.target.value) || 0 })} />
             ) : p.type === 'bool' ? (

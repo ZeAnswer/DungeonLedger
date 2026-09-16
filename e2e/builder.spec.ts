@@ -96,7 +96,22 @@ test('call form: a stored function call round-trips through the form', async ({ 
   await sheet.getByRole('button', { name: 'call a function' }).click();
   await sheet.locator('[data-role="call-fn"]').selectOption('favoredEnemy');
   await sheet.locator('[data-role="arg-amount"] input').fill('4');
-  await sheet.locator('[data-role="arg-types"] button', { hasText: 'ƒx' }).click();
+
+  // ƒx round trip on a tags-typed (array) param: lit -> expr seeds a JSON-quoted literal, expr -> lit
+  // recovers the original value when the expression still parses as that shape.
+  const typesBox = sheet.locator('[data-role="arg-types"]');
+  const typesFx = typesBox.locator('button', { hasText: 'ƒx' });
+  await typesBox.getByRole('button', { name: 'Dragon', exact: true }).click();
+  await typesFx.click();
+  await expect(typesBox.locator('input')).toHaveValue('["dragon"]');
+  await typesFx.click();
+  await expect(typesBox.getByRole('button', { name: 'Dragon', exact: true })).toHaveClass(/bg-amber-500/);
+  await sheet.getByRole('button', { name: 'JSON' }).click();
+  const roundTripped = JSON.parse(await sheet.locator('textarea').inputValue());
+  expect(roundTripped.scripts[0].call.args.types).toEqual({ k: 'lit', v: ['dragon'] });
+  await sheet.getByRole('button', { name: 'Feature' }).click();
+
+  await typesFx.click();
   await sheet.locator('[data-role="arg-types"] input').fill('params.types');
   await sheet.getByRole('button', { name: 'JSON' }).click();
   const json = JSON.parse(await sheet.locator('textarea').inputValue());
