@@ -39,10 +39,18 @@ function scriptLinter(errorsRef: () => ScriptError[]): Extension {
 }
 
 /**
+ * Caps the box at roughly the old textarea's height; long scripts scroll inside it, never the page.
+ * `.cm-scroller` defaults to `height: 100%` of `&` (the `.cm-editor` root), which itself has no height
+ * of its own — so the max-height has to land on `&`, not just the host `<div>` wrapping it, or there is
+ * nothing for `.cm-scroller`'s `overflow: auto` to ever kick in against.
+ */
+const boundedHeight = EditorView.theme({ '&': { maxHeight: '16rem' }, '.cm-scroller': { overflow: 'auto' } });
+
+/**
  * Deliberately without `closeBrackets`: on a phone (and in Playwright) a typed `)` that may or may not
  * be swallowed makes the box unpredictable, and scripts here are two or three lines long.
  */
-export function scriptExtensions(opts: { onChange: (v: string) => void; errorsRef: () => ScriptError[] }): Extension[] {
+export function scriptExtensions(opts: { onChange: (v: string) => void; errorsRef: () => ScriptError[]; onBlur?: () => void }): Extension[] {
   return [
     lineNumbers(),
     highlightActiveLine(),
@@ -56,7 +64,9 @@ export function scriptExtensions(opts: { onChange: (v: string) => void; errorsRe
     scriptLinter(opts.errorsRef),
     keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
     EditorView.lineWrapping,
+    boundedHeight,
     EditorState.tabSize.of(2),
     EditorView.updateListener.of((u) => { if (u.docChanged) opts.onChange(u.state.doc.toString()); }),
+    EditorView.domEventHandlers({ blur: () => opts.onBlur?.() }),
   ];
 }
