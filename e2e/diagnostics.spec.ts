@@ -18,4 +18,10 @@ test('a script that writes to a read-only value is reported on the record and in
   await expect(page.locator('[data-error="test-broken"]')).toBeVisible();
   await page.getByRole('button', { name: 'Settings' }).click();
   await expect(page.getByText(/read-only/)).toBeVisible();
+  // "Clear and retry" drops the recorded error everywhere it's shown
+  await page.getByRole('button', { name: 'Clear and retry' }).click();
+  await expect(page.getByText(/read-only/)).not.toBeVisible();
+  // scoped to the bottom nav: Settings' "Export library pack" button also matches "Library" by substring
+  await page.getByRole('navigation').getByRole('button', { name: 'Library' }).click();
+  await expect(page.locator('[data-error="test-broken"]')).not.toBeVisible();
 });

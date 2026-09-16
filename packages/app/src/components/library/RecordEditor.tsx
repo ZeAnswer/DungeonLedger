@@ -45,7 +45,8 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
       if (!parsed.id.trim()) throw new Error('id required');
       if (!parsed.name.trim()) throw new Error('name required');
       if (parsed.kind === 'item' && SLOTTED[parsed.item.category] && !parsed.item.slot) throw new Error(`Choose a body slot for this ${parsed.item.category}`);
-      clearScriptErrors(parsed.id);
+      clearScriptErrors(initial.id);
+      if (parsed.id !== initial.id) clearScriptErrors(parsed.id);
       onSave(parsed);
     } catch (e) { setErr((e as Error).message); }
   };
