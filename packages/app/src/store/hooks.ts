@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { activationsOf, type Condition, type EvalContext } from '@hl/engine';
+import { activationsOf, compile, type EvalContext } from '@hl/engine';
 import { useStore } from './store';
 
 export function useCtx(): EvalContext | undefined {
@@ -14,28 +14,30 @@ export function useCtx(): EvalContext | undefined {
   }, [character, library, battle, targetId]);
 }
 
-/** Every manual toggle id referenced by the character's active abilities (conditions `is battle.toggle.<id>`). */
+/**
+ * Every manual switch the character's active scripts read (`battle.on('<id>')` or `battle.toggles.<id>`), for the chips above
+ * the attack rows. The engine's instrumenter already finds them while compiling, and `compile` caches by
+ * source, so re-scanning on every render costs a Map lookup per script.
+ */
 export function collectToggles(ctx: EvalContext): { id: string; abilities: string[] }[] {
   const map = new Map<string, Set<string>>();
-  const walk = (c: Condition, abilityName: string) => {
-    if ('is' in c && c.is.startsWith('battle.toggle.')) {
-      const id = c.is.slice('battle.toggle.'.length);
+  const scan = (source: string, abilityName: string) => {
+    if (!source.trim()) return;
+    const c = compile(source);
+    if (!c.ok) return;
+    for (const id of c.toggles) {
       const e = map.get(id) ?? new Set<string>();
       e.add(abilityName);
       map.set(id, e);
-    } else if ('all' in c) c.all.forEach((x) => walk(x, abilityName));
-    else if ('any' in c) c.any.forEach((x) => walk(x, abilityName));
-    else if ('none' in c) c.none.forEach((x) => walk(x, abilityName));
-    else if ('count' in c) c.count.forEach((x) => walk(x, abilityName));
-    else if ('not' in c) walk(c.not, abilityName);
+    }
   };
   const suppressed = new Set(ctx.battle?.suppressedAbilities ?? []);
   for (const inst of ctx.character.abilities) {
     if (!inst.enabled || suppressed.has(inst.abilityId)) continue;
     const a = ctx.library.abilities[inst.abilityId];
     if (!a) continue;
-    for (const b of a.effects) walk(b.when, a.name);
-    for (const act of activationsOf(a)) for (const b of [...act.onUse, ...act.whileActive]) walk(b.when, a.name);
+    for (const s of a.scripts) if (s.enabled) scan(s.source, a.name);
+    for (const act of activationsOf(a)) for (const s of act.scripts) if (s.enabled) scan(s.source, a.name);
   }
   return [...map.entries()].map(([id, abilities]) => ({ id, abilities: [...abilities] }));
 }
