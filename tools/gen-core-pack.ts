@@ -33,7 +33,7 @@ const xpTable = Array.from({ length: 20 }, (_, i) => ({ level: i + 1, xp: (i * (
 const pack: Pack = PackSchema.parse({
   id: 'core-3.5e',
   name: 'Core 3.5e',
-  version: 5,
+  version: 6,
   description: 'Creature types, subtypes, conditions, skills, XP table, Ranger class, common feats and buffs.',
   // Library functions: shared script bodies with typed parameters, called as `fn.<id>({ … })` from a
   // record's script (or from a stored `call`, which compiles to the same thing). They live in the core
@@ -51,6 +51,67 @@ const pack: Pack = PackSchema.parse({
         { name: 'amount', type: 'number', label: 'Bonus', required: true },
       ],
       source: "if (target.isOneOf(types)) {\n  bonus('damage', amount);\n  bonus(['skill.bluff', 'skill.listen', 'skill.sense-motive', 'skill.spot', 'skill.survival'], amount);\n}",
+    },
+    // v6: the common "just a bonus, maybe guarded" shapes as functions, so a record can pick one from the
+    // function form instead of writing code — see docs/superpowers/plans/2026-09-16-clean-script-rows.md.
+    {
+      id: 'addToAbility', name: 'Add to ability score', description: 'A flat bonus to one ability score.',
+      params: [
+        { name: 'ability', type: 'ability', label: 'Ability', required: true },
+        { name: 'amount', type: 'number', label: 'Amount', required: true },
+        { name: 'type', type: 'bonusType', label: 'Bonus type' },
+      ],
+      source: "bonus(ability, amount, type ?? 'untyped');",
+    },
+    {
+      id: 'addToStat', name: 'Add to stat', description: 'A flat bonus to attack, damage, AC or a save — optionally only on ranged or melee attacks.',
+      params: [
+        { name: 'stat', type: 'stat', label: 'Stat', required: true },
+        { name: 'amount', type: 'number', label: 'Amount', required: true },
+        { name: 'type', type: 'bonusType', label: 'Bonus type' },
+        { name: 'onlyFor', type: 'attackKind', label: 'Only for' },
+      ],
+      source: "if (!onlyFor || onlyFor === 'any' || (onlyFor === 'ranged' && attack.isRanged) || (onlyFor === 'melee' && attack.isMelee)) bonus(stat, amount, type ?? 'untyped');",
+    },
+    {
+      id: 'addToSkill', name: 'Add to skill', description: 'A flat bonus to one skill.',
+      params: [
+        { name: 'skill', type: 'skill', label: 'Skill', required: true },
+        { name: 'amount', type: 'number', label: 'Amount', required: true },
+        { name: 'type', type: 'bonusType', label: 'Bonus type' },
+      ],
+      source: "bonus('skill.' + skill, amount, type ?? 'untyped');",
+    },
+    {
+      id: 'bonusVsType', name: 'Bonus vs. creature type', description: 'A bonus that applies only against one creature type.',
+      params: [
+        { name: 'stat', type: 'stat', label: 'Stat', required: true },
+        { name: 'amount', type: 'number', label: 'Amount', required: true },
+        { name: 'creatureType', type: 'tag', label: 'Creature type', required: true },
+      ],
+      source: 'if (target.is(creatureType)) bonus(stat, amount);',
+    },
+    {
+      id: 'bonusWhenSwitch', name: 'Bonus while a switch is on', description: 'A bonus that applies only while a named battle switch is toggled on.',
+      params: [
+        { name: 'stat', type: 'stat', label: 'Stat', required: true },
+        { name: 'amount', type: 'number', label: 'Amount', required: true },
+        { name: 'switchName', type: 'string', label: 'Switch name', required: true },
+      ],
+      source: 'if (battle.on(switchName)) bonus(stat, amount);',
+    },
+    {
+      id: 'markTarget', name: 'Mark target', description: 'Tags the current target for a duration. Event scripts only (hit, use, …) — always scripts cannot change state.',
+      params: [
+        { name: 'tag', type: 'tag', label: 'Tag', required: true },
+        { name: 'duration', type: 'duration', label: 'Duration', required: true },
+      ],
+      source: 'target.mark(tag, duration);',
+    },
+    {
+      id: 'reminder', name: 'Reminder note', description: 'A plain note in the attack panel.',
+      params: [{ name: 'text', type: 'string', label: 'Text', required: true }],
+      source: 'note(text);',
     },
   ],
   tags: [
