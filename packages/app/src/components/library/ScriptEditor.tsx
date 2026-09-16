@@ -3,7 +3,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { ScriptError } from '@hl/engine';
 import { scriptExtensions } from './codemirror';
-import { SNIPPETS } from './snippets';
+import { INSERT_GROUPS } from './snippets';
 
 /** One script's source. CodeMirror owns the DOM; React only pushes value changes that came from elsewhere. */
 export function ScriptEditor({ value, onChange, errors }: { value: string; onChange: (v: string) => void; errors: ScriptError[] }) {
@@ -52,6 +52,8 @@ export function ScriptEditor({ value, onChange, errors }: { value: string; onCha
     v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: value } });
   }, [value]);
 
+  const menuRef = useRef<HTMLDetailsElement | null>(null);
+
   const insert = (text: string) => {
     const v = view.current;
     if (!v) return;
@@ -59,13 +61,30 @@ export function ScriptEditor({ value, onChange, errors }: { value: string; onCha
     v.dispatch({ changes: { from: at.from, to: at.to, insert: text }, selection: { anchor: at.from + text.length } });
     v.focus();
   };
+  // One-shot pick: insert at the cursor, then close the menu.
+  const pick = (text: string) => {
+    insert(text);
+    if (menuRef.current) menuRef.current.open = false;
+  };
 
   return (
     <div>
       <div data-role="script-source" ref={host} className="max-h-64 overflow-hidden rounded-xl border border-zinc-700 text-sm" />
-      <div className="mt-1 flex gap-1 overflow-x-auto pb-1">
-        {SNIPPETS.map((s) => <button key={s.label} type="button" onClick={() => insert(s.insert)} className="shrink-0 rounded-full border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300">{s.label}</button>)}
-      </div>
+      <details ref={menuRef} data-role="script-insert" className="relative mt-1">
+        <summary className="inline-flex w-fit cursor-pointer list-none select-none items-center gap-1 rounded-full border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 marker:content-none">insert ▾</summary>
+        <div className="absolute z-10 mt-1 max-h-64 w-72 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-2 shadow-xl">
+          {INSERT_GROUPS.map((g) => (
+            <div key={g.label} className="mb-2 last:mb-0">
+              <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">{g.label}</div>
+              {g.items.map((item) => (
+                <button key={item.label} type="button" title={item.doc} onClick={() => pick(item.insert)} className="block w-full truncate rounded-lg px-2 py-1 text-left font-mono text-xs text-zinc-200 hover:bg-zinc-800">
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }
