@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { callSource, type Ability, type EvalContext, type Script, type ScriptError, activationsOf } from '@hl/engine';
 import { useStore } from '../../store/store';
-import { Button, Chip, inputCls } from '../ui';
+import { Button, inputCls } from '../ui';
 import { ScriptPreview } from './ScriptPreview';
 import { FunctionCallForm } from './FunctionCallForm';
+import { EVENT_OPTIONS } from './events';
 
 // CodeMirror (and its ~150 kB gzip of packages) is only ever needed once a record's Scripts section is
 // open, so it's split into its own chunk (see vite.config.ts's manualChunks) and loaded on demand instead
@@ -11,21 +12,6 @@ import { FunctionCallForm } from './FunctionCallForm';
 const ScriptEditor = lazy(() => import('./ScriptEditor').then((m) => ({ default: m.ScriptEditor })));
 const EDITOR_FALLBACK = <div className="flex h-16 items-center justify-center rounded-xl border border-zinc-700 text-sm text-zinc-500">loading editor…</div>;
 
-/** The one event a script runs on, as the row's dropdown shows it. `always` is the compute phase and
- * cannot be combined with the others; `custom` reveals a name box and stores `custom:<name>`. */
-export const EVENT_OPTIONS = [
-  { value: 'always', label: 'Always' },
-  { value: 'hit', label: 'When I hit' },
-  { value: 'miss', label: 'When I miss' },
-  { value: 'crit', label: 'When I crit' },
-  { value: 'damaged', label: "When I'm hit" },
-  { value: 'roundStart', label: 'Round start' },
-  { value: 'roundEnd', label: 'Round end' },
-  { value: 'use', label: 'When used' },
-  { value: 'equip', label: 'When equipped' },
-  { value: 'unequip', label: 'When unequipped' },
-  { value: 'custom', label: 'Custom…' },
-] as const;
 
 /** `base` if free, else `base-2`, `base-3`, … Ids must not collide: activation ids double as pool ids. */
 export function uniqueId(base: string, taken: string[]): string {
@@ -88,17 +74,24 @@ function ScriptRow({ script: s, set, onRemove, onDropCall, onToCall, errors, abi
   script: Script; set: (patch: Partial<Script>) => void; onRemove: () => void; onDropCall: () => void; onToCall: () => void; errors: ScriptError[]; ability?: Ability;
 }) {
   const [open, setOpen] = useState(false);
-  const dropdown = dropdownValue(s.events);
+  // "Custom…" shows a name box; the script's events only change once a name is typed, so Save never sees
+  // an empty `custom:` (the schema rejects it). Until then the row keeps whatever event it had.
+  const [customOpen, setCustomOpen] = useState(false);
+  const storedCustom = s.events[0]?.startsWith('custom:') ? s.events[0].slice(7) : undefined;
+  const [customName, setCustomName] = useState(storedCustom ?? '');
+  const dropdown = customOpen || storedCustom !== undefined ? 'custom' : dropdownValue(s.events);
   const legacyExtra = s.events.length - 1;
   const onEventChange = (v: string) => {
-    if (v === 'custom') {
-      const existing = s.events.find((e) => e.startsWith('custom:'));
-      set({ events: [existing ?? 'custom:'] });
-    } else {
-      set({ events: [v] });
-    }
+    if (v === 'custom') { setCustomOpen(true); return; }
+    setCustomOpen(false);
+    set({ events: [v] });
   };
-  const setCustomName = (name: string) => set({ events: [`custom:${name.replace(/[^A-Za-z0-9_-]/g, '')}`] });
+  const onCustomName = (raw: string) => {
+    const name = raw.replace(/[^A-Za-z0-9_-]/g, '');
+    setCustomName(name);
+    if (name) set({ events: [`custom:${name}`] });
+    else if (storedCustom !== undefined) set({ events: ['always'] });
+  };
   return (
     <div data-role="script" className="rounded-2xl border border-zinc-800 bg-zinc-900 p-2">
       <div className="mb-2 flex items-center gap-2">
@@ -110,7 +103,7 @@ function ScriptRow({ script: s, set, onRemove, onDropCall, onToCall, errors, abi
         <button type="button" className="shrink-0 px-2 text-zinc-500" onClick={onRemove}>✕</button>
       </div>
       {dropdown === 'custom' && (
-        <input className={inputCls + ' mb-2 py-1.5'} placeholder="event name" value={s.events[0]?.startsWith('custom:') ? s.events[0].slice(7) : ''} onChange={(e) => setCustomName(e.target.value)} />
+        <input autoFocus={storedCustom === undefined} data-role="script-custom-event" className={inputCls + ' mb-2 py-1.5'} placeholder="event name (letters, digits, - and _)" value={customName} onChange={(e) => onCustomName(e.target.value)} />
       )}
       {open && (
         <div className="mb-2 space-y-2 rounded-xl border border-zinc-800 bg-zinc-950 p-2">
@@ -119,10 +112,6 @@ function ScriptRow({ script: s, set, onRemove, onDropCall, onToCall, errors, abi
           <div className="flex items-center gap-4 text-xs text-zinc-400">
             <label className="flex items-center gap-1"><input type="checkbox" checked={s.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> enabled</label>
             <label className="flex items-center gap-1">priority <PriorityInput value={s.priority} onCommit={(n) => set({ priority: n })} /></label>
-          </div>
-          <div className="flex gap-1">
-            <Chip active={!s.call} onClick={onDropCall}>code</Chip>
-            <Chip active={!!s.call} onClick={onToCall}>call a function</Chip>
           </div>
         </div>
       )}

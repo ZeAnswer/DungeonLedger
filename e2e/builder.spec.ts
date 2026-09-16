@@ -125,12 +125,11 @@ test('script row: ⋯ is closed by default (even for a brand-new row) and opens 
   await sheet.getByRole('button', { name: 'JSON' }).click();
   expect(JSON.parse(await sheet.locator('textarea').inputValue()).scripts[0]).toMatchObject({ priority: -5, source: "bonus('attack', 1)" });
 
-  // Switching that same row to "call a function" (via the ⋯ switch, reopened after the JSON round trip)
+  // Switching that same row to a function (via the link under the code, after the JSON round trip)
   // must not leave `source` sitting around dead (the engine prefers `call` over `source`, so a stale one
   // would silently never run again), and must seed `fn` with a real function rather than an empty selection.
   await sheet.getByRole('button', { name: 'Feature', exact: true }).click();
-  await row.locator('[data-role="script-more"]').click();
-  await row.getByRole('button', { name: 'call a function' }).click();
+  await row.getByRole('button', { name: 'use a function instead' }).click();
   await sheet.getByRole('button', { name: 'JSON' }).click();
   const after = JSON.parse(await sheet.locator('textarea').inputValue()).scripts[0];
   expect(after.source).toBe('');
@@ -266,4 +265,24 @@ test('bonusWhenSwitch: a call with a literal switch name is discoverable as a to
   await page.getByRole('navigation').getByRole('button', { name: 'Battle' }).click();
   await page.getByRole('button', { name: /New battle/ }).click();
   await expect(page.getByRole('button', { name: 'Sniping', exact: true })).toBeVisible();
+});
+
+test('Custom… event: nothing is stored until a name is typed, then custom:<name>', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Library' }).click();
+  await page.getByRole('button', { name: '+ New feature' }).click();
+  const sheet = page.locator('.fixed.inset-0');
+  await sheet.getByLabel('Name').fill('Test Custom');
+  await sheet.getByLabel(/^Id/).fill('test-custom');
+  await sheet.getByRole('button', { name: '+ add script' }).click();
+  const row = sheet.locator('[data-role="script"]').first();
+  await row.locator('[data-role="script-event"]').selectOption('custom');
+  await sheet.getByRole('button', { name: 'JSON' }).click();
+  expect(JSON.parse(await sheet.locator('textarea').inputValue()).scripts[0].events).toEqual(['always']);
+  // Switching tabs remounts the row, so pick Custom… again, then type the name.
+  await sheet.getByRole('button', { name: 'Feature', exact: true }).click();
+  await row.locator('[data-role="script-event"]').selectOption('custom');
+  await row.locator('[data-role="script-custom-event"]').fill('rage-start');
+  await sheet.getByRole('button', { name: 'JSON' }).click();
+  expect(JSON.parse(await sheet.locator('textarea').inputValue()).scripts[0].events).toEqual(['custom:rage-start']);
 });

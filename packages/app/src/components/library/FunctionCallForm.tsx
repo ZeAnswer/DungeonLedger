@@ -3,7 +3,7 @@ import { useStore } from '../../store/store';
 import { Chip, cx, inputCls } from '../ui';
 import { FunctionStatSelect } from './StatSelect';
 import { DurationPicker } from './DurationPicker';
-import { EVENT_OPTIONS } from './ScriptsEditor';
+import { EVENT_OPTIONS } from './events';
 
 type Call = NonNullable<Script['call']>;
 
