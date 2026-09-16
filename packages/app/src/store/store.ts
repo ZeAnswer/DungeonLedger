@@ -106,14 +106,25 @@ export const useStore = create<Store>((set, get) => ({
     }
     // Built-in packs newer than what this install has seen get merged in (same-pack newer version wins; user edits to other packs untouched).
     let lib: FullLibrary = { ...fullEmpty(), ...library, abilities: convertAbilities(library.abilities as Record<string, unknown> | undefined) };
+    // Diffed and carried separately from `lib`, same reason as importPack: the live slice (falling back to
+    // the stored library blob only when this install has never had one, i.e. mid-migration) is the correct
+    // baseline, and the merge result must not be written back into the persisted library blob.
+    let mergedGlobals = globals ?? lib.globals;
     const updated: string[] = [];
     for (const p of defaultPacks) {
       const seen = Math.max(0, ...Object.values(lib.meta).filter((m) => m.packId === p.id).map((m) => m.version));
-      if (p.version > seen) { lib = { ...lib, ...(mergePack(lib, { ...p, characters: [] }, {}).library as FullLibrary) }; updated.push(p.name); }
+      if (p.version > seen) {
+        const m = mergePack({ ...lib, globals: mergedGlobals }, { ...p, characters: [] }, {});
+        const { globals: _mLibGlobals, ...mLib } = m.library as FullLibrary;
+        void _mLibGlobals;
+        lib = { ...lib, ...mLib };
+        mergedGlobals = m.library.globals;
+        updated.push(p.name);
+      }
     }
     set({
       library: lib,
-      globals: globals ?? lib.globals,
+      globals: mergedGlobals,
       character: character ? CharacterSchema.parse(character) : Object.values(library.characters ?? {})[0],
       battle: battle ? loadBattle(battle, lib) : undefined,
       pastBattles: loadPastBattles(past, lib),
@@ -143,7 +154,11 @@ export const useStore = create<Store>((set, get) => ({
     // Diff the pack's globals against the live globals slice (not the stale library.globals blob), so
     // the MergeReport's added/updated/conflicts counts reflect what the player actually has right now.
     const m = mergePack({ ...library, globals }, pack, opts);
-    const lib = { ...fullEmpty(), ...library, ...m.library } as FullLibrary;
+    // The merged globals go to the live slice below, never into the persisted library blob (a pack
+    // update must not clobber it, and setVar must never need to touch the library).
+    const { globals: _mLibGlobals, ...mLib } = m.library as FullLibrary;
+    void _mLibGlobals;
+    const lib = { ...fullEmpty(), ...library, ...mLib } as FullLibrary;
     // If the pack carries the active character (or we have none), refresh it.
     const incoming = pack.characters.find((c) => c.id === character?.id) ?? (character ? undefined : pack.characters[0]);
     set({ library: lib, globals: m.library.globals, ...(incoming && (opts?.overwrite || !character || !m.report.conflicts.some((c) => c.key === `character:${incoming.id}`)) ? { character: incoming } : {}) });

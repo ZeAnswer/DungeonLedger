@@ -49,7 +49,7 @@ function TargetControls({ targetId }: { targetId: string }) {
   const ctx = useCtx();
   const battle = useStore((s) => s.battle)!;
   const setBattle = useStore((s) => s.setBattle);
-  const setCharacter = useStore((s) => s.setCharacter);
+  const applyState = useStore((s) => s.applyState);
   const showToast = useStore((s) => s.showToast);
   const [dmg, setDmg] = useState('');
   const c = battle.combatants.find((x) => x.id === targetId);
@@ -57,7 +57,7 @@ function TargetControls({ targetId }: { targetId: string }) {
   const enemy = (result: 'hit' | 'miss') => {
     const damage = result === 'hit' && dmg ? Number(dmg) : undefined;
     const r = logEnemyAction(ctx, { actorId: c.id, result, ...(damage !== undefined ? { damage } : {}) });
-    setBattle(r.battle); setCharacter(r.character); setDmg('');
+    applyState(r); setDmg('');
     showToast(`${c.name} ${result === 'hit' ? `hit you${damage ? ` for ${damage}` : ''}` : 'missed you'}`);
   };
   return (

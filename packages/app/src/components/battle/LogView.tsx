@@ -5,10 +5,10 @@ import { Button, Chip, cx } from '../ui';
 
 export function LogView({ battle }: { battle: Battle }) {
   const setBattle = useStore((s) => s.setBattle);
-  const setCharacter = useStore((s) => s.setCharacter);
+  const applyState = useStore((s) => s.applyState);
   const ctx = useCtx();
   const lib = useStore((s) => s.library);
-  const undo = (id: string) => { if (!ctx) return; const r = undoEvent({ ...ctx, battle }, id); setBattle(r.battle); setCharacter(r.character); };
+  const undo = (id: string) => { if (!ctx) return; const r = undoEvent({ ...ctx, battle }, id); applyState(r); };
   const name = (id?: string) => battle.combatants.find((c) => c.id === id)?.name ?? id ?? '';
   const desc = (e: LogEvent) => {
     switch (e.kind) {
