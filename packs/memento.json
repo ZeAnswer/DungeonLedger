@@ -1,7 +1,7 @@
 {
   "id": "memento",
   "name": "Memento (Ranger 5 / Monster Hunter 1)",
-  "version": 12,
+  "version": 13,
   "description": "Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor's Monsters' Manual.",
   "tags": [
     {
@@ -286,7 +286,7 @@
               "events": [
                 "always"
               ],
-              "source": "if (target.isOneOf(params.types)) {\n  need(target.hurt >= HURT.BLOODIED, 'target is bloodied or worse');\n  note(`MONSTER BLOW: on hit, Fort DC = ${player.lastDamage + player.classes['monster-hunter'] + player.mod.wis} or die.`);\n}",
+              "source": "if (target.isOneOf(params.types)) {\n  need(target.hurt >= HURT.BLOODIED, 'target is bloodied or worse');\n  note(`MONSTER BLOW: on hit, Fort DC = damage + ${player.classes['monster-hunter'] + player.mod.wis} or die.`);\n}",
               "enabled": true,
               "priority": 0
             }
@@ -1670,13 +1670,6 @@
   ],
   "functions": [
     {
-      "id": "haste",
-      "name": "Haste",
-      "description": "The haste package: one extra attack on a full attack, +1 dodge to attack and AC, +1 Reflex, +30 ft speed.",
-      "params": [],
-      "source": "extraAttack(1, { base: 'full' });\nbonus('attack', 1, 'dodge');\nbonus('ac', 1, 'dodge');\nbonus('save.ref', 1, 'dodge');\nbonus('speed', 30);"
-    },
-    {
       "id": "trophy",
       "name": "Trophy bonus",
       "description": "A Monster Hunter trophy bonus, multiplied by the character's trophyMultiplier (×2 at MH5, ×3 at MH10).",
@@ -1702,26 +1695,6 @@
         }
       ],
       "source": "bonus(stat, base * (vars.trophyMultiplier ?? 1), type);"
-    },
-    {
-      "id": "favoredEnemy",
-      "name": "Favored enemy",
-      "description": "Bonus damage and Bluff/Listen/Sense Motive/Spot/Survival against the chosen creature types.",
-      "params": [
-        {
-          "name": "types",
-          "type": "tags",
-          "label": "Creature types",
-          "required": true
-        },
-        {
-          "name": "amount",
-          "type": "number",
-          "label": "Bonus",
-          "required": true
-        }
-      ],
-      "source": "if (target.isOneOf(types)) {\n  bonus('damage', amount);\n  bonus(['skill.bluff', 'skill.listen', 'skill.sense-motive', 'skill.spot', 'skill.survival'], amount);\n}"
     }
   ],
   "globals": {}

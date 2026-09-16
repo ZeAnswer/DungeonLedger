@@ -13,11 +13,13 @@ const files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
 const problems: string[] = [];
 const warnings: string[] = [];
 let lib = emptyLibrary();
+const parsed: Pack[] = [];
 
 for (const f of files) {
   const raw = JSON.parse(readFileSync(join(dir, f), 'utf8'));
   const r = PackSchema.safeParse(raw);
   if (!r.success) { problems.push(`${f}: ${r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`); continue; }
+  parsed.push(r.data);
   const m = mergePack(lib, r.data);
   lib = m.library;
   for (const c of m.report.conflicts) problems.push(`${f}: conflict ${c.key} (already from ${c.existingPack})`);
@@ -37,10 +39,14 @@ const FN_REF = /\bfn\.([A-Za-z_][\w-]*)|fn\[['"]([^'"]+)['"]\]/g;
 const PARAM_REF = /\bparams\.([A-Za-z_][\w-]*)|params\[['"]([^'"]+)['"]\]/g;
 const emitted = new Set<string>(); // every `emit('name')` found in any script or function
 const customEvents = new Map<string, string[]>(); // custom event name → the scripts listening for it
+/** Which pack defines each function: a pack may only call its own functions and the core pack's. */
+const CORE = 'core-3.5e';
+const fnPack = new Map<string, string>();
+for (const p of parsed) for (const f of p.functions) if (!fnPack.has(f.id)) fnPack.set(f.id, p.id);
 
 let compiled = 0;
 /** Compiles one source and checks its `fn.<id>` references; `params` are checked only where a record owns them. */
-const checkSource = (owner: string, source: string, paramNames: string[] = [], declaredParams?: Set<string>) => {
+const checkSource = (packId: string, owner: string, source: string, paramNames: string[] = [], declaredParams?: Set<string>) => {
   if (!source.trim()) return;
   compiled++;
   const c = compile(source, paramNames);
@@ -48,7 +54,9 @@ const checkSource = (owner: string, source: string, paramNames: string[] = [], d
   for (const e of c.emits) emitted.add(e);
   for (const m of source.matchAll(FN_REF)) {
     const id = m[1] ?? m[2]!;
-    if (!lib.functions[id]) problems.push(`${owner}: unknown function "fn.${id}"`);
+    const from = fnPack.get(id);
+    if (!from) problems.push(`${owner}: unknown function "fn.${id}"`);
+    else if (from !== packId && from !== CORE) problems.push(`${owner}: calls "fn.${id}", defined in pack "${from}" — a pack may only call its own functions or ${CORE}'s`);
   }
   if (!declaredParams) return;
   for (const m of source.matchAll(PARAM_REF)) {
@@ -58,7 +66,7 @@ const checkSource = (owner: string, source: string, paramNames: string[] = [], d
 };
 
 /** A stored call (`script.call`) is the form the function editor round-trips; it compiles to `fn["id"]({ … })`. */
-const checkCall = (owner: string, call: NonNullable<Script['call']>, declaredParams: Set<string>) => {
+const checkCall = (packId: string, owner: string, call: NonNullable<Script['call']>, declaredParams: Set<string>) => {
   const def = lib.functions[call.fn];
   if (!def) { problems.push(`${owner}: calls unknown function "${call.fn}"`); return; }
   const known = new Set(def.params.map((p) => p.name));
@@ -66,31 +74,37 @@ const checkCall = (owner: string, call: NonNullable<Script['call']>, declaredPar
   for (const p of def.params) if (p.required && call.args[p.name] === undefined && p.default === undefined) problems.push(`${owner}: call to ${def.id} is missing required argument "${p.name}"`);
   // `ref` and `expr` arguments are spliced into the generated source, so compile them the way the engine will.
   const parts = def.params.map((p) => { const a = call.args[p.name]; return a ? `${p.name}: ${a.k === 'lit' ? JSON.stringify(a.v) : a.v}` : undefined; }).filter((x) => x !== undefined);
-  checkSource(owner, `fn[${JSON.stringify(def.id)}]({ ${parts.join(', ')} });`, [], declaredParams);
+  checkSource(packId, owner, `fn[${JSON.stringify(def.id)}]({ ${parts.join(', ')} });`, [], declaredParams);
 };
 
-const checkScripts = (owner: string, scripts: Script[], declaredParams: Set<string>) => {
+const checkScripts = (packId: string, owner: string, scripts: Script[], declaredParams: Set<string>) => {
   for (const s of scripts) {
     const id = `${owner}/${s.id}`;
-    if (s.call) checkCall(id, s.call, declaredParams);
-    checkSource(id, s.source, [], declaredParams);
+    if (s.call) checkCall(packId, id, s.call, declaredParams);
+    checkSource(packId, id, s.source, [], declaredParams);
     for (const e of s.events) if (e.startsWith('custom:')) customEvents.set(e.slice(7), [...(customEvents.get(e.slice(7)) ?? []), id]);
   }
 };
 
-for (const f of Object.values(lib.functions)) checkSource(`function ${f.id}`, f.source, f.params.map((p) => p.name));
+// Scripts are checked per pack, not over the merged library, so every `fn.<id>` can be judged against
+// the pack that owns the record: a pack that calls another pack's function breaks when installed alone.
+for (const p of parsed) {
+  for (const f of p.functions) checkSource(p.id, `${p.id} function ${f.id}`, f.source, f.params.map((x) => x.name));
+  for (const a of p.abilities) {
+    const declaredParams = new Set(Object.keys(a.params ?? {}));
+    checkScripts(p.id, `${p.id} ability ${a.id}`, a.scripts, declaredParams);
+    for (const act of activationsOf(a)) checkScripts(p.id, `${p.id} ability ${a.id}/${act.id}`, act.scripts, declaredParams);
+  }
+}
 
 const resourceIds = new Map<string, string>(); // activation ids and pool ids share one namespace (findResourceDef looks in both)
 for (const a of Object.values(lib.abilities)) {
-  const declaredParams = new Set(Object.keys(a.params ?? {}));
-  checkScripts(`ability ${a.id}`, a.scripts, declaredParams);
   const poolIds = new Set(poolsOf(a).map((p) => p.id));
   for (const p of poolsOf(a)) {
     const prev = resourceIds.get(p.id);
     if (prev) problems.push(`${a.id}: pool id "${p.id}" already used by ${prev}`); else resourceIds.set(p.id, a.id);
   }
   for (const act of activationsOf(a)) {
-    checkScripts(`ability ${a.id}/${act.id}`, act.scripts, declaredParams);
     const prev = resourceIds.get(act.id);
     if (prev) problems.push(`${a.id}: activation id "${act.id}" already used by ${prev}`); else resourceIds.set(act.id, a.id);
     if (act.spell && lib.abilities[act.spell]?.kind !== 'spell') problems.push(`${a.id}/${act.id}: spell "${act.spell}" is not a spell record`);
@@ -134,7 +148,7 @@ for (const ch of Object.values(characters)) {
 }
 
 // A green run says what it actually looked at, so "0 problems" is never mistaken for "nothing ran".
-console.log(`\ncross-reference checks: ${compiled} script sources compiled (records, activations, ${Object.keys(lib.functions).length} functions), fn/call references and required arguments, params.<x> declared on the record, custom events emitted, activation and pool id uniqueness, charge and pool expressions, character classes/skills/ability params, every stat and attack mode resolved. Not checked statically: tag, skill and stat ids written as strings inside a script.`);
+console.log(`\ncross-reference checks: ${compiled} script sources compiled (records, activations, ${Object.keys(lib.functions).length} functions), fn/call references resolvable from the calling pack (own or core) with their required arguments, params.<x> declared on the record, custom events emitted, activation and pool id uniqueness, charge and pool expressions, character classes/skills/ability params, every stat and attack mode resolved. Not checked statically: tag, skill and stat ids written as strings inside a script.`);
 if (warnings.length) console.warn('\nWARNINGS:\n' + warnings.map((w) => ' - ' + w).join('\n'));
 if (problems.length) { console.error('\nPROBLEMS:\n' + problems.map((p) => ' - ' + p).join('\n')); process.exit(1); }
 console.log(`\nOK: ${Object.keys(lib.functions).length} functions, ${Object.keys(lib.abilities).length} abilities, ${Object.keys(lib.tags).length} tags, ${Object.keys(lib.skills).length} skills, ${Object.keys(monsters).length} monsters, ${Object.keys(characters).length} characters`);

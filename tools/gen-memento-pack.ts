@@ -58,16 +58,13 @@ const MK = { kind: 'param', name: 'types', includesTargetTag: true } as const;
 const pack: Pack = PackSchema.parse({
   id: 'memento',
   name: 'Memento (Ranger 5 / Monster Hunter 1)',
-  version: 12, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
+  version: 13, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
   description: 'Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor\'s Monsters\' Manual.',
   // Library functions: shared script bodies with typed parameters, called as `fn.<id>({ … })` from a
-  // record's script (or from a stored `call`, which compiles to the same thing).
+  // record's script (or from a stored `call`, which compiles to the same thing). `haste` and
+  // `favoredEnemy` live in the core pack, which every library loads; only the Monster Hunter trophy
+  // multiplier is specific to this pack.
   functions: [
-    {
-      id: 'haste', name: 'Haste', description: 'The haste package: one extra attack on a full attack, +1 dodge to attack and AC, +1 Reflex, +30 ft speed.',
-      params: [],
-      source: "extraAttack(1, { base: 'full' });\nbonus('attack', 1, 'dodge');\nbonus('ac', 1, 'dodge');\nbonus('save.ref', 1, 'dodge');\nbonus('speed', 30);",
-    },
     {
       id: 'trophy', name: 'Trophy bonus', description: 'A Monster Hunter trophy bonus, multiplied by the character\'s trophyMultiplier (×2 at MH5, ×3 at MH10).',
       params: [
@@ -76,14 +73,6 @@ const pack: Pack = PackSchema.parse({
         { name: 'type', type: 'bonusType', label: 'Bonus type', default: 'enhancement' },
       ],
       source: 'bonus(stat, base * (vars.trophyMultiplier ?? 1), type);',
-    },
-    {
-      id: 'favoredEnemy', name: 'Favored enemy', description: 'Bonus damage and Bluff/Listen/Sense Motive/Spot/Survival against the chosen creature types.',
-      params: [
-        { name: 'types', type: 'tags', label: 'Creature types', required: true },
-        { name: 'amount', type: 'number', label: 'Bonus', required: true },
-      ],
-      source: "if (target.isOneOf(types)) {\n  bonus('damage', amount);\n  bonus(['skill.bluff', 'skill.listen', 'skill.sense-motive', 'skill.spot', 'skill.survival'], amount);\n}",
     },
   ],
   tags: [
@@ -172,7 +161,7 @@ const pack: Pack = PackSchema.parse({
         {
           id: 'declared', label: 'Monster Blow',
           when: { kind: 'all', of: [{ kind: 'toggle', id: 'monster-blow' }, MK, { kind: 'target.hurtAtMost', hurt: 'bloodied' }] },
-          do: [{ kind: 'note', text: 'MONSTER BLOW: on hit, Fort DC = {damage + classLevel(monster-hunter) + wisMod} or die.' }],
+          do: [{ kind: 'note', text: 'MONSTER BLOW: on hit, Fort DC = damage + {classLevel(monster-hunter) + wisMod} or die.' }],
         },
         { id: 'use', trigger: 'onUse', do: [{ kind: 'consume', resourceId: 'monster-blow' }] },
       ],

@@ -33,8 +33,26 @@ const xpTable = Array.from({ length: 20 }, (_, i) => ({ level: i + 1, xp: (i * (
 const pack: Pack = PackSchema.parse({
   id: 'core-3.5e',
   name: 'Core 3.5e',
-  version: 4,
+  version: 5,
   description: 'Creature types, subtypes, conditions, skills, XP table, Ranger class, common feats and buffs.',
+  // Library functions: shared script bodies with typed parameters, called as `fn.<id>({ … })` from a
+  // record's script (or from a stored `call`, which compiles to the same thing). They live in the core
+  // pack because core records call them: a pack may only call functions of its own or of core-3.5e.
+  functions: [
+    {
+      id: 'haste', name: 'Haste', description: 'The haste package: one extra attack on a full attack, +1 dodge to attack and AC, +1 Reflex, +30 ft speed.',
+      params: [],
+      source: "extraAttack(1, { base: 'full' });\nbonus('attack', 1, 'dodge');\nbonus('ac', 1, 'dodge');\nbonus('save.ref', 1, 'dodge');\nbonus('speed', 30);",
+    },
+    {
+      id: 'favoredEnemy', name: 'Favored enemy', description: 'Bonus damage and Bluff/Listen/Sense Motive/Spot/Survival against the chosen creature types.',
+      params: [
+        { name: 'types', type: 'tags', label: 'Creature types', required: true },
+        { name: 'amount', type: 'number', label: 'Bonus', required: true },
+      ],
+      source: "if (target.isOneOf(types)) {\n  bonus('damage', amount);\n  bonus(['skill.bluff', 'skill.listen', 'skill.sense-motive', 'skill.spot', 'skill.survival'], amount);\n}",
+    },
+  ],
   tags: [
     ...creatureTypes.map((t) => tag(t, 'creatureType')),
     ...subtypes.map((t) => tag(t, 'subtype')),

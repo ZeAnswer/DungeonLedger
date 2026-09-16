@@ -181,9 +181,9 @@ Every name below is destructured into scope; there is no `api.` prefix. `Math`, 
 | `note(text)` | A line in the attack panel; use template literals for values |
 | `slot(slot, count = 1)` | Extra equipment slots (Hand of Glory's ring) |
 | `attackMode({ id, label, base, extra, penalty, kind, note })` | Adds an attack mode (Rapid Shot, Manyshot) |
-| `extraAttack(n = 1, { base = 'full', kind })` | Extra attacks on an existing mode |
+| `extraAttack(n = 1, { base = 'full' \| 'single' \| 'any', kind })` | Extra attacks on the modes built from that base (`any` = every mode) |
 | `naturalAttack({ name, dice, count, attackBonus })` | Adds an attack profile |
-| `ask(promptId, { per, label })` | The entered check result, or `0` plus a prompt chip asking for it (`per: 'creatureType'` remembers one answer per target type) |
+| `ask(promptId, { per, label })` | The entered check result, or `0`. When the answer is missing, the chip asking for it (and its warning) is surfaced **only on attack and damage** — like notes and near-misses — so a prompt never turns up under AC or a skill. `per: 'creatureType'` remembers one answer per target type |
 | `tier(value, [upTo, result], …)` | First row the value does not exceed |
 | `history(event, { by, vs, since, ability, category })` | Count of logged events: `event` ∈ hit, miss, crit, attack, used, activated, damaged, moved; `by` ∈ me, target, any (default me); `vs` ∈ current, any, sameCategory (default current); `since` ∈ attack, round, lastRound, encounter, day (default round) |
 
@@ -237,7 +237,9 @@ fn.trophy({ stat: 'init', base: 4 });                    // in a script's source
             "types": { "k": "ref", "v": "params.types" } } } }
 ```
 
-`k: 'lit'` is a literal value, `ref` a path, `expr` a JavaScript expression; both are spliced into `fn["trophy"]({ … })` before compiling. The three functions the bundled packs ship with (in `packs/memento.json`) are `haste()`, `trophy({ stat, base, type })` and `favoredEnemy({ types, amount })`.
+`k: 'lit'` is a literal value, `ref` a path, `expr` a JavaScript expression; both are spliced into `fn["trophy"]({ … })` before compiling.
+
+**Where a function may live.** Functions merge into one library namespace, but a pack has to work when it is the only one installed alongside core, so a record may only call a function defined in **its own pack** or in **`core-3.5e`**; the validator rejects anything else. The bundled functions are `haste()` and `favoredEnemy({ types, amount })` in `packs/core-3.5e.json` (core records call them) and `trophy({ stat, base, type })` in `packs/memento.json` (only Monster Hunter trophies use it).
 
 ## Globals
 
@@ -321,7 +323,7 @@ if (battle.on('sniping')) {
 ```js
 if (target.isOneOf(params.types)) {
   need(target.hurt >= HURT.BLOODIED, 'target is bloodied or worse');
-  note(`MONSTER BLOW: on hit, Fort DC = ${player.lastDamage + player.classes['monster-hunter'] + player.mod.wis} or die.`);
+  note(`MONSTER BLOW: on hit, Fort DC = damage + ${player.classes['monster-hunter'] + player.mod.wis} or die.`);
 }
 ```
 
@@ -343,4 +345,4 @@ charges('monster-blow').use();   // events: ['use']
 
 ## Validation
 
-`npm run validate-packs` checks every pack: schema, cross-references (abilities, tags, skills, classes, monsters), unique activation and pool ids, every script and function source compiling, `fn.<id>` and `call.fn` resolving with their required arguments, `params.<x>` declared on the record that reads it, and every stat and attack mode resolving for each bundled character. A `custom:<name>` nobody emits is a warning, not an error. Tag, skill and stat ids written *inside* a script are not statically checked: they are ordinary strings the engine validates when the script runs.
+`npm run validate-packs` checks every pack: schema, cross-references (abilities, tags, skills, classes, monsters), unique activation and pool ids, every script and function source compiling, `fn.<id>` and `call.fn` resolving — within the calling pack or `core-3.5e` — with their required arguments, `params.<x>` declared on the record that reads it, and every stat and attack mode resolving for each bundled character. A `custom:<name>` nobody emits is a warning, not an error. Tag, skill and stat ids written *inside* a script are not statically checked: they are ordinary strings the engine validates when the script runs.
