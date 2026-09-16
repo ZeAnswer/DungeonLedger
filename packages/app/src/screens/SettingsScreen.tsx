@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useStore } from '../store/store';
+import { packCode, useStore } from '../store/store';
 import { storage } from '../storage';
-import { Button, Section, inputCls } from '../components/ui';
+import { Button, Section, Sheet, inputCls } from '../components/ui';
 import { BUILD, checkForUpdate } from '../pwa';
 import { quarantinedScripts } from '../store/diagnostics';
 import { setSafeMode } from '../boot';
+import { PackSchema, type MergeReport, type Pack } from '@hl/engine';
 
 export function SettingsScreen() {
   const s = useStore();
@@ -12,12 +13,23 @@ export function SettingsScreen() {
   const [result, setResult] = useState<string | undefined>();
   const [overwrite, setOverwrite] = useState(false);
   const [update, setUpdate] = useState<string | undefined>();
+  const [pending, setPending] = useState<{ pack: Pack; overwrite: boolean } | undefined>();
 
-  const report = (r: ReturnType<typeof s.importText>) => {
+  const report = (r: { report?: MergeReport; error?: string }) => {
     if (r.error) { setResult(`Import failed:\n${r.error}`); return; }
     const rep = r.report!;
     setResult(`Imported: ${rep.added.length} added, ${rep.updated.length} updated, ${rep.unchanged.length} unchanged${rep.conflicts.length ? `\nConflicts (kept existing; tick "overwrite" to replace):\n${rep.conflicts.map((c) => ` • ${c.key}`).join('\n')}` : ''}`);
     s.showToast('Pack imported');
+  };
+
+  const offer = (text: string) => {
+    let raw: unknown;
+    try { raw = JSON.parse(text); } catch (e) { setResult(`Import failed:\n${(e as Error).message}`); return; }
+    const parsed = PackSchema.safeParse(raw);
+    if (!parsed.success) { setResult(`Import failed:\n${parsed.error.issues.slice(0, 5).map((i) => `${i.path.join('.')}: ${i.message}`).join('\n')}`); return; }
+    const code = packCode(parsed.data);
+    if (code.scripts || code.functions) { setPending({ pack: parsed.data, overwrite }); return; }
+    report({ report: s.importPack(parsed.data, { overwrite }) });
   };
 
   return (
@@ -28,10 +40,10 @@ export function SettingsScreen() {
         <p className="mb-2 text-sm text-zinc-400">A pack is a JSON file with abilities, tags, monsters, skills or a character. Items with the same id from a newer version of the same pack replace the old ones.</p>
         <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} /> Overwrite conflicting items</label>
         <div className="flex gap-2">
-          <Button variant="primary" onClick={async () => { const f = await storage().importFile(); if (f) report(s.importText(f.text, { overwrite })); }}>Pick file…</Button>
+          <Button variant="primary" onClick={async () => { const f = await storage().importFile(); if (f) offer(f.text); }}>Pick file…</Button>
         </div>
         <textarea className={inputCls + ' mt-3 h-32 font-mono text-xs'} placeholder="…or paste pack JSON here" value={paste} onChange={(e) => setPaste(e.target.value)} />
-        <Button className="mt-2" onClick={() => { if (paste.trim()) { report(s.importText(paste, { overwrite })); setPaste(''); } }}>Import pasted JSON</Button>
+        <Button className="mt-2" onClick={() => { if (paste.trim()) { offer(paste); setPaste(''); } }}>Import pasted JSON</Button>
         {result && <pre className="mt-3 whitespace-pre-wrap rounded-xl bg-zinc-900 p-3 text-xs text-zinc-300">{result}</pre>}
       </Section>
 
@@ -86,6 +98,18 @@ export function SettingsScreen() {
           {update && <span className="text-xs text-zinc-400">{update}</span>}
         </div>
       </Section>
+
+      <Sheet open={!!pending} onClose={() => setPending(undefined)} title="This pack runs as code">
+        {pending && (() => { const code = packCode(pending.pack); return (
+          <div data-role="code-confirm">
+            <p className="mb-3 text-sm text-zinc-300"><b>{pending.pack.name}</b> carries {code.scripts} script{code.scripts === 1 ? '' : 's'}{code.functions ? ` and ${code.functions} function${code.functions === 1 ? '' : 's'}` : ''}. Scripts are JavaScript that <b>runs as code</b> on this device with the same trust as the built-in packs. Import it only from a source you trust.</p>
+            <div className="flex gap-2">
+              <Button variant="primary" onClick={() => { report({ report: s.importPack(pending.pack, { overwrite: pending.overwrite }) }); setPending(undefined); }}>Import anyway</Button>
+              <Button variant="ghost" onClick={() => setPending(undefined)}>Cancel</Button>
+            </div>
+          </div>
+        ); })()}
+      </Sheet>
     </div>
   );
 }

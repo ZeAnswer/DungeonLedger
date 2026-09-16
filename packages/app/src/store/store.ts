@@ -308,6 +308,16 @@ export function ctxLibrary(s: { library: FullLibrary; globals: Record<string, Va
   return libOut;
 }
 
+/** How much code a pack brings: the numbers the confirmation quotes. `PackSchema` has already parsed the abilities. */
+export function packCode(pack: Pack): { scripts: number; functions: number } {
+  let scripts = 0;
+  for (const a of pack.abilities) {
+    scripts += a.scripts.length;
+    for (const act of activationsOf(a)) scripts += act.scripts.length;
+  }
+  return { scripts, functions: pack.functions.length };
+}
+
 /** Evaluation context for the engine from current store state. */
 export function selectCtx(s: Store): EvalContext | undefined {
   if (!s.character) return undefined;
