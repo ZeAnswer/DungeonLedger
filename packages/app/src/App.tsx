@@ -27,7 +27,7 @@ export default function App() {
   const safeModeAuto = useStore((s) => s.safeModeAuto);
   const setSafeModeState = useStore((s) => s.setSafeModeState);
   useEffect(() => { refreshDiagnostics(); });
-  useEffect(() => { bootSucceeded(); }, []);
+  useEffect(() => { if (hydrated) bootSucceeded(); }, [hydrated]);
 
   if (!hydrated) return <div className="flex h-full items-center justify-center text-zinc-500">Loading…</div>;
 

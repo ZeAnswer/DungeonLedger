@@ -6,22 +6,29 @@ const FAILS = 'hl.bootFails';
 const read = (k: string): string | null => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k: string, v: string | undefined): void => { try { v === undefined ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* private mode */ } };
 
+/** `?safe=1` is a one-load-only request: it must not itself write to storage. */
+function queryRequested(): boolean {
+  try { return new URLSearchParams(location.search).get('safe') === '1'; } catch { return false; }
+}
+
 function requested(): boolean {
-  try { if (new URLSearchParams(location.search).get('safe') === '1') return true; } catch { /* no location */ }
-  return read(SAFE) === '1';
+  return queryRequested() || read(SAFE) === '1';
 }
 
 /**
  * Called once before React mounts. Counts boots that never finished: the second one in a row turns safe
  * mode on by itself, which is the "compute pass throws twice at boot" rule — whatever threw, the screen
- * comes back with scripts off instead of white.
+ * comes back with scripts off instead of white. That auto-trip is the only path here that persists
+ * `hl.safeMode` on its own; a bare `?safe=1` (or an already-stored flag) just turns scripts off for
+ * this load without writing anything.
  */
 export function armBootGuard(): { safeMode: boolean; autoTripped: boolean } {
   const fails = Number(read(FAILS) ?? '0') + 1;
   write(FAILS, String(fails));
   const autoTripped = fails >= 2 && read(SAFE) !== '1';
   const safeMode = autoTripped || requested();
-  if (safeMode) { write(SAFE, '1'); setScriptMode('off'); }
+  if (autoTripped) write(SAFE, '1');
+  if (safeMode) setScriptMode('off');
   return { safeMode, autoTripped };
 }
 
