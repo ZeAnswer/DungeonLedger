@@ -245,6 +245,20 @@ test('missing prompt is reported structurally with the target tag label', () => 
   expect(r.warnings[0]).toBe('Knowledge Devotion: needs a Knowledge check vs Aberration');
 });
 
+test('prompts are surfaced on attack and damage only, not on other stats', () => {
+  const c = ctxWith([knowledgeDevotion]);
+  for (const stat of ['attack', 'damage'] as const) {
+    const r = resolveStat(c, stat);
+    expect(r.promptsNeeded).toEqual([{ promptId: 'knowledge', perTagCategory: 'creatureType', tag: 'aberration', source: 'knowledge-devotion', sourceName: 'Knowledge Devotion' }]);
+    expect(r.warnings).toContain('Knowledge Devotion: needs a Knowledge check vs Aberration');
+  }
+  for (const stat of ['ac', 'save.will', 'init', 'skill.swim'] as const) {
+    const r = resolveStat(c, stat);
+    expect(r.promptsNeeded).toEqual([]);
+    expect(r.warnings).toEqual([]);
+  }
+});
+
 test('availableActions lists activations with charges, spell name and declare flag; pools are listed separately', () => {
   const hog = AbilitySchema.parse({ id: 'hog', name: 'Hand of Glory', kind: 'item', item: { category: 'wondrous', slot: 'neck' }, activations: [{ id: 'hog-daylight', spell: 'daylight', charges: { max: 1 } }, { id: 'hog-torch', name: 'Torch' }] });
   const daylight = AbilitySchema.parse({ id: 'daylight', name: 'Daylight', kind: 'spell', duration: 3000, scripts: [{ id: 'l', source: "flag('sense.light')" }] });

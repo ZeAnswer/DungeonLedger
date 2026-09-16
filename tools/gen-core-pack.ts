@@ -4,6 +4,7 @@
  */
 import { writeFileSync } from 'node:fs';
 import { PackSchema, type Pack } from '../packages/engine/src/schema';
+import { ROUND } from '../packages/engine/src/scripts/units';
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 const tag = (label: string, category: Pack['tags'][number]['category']) => ({ id: slug(label), label, category });
@@ -32,7 +33,7 @@ const xpTable = Array.from({ length: 20 }, (_, i) => ({ level: i + 1, xp: (i * (
 const pack: Pack = PackSchema.parse({
   id: 'core-3.5e',
   name: 'Core 3.5e',
-  version: 3,
+  version: 4,
   description: 'Creature types, subtypes, conditions, skills, XP table, Ranger class, common feats and buffs.',
   tags: [
     ...creatureTypes.map((t) => tag(t, 'creatureType')),
@@ -54,32 +55,17 @@ const pack: Pack = PackSchema.parse({
   abilities: [
     // ---- ranger class features ----
     {
-      id: 'favored-enemy-1', name: 'Favored Enemy (1st)', source: 'class', sourceRef: 'PHB p.47',
+      // v4: calls the `favoredEnemy` library function (packs/memento.json) instead of six bonus lines.
+      id: 'favored-enemy-1', name: 'Favored Enemy (1st)', kind: 'feature', acquired: { kind: 'class' }, sourceRef: 'PHB p.47',
       text: '+2 on Bluff, Listen, Sense Motive, Spot and Survival checks and weapon damage rolls against the chosen creature type. Increases by +2 at ranger levels 5, 10, 15, 20 (choose which favored enemy improves).',
       params: { types: { kind: 'tags', label: 'Creature type', category: 'creatureType', count: 1 } },
-      effects: [{
-        id: 'fe', label: 'Favored enemy', when: { kind: 'param', name: 'types', includesTargetTag: true },
-        do: [
-          { kind: 'bonus', to: 'damage', value: 'favoredEnemyBonus1' },
-          { kind: 'bonus', to: 'skill.bluff', value: 'favoredEnemyBonus1' }, { kind: 'bonus', to: 'skill.listen', value: 'favoredEnemyBonus1' },
-          { kind: 'bonus', to: 'skill.sense-motive', value: 'favoredEnemyBonus1' }, { kind: 'bonus', to: 'skill.spot', value: 'favoredEnemyBonus1' },
-          { kind: 'bonus', to: 'skill.survival', value: 'favoredEnemyBonus1' },
-        ],
-      }],
+      scripts: [{ id: 'fe', label: 'Favored enemy', events: ['always'], source: 'fn.favoredEnemy({ types: params.types, amount: vars.favoredEnemyBonus1 });' }],
     },
     {
-      id: 'favored-enemy-2', name: 'Favored Enemy (2nd)', source: 'class', sourceRef: 'PHB p.47',
+      id: 'favored-enemy-2', name: 'Favored Enemy (2nd)', kind: 'feature', acquired: { kind: 'class' }, sourceRef: 'PHB p.47',
       text: 'Second favored enemy, gained at ranger level 5.',
       params: { types: { kind: 'tags', label: 'Creature type', category: 'creatureType', count: 1 } },
-      effects: [{
-        id: 'fe', label: 'Favored enemy', when: { kind: 'param', name: 'types', includesTargetTag: true },
-        do: [
-          { kind: 'bonus', to: 'damage', value: 'favoredEnemyBonus2' },
-          { kind: 'bonus', to: 'skill.bluff', value: 'favoredEnemyBonus2' }, { kind: 'bonus', to: 'skill.listen', value: 'favoredEnemyBonus2' },
-          { kind: 'bonus', to: 'skill.sense-motive', value: 'favoredEnemyBonus2' }, { kind: 'bonus', to: 'skill.spot', value: 'favoredEnemyBonus2' },
-          { kind: 'bonus', to: 'skill.survival', value: 'favoredEnemyBonus2' },
-        ],
-      }],
+      scripts: [{ id: 'fe', label: 'Favored enemy', events: ['always'], source: 'fn.favoredEnemy({ types: params.types, amount: vars.favoredEnemyBonus2 });' }],
     },
     { id: 'track', name: 'Track', source: 'feat', text: 'Use Survival to follow tracks.', effects: [] },
     { id: 'endurance', name: 'Endurance', source: 'feat', text: '+4 on checks and saves to resist nonlethal damage from exertion, environment, starvation, etc. Sleep in light or medium armor without fatigue.', effects: [] },
@@ -117,9 +103,9 @@ const pack: Pack = PackSchema.parse({
     { id: 'dodge', name: 'Dodge', source: 'feat', text: '+1 dodge bonus to AC against one designated opponent.', effects: [{ id: 'd', when: { kind: 'toggle', id: 'dodge-target' }, do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'dodge' }] }] },
     // ---- buffs ----
     {
-      id: 'haste', name: 'Haste', source: 'buff', duration: { rounds: 10 },
+      id: 'haste', name: 'Haste', kind: 'status', harmful: false, duration: 10 * ROUND,
       text: 'One extra attack at full BAB on a full attack, +1 dodge to attack and AC, +1 Reflex, +30 ft speed.',
-      effects: [{ id: 'h', do: [{ kind: 'extraAttack', appliesToBase: 'full' }, { kind: 'bonus', to: 'attack', value: 1, bonusType: 'dodge' }, { kind: 'bonus', to: 'ac', value: 1, bonusType: 'dodge' }, { kind: 'bonus', to: 'save.ref', value: 1, bonusType: 'dodge' }, { kind: 'bonus', to: 'speed', value: 30 }] }],
+      scripts: [{ id: 'h', events: ['always'], source: 'fn.haste();' }],
     },
     { id: 'bless', name: 'Bless', source: 'buff', duration: { rounds: 10 }, effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'attack', value: 1, bonusType: 'morale' }, { kind: 'bonus', to: 'save.will', value: 1, bonusType: 'morale' }] }] },
     { id: 'inspire-courage-1', name: 'Inspire Courage +1', source: 'buff', duration: 'untilRemoved', text: 'Bard song: +1 morale on attack and weapon damage, +1 vs charm and fear.', effects: [{ id: 'ic', do: [{ kind: 'bonus', to: 'attack', value: 1, bonusType: 'morale' }, { kind: 'bonus', to: 'damage', value: 1, bonusType: 'morale' }] }] },

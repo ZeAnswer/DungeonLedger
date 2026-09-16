@@ -237,9 +237,11 @@ export function resolveStat(ctx: EvalContext, stat: StatId): StatResult {
       dice: stat === 'damage' ? [...dice, ...sink.dice] : dice,
       flags: stat === 'attack' ? { ...sink.flags } : {},
       notes: attackLike ? [...new Set(sink.notes.map((n) => n.text))] : [],
-      warnings: [...warnings, ...sink.warnings, ...sink.prompts.map((p) => promptWarning(ctx, p)), ...sink.errors.map((e) => `${e.label}: ${e.message}`)],
+      // Prompts (and their warnings) belong to the attack line that asked for them — Knowledge Devotion
+      // only bonuses attack and damage — so, like notes and near-misses, they stay off every other stat.
+      warnings: [...warnings, ...sink.warnings, ...(attackLike ? sink.prompts.map((p) => promptWarning(ctx, p)) : []), ...sink.errors.map((e) => `${e.label}: ${e.message}`)],
       nearMiss: attackLike ? [...sink.skipped] : [],
-      promptsNeeded: [...sink.prompts],
+      promptsNeeded: attackLike ? [...sink.prompts] : [],
     };
     if (stat === 'critRange') result.total = 21 - Math.max(1, Math.min(20, total));
     return result;

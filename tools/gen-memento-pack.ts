@@ -4,6 +4,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { PackSchema, type Pack } from '../packages/engine/src/schema';
+import { UNTIL_MY_NEXT_TURN } from '../packages/engine/src/scripts/units';
 
 const rpgscribePath = new URL('./data/memento-rpgscribe.json', import.meta.url);
 const rpgscribe = existsSync(rpgscribePath) ? JSON.parse(readFileSync(rpgscribePath, 'utf8')) : undefined;
@@ -57,8 +58,34 @@ const MK = { kind: 'param', name: 'types', includesTargetTag: true } as const;
 const pack: Pack = PackSchema.parse({
   id: 'memento',
   name: 'Memento (Ranger 5 / Monster Hunter 1)',
-  version: 11, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
+  version: 12, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
   description: 'Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor\'s Monsters\' Manual.',
+  // Library functions: shared script bodies with typed parameters, called as `fn.<id>({ … })` from a
+  // record's script (or from a stored `call`, which compiles to the same thing).
+  functions: [
+    {
+      id: 'haste', name: 'Haste', description: 'The haste package: one extra attack on a full attack, +1 dodge to attack and AC, +1 Reflex, +30 ft speed.',
+      params: [],
+      source: "extraAttack(1, { base: 'full' });\nbonus('attack', 1, 'dodge');\nbonus('ac', 1, 'dodge');\nbonus('save.ref', 1, 'dodge');\nbonus('speed', 30);",
+    },
+    {
+      id: 'trophy', name: 'Trophy bonus', description: 'A Monster Hunter trophy bonus, multiplied by the character\'s trophyMultiplier (×2 at MH5, ×3 at MH10).',
+      params: [
+        { name: 'stat', type: 'stat', label: 'Stat', required: true },
+        { name: 'base', type: 'number', label: 'Base bonus', required: true },
+        { name: 'type', type: 'bonusType', label: 'Bonus type', default: 'enhancement' },
+      ],
+      source: 'bonus(stat, base * (vars.trophyMultiplier ?? 1), type);',
+    },
+    {
+      id: 'favoredEnemy', name: 'Favored enemy', description: 'Bonus damage and Bluff/Listen/Sense Motive/Spot/Survival against the chosen creature types.',
+      params: [
+        { name: 'types', type: 'tags', label: 'Creature types', required: true },
+        { name: 'amount', type: 'number', label: 'Bonus', required: true },
+      ],
+      source: "if (target.isOneOf(types)) {\n  bonus('damage', amount);\n  bonus(['skill.bluff', 'skill.listen', 'skill.sense-motive', 'skill.spot', 'skill.survival'], amount);\n}",
+    },
+  ],
   tags: [
     { id: 'analyzed', label: 'Analyzed (Hunter\'s Analysis)', category: 'condition' },
     { id: 'oversized', label: 'Oversized (above Large)', category: 'custom' },
@@ -145,7 +172,7 @@ const pack: Pack = PackSchema.parse({
         {
           id: 'declared', label: 'Monster Blow',
           when: { kind: 'all', of: [{ kind: 'toggle', id: 'monster-blow' }, MK, { kind: 'target.hurtAtMost', hurt: 'bloodied' }] },
-          do: [{ kind: 'note', text: 'MONSTER BLOW: on hit, Fort DC = damage + classLevel(monster-hunter) + wisMod or die.' }],
+          do: [{ kind: 'note', text: 'MONSTER BLOW: on hit, Fort DC = {damage + classLevel(monster-hunter) + wisMod} or die.' }],
         },
         { id: 'use', trigger: 'onUse', do: [{ kind: 'consume', resourceId: 'monster-blow' }] },
       ],
@@ -165,13 +192,14 @@ const pack: Pack = PackSchema.parse({
     },
     // ---- items ----
     {
-      id: 'boots-of-speed', name: 'Boots of Speed', origin: 'item', activation: { action: 'free' }, duration: 'endOfRound', item: { category: 'wondrous', slot: 'feet', weight: 1, price: '12,000 gp' },
+      // v4: the spent haste round is the activation's own charge pool; the while-active script calls fn.haste().
+      id: 'boots-of-speed', name: 'Boots of Speed', kind: 'item', item: { category: 'wondrous', slot: 'feet', weight: 1, price: '12,000 gp' },
       text: 'Free action: spend one haste round (10 per day). This round: one extra attack on a full attack, +1 dodge to attack and AC, +1 Reflex, +30 ft speed. Choose again each round.',
-      resources: [{ id: 'boots-rounds', label: 'Haste rounds', max: 10, resetOn: 'day' }],
-      cost: [{ kind: 'charge', resourceId: 'boots-rounds' }],
-      effects: [
-        { id: 'haste', label: 'Haste', do: [{ verb: 'attack', extraAttacks: 1, appliesToBase: 'full' }, { verb: 'modify', to: 'attack', value: 1, type: 'dodge' }, { verb: 'modify', to: 'ac', value: 1, type: 'dodge' }, { verb: 'modify', to: 'save.ref', value: 1, type: 'dodge' }, { verb: 'modify', to: 'speed', value: 30 }] },
-      ],
+      activations: [{
+        id: 'boots-rounds', action: 'free', duration: UNTIL_MY_NEXT_TURN,
+        charges: { max: 10, resetOn: 'day', label: 'Haste rounds' },
+        scripts: [{ id: 'haste', label: 'Haste', events: ['always'], source: 'fn.haste();' }],
+      }],
     },
     { id: 'ring-of-protection-1', item: { category: 'wondrous', slot: 'ring', price: '2,000 gp' }, name: 'Ring of Protection +1', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'deflection' }] }] },
     { id: 'bracers-of-armor-1', item: { category: 'wondrous', slot: 'arms', weight: 1 }, name: 'Bracers of Armor +1', source: 'item', effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'armor' }] }] },
@@ -219,13 +247,21 @@ const pack: Pack = PackSchema.parse({
     { id: 'gorgon-scale', name: "Gorgon's scale", source: 'item', item: { category: 'material' }, text: 'Trophy crafting material (Magical beast). Crafts: Gorgon belt — +2d6 damage when charging, petrifying cone 60 ft 1/day DC +14 Fort negates.', effects: [] },
     // ---- trophies (Monster Hunter) ----
     {
-      id: 'chuul-gloves', item: { category: 'trophy', slot: 'hands' }, name: 'Chuul Gloves (trophy)', source: 'item', text: 'Trophy: +4 initiative (improved initiative); paralysis touch DC 11+, Fort negates.',
-      effects: [{ id: 'i', do: [{ kind: 'bonus', to: 'init', value: '4 * trophyMultiplier', bonusType: 'enhancement' }] }],
+      id: 'chuul-gloves', kind: 'item', item: { category: 'trophy', slot: 'hands' }, name: 'Chuul Gloves (trophy)', text: 'Trophy: +4 initiative (improved initiative); paralysis touch DC 11+, Fort negates.',
+      scripts: [{ id: 'i', events: ['always'], source: "fn.trophy({ stat: 'init', base: 4 });" }],
     },
-    { id: 'gargoyle-bracers', item: { category: 'trophy', slot: 'arms' }, name: 'Gargoyle Bracers (trophy)', source: 'item', enabledByDefault: false, text: 'Trophy: DR 10/magic, freeze (appear as statue, Spot DC 15 + MH + Wis), +2 Con. Trophy bonuses are enhancement-type.', todo: 'Equip in Inventory if worn.', effects: [{ id: 'con', do: [{ kind: 'bonus', to: 'ability.con', value: '2 * trophyMultiplier', bonusType: 'enhancement' }, { kind: 'note', text: 'Gargoyle bracers: DR 10/magic.' }] }] },
+    {
+      id: 'gargoyle-bracers', kind: 'item', item: { category: 'trophy', slot: 'arms' }, name: 'Gargoyle Bracers (trophy)',
+      text: 'Trophy: DR 10/magic, freeze (appear as statue, Spot DC 15 + MH + Wis), +2 Con. Trophy bonuses are enhancement-type.', todo: 'Equip in Inventory if worn.',
+      scripts: [{ id: 'con', events: ['always'], source: "fn.trophy({ stat: 'ability.con', base: 2 });\nnote('Gargoyle bracers: DR 10/magic.');" }],
+    },
     { id: 'rider-ring', item: { category: 'trophy', slot: 'ring' }, name: 'Rider Ring (drider trophy)', source: 'item', enabledByDefault: false, text: 'Trophy: SR 14, darkness at will.', todo: 'Enable if worn.', effects: [] },
     { id: 'medusa-mask', item: { category: 'trophy', slot: 'head' }, name: 'Medusa Mask (trophy)', source: 'item', enabledByDefault: false, text: 'Trophy: petrifying gaze 1/day DC 12 Fort; 3 snake attacks 5 ft +3, 1d4 + poison 1d6 Str DC 12.', todo: 'Enable if worn.', resources: [{ id: 'medusa-gaze', label: 'Petrifying gaze', max: 1, per: 'day' }], effects: [] },
-    { id: 'shield-amulet', item: { category: 'trophy', slot: 'neck' }, name: 'Shield Amulet (shield guardian trophy)', source: 'item', enabledByDefault: false, text: 'Trophy: +4 natural armor; stores one spell of each level 4/5/6.', todo: 'Enable if worn.', effects: [{ id: 'n', do: [{ kind: 'bonus', to: 'ac', value: '4 * trophyMultiplier', bonusType: 'natural' }] }] },
+    {
+      id: 'shield-amulet', kind: 'item', item: { category: 'trophy', slot: 'neck' }, name: 'Shield Amulet (shield guardian trophy)',
+      text: 'Trophy: +4 natural armor; stores one spell of each level 4/5/6.', todo: 'Enable if worn.',
+      scripts: [{ id: 'n', events: ['always'], source: "fn.trophy({ stat: 'ac', base: 4, type: 'natural' });" }],
+    },
   ],
   characters: [{
     id: 'memento', name: 'Memento',

@@ -1,22 +1,23 @@
 /**
  * Validates every packs/*.json: schema, cross-references (abilities, tags, skills, classes),
- * and that every expression evaluates for each character. Run: npm run validate-packs
+ * every rules-v4 script (it compiles, its `fn` and `params` references resolve, its custom events
+ * are emitted somewhere), and that every expression evaluates for each character.
+ * Run: npm run validate-packs
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { PackSchema, emptyLibrary, mergePack, evalExpr, exprVars, resolveStat, resolveAttack, listAttackModes, attackProfiles, activationsOf, poolsOf, type EvalContext, type Pack } from '../packages/engine/src';
+import { PackSchema, compile, emptyLibrary, mergePack, evalExpr, exprVars, resolveStat, resolveAttack, listAttackModes, attackProfiles, activationsOf, poolsOf, type EvalContext, type Pack, type Script } from '../packages/engine/src';
 
 const dir = new URL('../packs/', import.meta.url).pathname;
 const files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
 const problems: string[] = [];
+const warnings: string[] = [];
 let lib = emptyLibrary();
-const packs: Pack[] = [];
 
 for (const f of files) {
   const raw = JSON.parse(readFileSync(join(dir, f), 'utf8'));
   const r = PackSchema.safeParse(raw);
   if (!r.success) { problems.push(`${f}: ${r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`); continue; }
-  packs.push(r.data);
   const m = mergePack(lib, r.data);
   lib = m.library;
   for (const c of m.report.conflicts) problems.push(`${f}: conflict ${c.key} (already from ${c.existingPack})`);
@@ -26,46 +27,70 @@ for (const f of files) {
 const monsters = (lib as { monsters?: Record<string, unknown> }).monsters ?? {};
 const characters = (lib as { characters?: Record<string, Pack['characters'][number]> }).characters ?? {};
 
-const checkSelector = (owner: string, sel: string) => {
-  const p = sel.split('.');
-  if (p[0] === 'target' && (p[1] === 'tag' || p[1] === 'condition') && !lib.tags[p.slice(2).join('.')]) problems.push(`${owner}: unknown tag in selector "${sel}"`);
-  if (p[0] === 'self' && p[1] === 'tag' && !lib.tags[p.slice(2).join('.')]) problems.push(`${owner}: unknown tag in selector "${sel}"`);
-  if (p[0] === 'self' && p[1] === 'skill' && !lib.skills[p.slice(2, -1).join('.')]) problems.push(`${owner}: unknown skill in selector "${sel}"`);
-  if (p[0] === 'self' && p[1] === 'ability' && !lib.abilities[p.slice(2, -1).join('.')]) problems.push(`${owner}: unknown ability in selector "${sel}"`);
-  if (p[0] === 'self' && p[1] === 'class' && !lib.classTables[p.slice(2, -1).join('.')]) problems.push(`${owner}: unknown class in selector "${sel}"`);
+// ---------- rules v4: scripts ----------
+// Static checks only. A script's *strings* — tag, skill, stat and record ids inside `bonus('skill.spot', …)`,
+// `target.is('aquatic')`, `grant('haste')` — are deliberately NOT resolved here: they are ordinary values a
+// script may also compute at runtime, and the engine validates them when it runs (StatIdSchema, BonusTypeSchema,
+// library lookups). What is checked is what can be known without running: the source parses, every function it
+// calls exists with its required arguments, and every `params.x` it reads is declared on the record.
+const FN_REF = /\bfn\.([A-Za-z_][\w-]*)|fn\[['"]([^'"]+)['"]\]/g;
+const PARAM_REF = /\bparams\.([A-Za-z_][\w-]*)|params\[['"]([^'"]+)['"]\]/g;
+const emitted = new Set<string>(); // every `emit('name')` found in any script or function
+const customEvents = new Map<string, string[]>(); // custom event name → the scripts listening for it
+
+let compiled = 0;
+/** Compiles one source and checks its `fn.<id>` references; `params` are checked only where a record owns them. */
+const checkSource = (owner: string, source: string, paramNames: string[] = [], declaredParams?: Set<string>) => {
+  if (!source.trim()) return;
+  compiled++;
+  const c = compile(source, paramNames);
+  if (!c.ok) { problems.push(`${owner}: ${c.error}${c.line !== undefined ? ` (line ${c.line})` : ''}`); return; }
+  for (const e of c.emits) emitted.add(e);
+  for (const m of source.matchAll(FN_REF)) {
+    const id = m[1] ?? m[2]!;
+    if (!lib.functions[id]) problems.push(`${owner}: unknown function "fn.${id}"`);
+  }
+  if (!declaredParams) return;
+  for (const m of source.matchAll(PARAM_REF)) {
+    const name = m[1] ?? m[2]!;
+    if (!declaredParams.has(name)) problems.push(`${owner}: reads params.${name}, which the record does not declare`);
+  }
 };
-let owner = ''; // set before each walk() below; the hoisted walk reads it so selector problems name the record being checked.
-const walk = (c: unknown): void => {
-  if (!c || typeof c !== 'object') return;
-  const o = c as Record<string, unknown>;
-  for (const k of ['is', 'exists', 'compare', 'in']) if (typeof o[k] === 'string') checkSelector(owner, o[k] as string);
-  if (Array.isArray(o.set)) for (const t of o.set as string[]) if (!lib.tags[t]) problems.push(`${owner}: unknown tag "${t}"`);
-  for (const k of ['all', 'any', 'none', 'count']) if (Array.isArray(o[k])) (o[k] as unknown[]).forEach(walk);
-  if (o.not) walk(o.not);
+
+/** A stored call (`script.call`) is the form the function editor round-trips; it compiles to `fn["id"]({ … })`. */
+const checkCall = (owner: string, call: NonNullable<Script['call']>, declaredParams: Set<string>) => {
+  const def = lib.functions[call.fn];
+  if (!def) { problems.push(`${owner}: calls unknown function "${call.fn}"`); return; }
+  const known = new Set(def.params.map((p) => p.name));
+  for (const name of Object.keys(call.args)) if (!known.has(name)) problems.push(`${owner}: ${def.id} has no parameter "${name}"`);
+  for (const p of def.params) if (p.required && call.args[p.name] === undefined && p.default === undefined) problems.push(`${owner}: call to ${def.id} is missing required argument "${p.name}"`);
+  // `ref` and `expr` arguments are spliced into the generated source, so compile them the way the engine will.
+  const parts = def.params.map((p) => { const a = call.args[p.name]; return a ? `${p.name}: ${a.k === 'lit' ? JSON.stringify(a.v) : a.v}` : undefined; }).filter((x) => x !== undefined);
+  checkSource(owner, `fn[${JSON.stringify(def.id)}]({ ${parts.join(', ')} });`, [], declaredParams);
 };
+
+const checkScripts = (owner: string, scripts: Script[], declaredParams: Set<string>) => {
+  for (const s of scripts) {
+    const id = `${owner}/${s.id}`;
+    if (s.call) checkCall(id, s.call, declaredParams);
+    checkSource(id, s.source, [], declaredParams);
+    for (const e of s.events) if (e.startsWith('custom:')) customEvents.set(e.slice(7), [...(customEvents.get(e.slice(7)) ?? []), id]);
+  }
+};
+
+for (const f of Object.values(lib.functions)) checkSource(`function ${f.id}`, f.source, f.params.map((p) => p.name));
+
 const resourceIds = new Map<string, string>(); // activation ids and pool ids share one namespace (findResourceDef looks in both)
 for (const a of Object.values(lib.abilities)) {
-  owner = `ability ${a.id}`;
-  // Effect blocks are the v3 shape: a pack still written in v3 is converted on parse, so these lists
-  // are empty for anything already printed to scripts. The v4 cross-reference walk (over script
-  // sources) lands with the regenerated packs.
-  type V3Blocks = { effects?: { when?: unknown; do: Record<string, string>[] }[]; onUse?: never[]; whileActive?: never[] };
-  const v3 = a as unknown as V3Blocks;
-  const blocks = [...(v3.effects ?? []), ...activationsOf(a).flatMap((x) => { const y = x as unknown as V3Blocks; return [...(y.onUse ?? []), ...(y.whileActive ?? [])]; })];
-  for (const b of blocks) {
-    walk(b.when);
-    for (const e of b.do) {
-      if (e.verb === 'modify' && e.to.startsWith('skill.') && !lib.skills[e.to.slice(6)]) problems.push(`${a.id}: unknown skill "${e.to}"`);
-      if (e.verb === 'tag' && !lib.tags[e.tag]) problems.push(`${a.id}: tag verb unknown tag "${e.tag}"`);
-      if ((e.verb === 'grant' || e.verb === 'suppress') && !lib.abilities[e.ability]) problems.push(`${a.id}: ${e.verb} unknown ability "${e.ability}"`);
-    }
-  }
+  const declaredParams = new Set(Object.keys(a.params ?? {}));
+  checkScripts(`ability ${a.id}`, a.scripts, declaredParams);
   const poolIds = new Set(poolsOf(a).map((p) => p.id));
   for (const p of poolsOf(a)) {
     const prev = resourceIds.get(p.id);
     if (prev) problems.push(`${a.id}: pool id "${p.id}" already used by ${prev}`); else resourceIds.set(p.id, a.id);
   }
   for (const act of activationsOf(a)) {
+    checkScripts(`ability ${a.id}/${act.id}`, act.scripts, declaredParams);
     const prev = resourceIds.get(act.id);
     if (prev) problems.push(`${a.id}: activation id "${act.id}" already used by ${prev}`); else resourceIds.set(act.id, a.id);
     if (act.spell && lib.abilities[act.spell]?.kind !== 'spell') problems.push(`${a.id}/${act.id}: spell "${act.spell}" is not a spell record`);
@@ -75,6 +100,9 @@ for (const a of Object.values(lib.abilities)) {
     }
   }
 }
+// A listener with no emitter is a warning, not an error: the emitter may live in another pack or in the app.
+for (const [name, listeners] of customEvents) if (!emitted.has(name)) warnings.push(`custom event "${name}" is listened for by ${listeners.join(', ')} but nothing emits it`);
+
 for (const m of Object.values(monsters) as { id: string; tags: string[] }[]) for (const t of m.tags) if (!lib.tags[t]) problems.push(`monster ${m.id}: unknown tag "${t}"`);
 
 for (const ch of Object.values(characters)) {
@@ -92,8 +120,7 @@ for (const ch of Object.values(characters)) {
     }
     for (const act of activationsOf(a)) { if (act.charges) { try { evalExpr(act.charges.max, vars); } catch (e) { problems.push(`${a.id}/${act.id}: ${(e as Error).message}`); } } }
     for (const p of poolsOf(a)) { try { evalExpr(p.max, vars); } catch (e) { problems.push(`${a.id} pool ${p.id}: ${(e as Error).message}`); } }
-    // v3 only (see above): expressions in v4 scripts are checked when the script runs.
-    for (const b of ((a as unknown as { effects?: { id: string; do: Record<string, string>[] }[] }).effects ?? [])) for (const e of b.do) if (e.verb === 'modify' && typeof e.value === 'string') { try { evalExpr(e.value, vars); } catch (err) { problems.push(`${a.id}/${b.id}: ${(err as Error).message}`); } }
+    // Values inside scripts are JavaScript, not `ExprSchema` strings: they are compiled above and run by the engine.
   }
   // smoke: every stat and attack mode resolves
   for (const stat of ['ac', 'ac.touch', 'ac.flatFooted', 'save.fort', 'save.ref', 'save.will', 'init', ...Object.keys(ch.skills).map((s) => `skill.${s}`)]) {
@@ -106,5 +133,8 @@ for (const ch of Object.values(characters)) {
   }
 }
 
+// A green run says what it actually looked at, so "0 problems" is never mistaken for "nothing ran".
+console.log(`\ncross-reference checks: ${compiled} script sources compiled (records, activations, ${Object.keys(lib.functions).length} functions), fn/call references and required arguments, params.<x> declared on the record, custom events emitted, activation and pool id uniqueness, charge and pool expressions, character classes/skills/ability params, every stat and attack mode resolved. Not checked statically: tag, skill and stat ids written as strings inside a script.`);
+if (warnings.length) console.warn('\nWARNINGS:\n' + warnings.map((w) => ' - ' + w).join('\n'));
 if (problems.length) { console.error('\nPROBLEMS:\n' + problems.map((p) => ' - ' + p).join('\n')); process.exit(1); }
-console.log(`\nOK: ${Object.keys(lib.abilities).length} abilities, ${Object.keys(lib.tags).length} tags, ${Object.keys(lib.skills).length} skills, ${Object.keys(monsters).length} monsters, ${Object.keys(characters).length} characters`);
+console.log(`\nOK: ${Object.keys(lib.functions).length} functions, ${Object.keys(lib.abilities).length} abilities, ${Object.keys(lib.tags).length} tags, ${Object.keys(lib.skills).length} skills, ${Object.keys(monsters).length} monsters, ${Object.keys(characters).length} characters`);

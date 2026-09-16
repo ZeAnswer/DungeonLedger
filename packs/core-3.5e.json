@@ -1,7 +1,7 @@
 {
   "id": "core-3.5e",
   "name": "Core 3.5e",
-  "version": 3,
+  "version": 4,
   "description": "Creature types, subtypes, conditions, skills, XP table, Ranger class, common feats and buffs.",
   "tags": [
     {
@@ -401,59 +401,16 @@
       "name": "Favored Enemy (1st)",
       "text": "+2 on Bluff, Listen, Sense Motive, Spot and Survival checks and weapon damage rolls against the chosen creature type. Increases by +2 at ranger levels 5, 10, 15, 20 (choose which favored enemy improves).",
       "sourceRef": "PHB p.47",
-      "effects": [
+      "scripts": [
         {
           "id": "fe",
           "label": "Favored enemy",
-          "trigger": "always",
-          "when": {
-            "in": "target.tags",
-            "param": "types"
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "damage",
-              "value": "favoredEnemyBonus1",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.bluff",
-              "value": "favoredEnemyBonus1",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.listen",
-              "value": "favoredEnemyBonus1",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.sense-motive",
-              "value": "favoredEnemyBonus1",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.spot",
-              "value": "favoredEnemyBonus1",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.survival",
-              "value": "favoredEnemyBonus1",
-              "type": "untyped",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "fn.favoredEnemy({ types: params.types, amount: vars.favoredEnemyBonus1 });",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "feature",
@@ -477,59 +434,16 @@
       "name": "Favored Enemy (2nd)",
       "text": "Second favored enemy, gained at ranger level 5.",
       "sourceRef": "PHB p.47",
-      "effects": [
+      "scripts": [
         {
           "id": "fe",
           "label": "Favored enemy",
-          "trigger": "always",
-          "when": {
-            "in": "target.tags",
-            "param": "types"
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "damage",
-              "value": "favoredEnemyBonus2",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.bluff",
-              "value": "favoredEnemyBonus2",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.listen",
-              "value": "favoredEnemyBonus2",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.sense-motive",
-              "value": "favoredEnemyBonus2",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.spot",
-              "value": "favoredEnemyBonus2",
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "skill.survival",
-              "value": "favoredEnemyBonus2",
-              "type": "untyped",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "fn.favoredEnemy({ types: params.types, amount: vars.favoredEnemyBonus2 });",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "feature",
@@ -552,7 +466,7 @@
       "id": "track",
       "name": "Track",
       "text": "Use Survival to follow tracks.",
-      "effects": [],
+      "scripts": [],
       "kind": "feature",
       "acquired": {
         "kind": "feat"
@@ -565,7 +479,7 @@
       "id": "endurance",
       "name": "Endurance",
       "text": "+4 on checks and saves to resist nonlethal damage from exertion, environment, starvation, etc. Sleep in light or medium armor without fatigue.",
-      "effects": [],
+      "scripts": [],
       "kind": "feature",
       "acquired": {
         "kind": "feat"
@@ -578,7 +492,7 @@
       "id": "craft-magic-arms-and-armor",
       "name": "Craft Magic Arms and Armor",
       "text": "Create magic weapons, armor and shields (caster level 5 normally).",
-      "effects": [],
+      "scripts": [],
       "kind": "feature",
       "acquired": {
         "kind": "feat"
@@ -591,7 +505,7 @@
       "id": "craft-wondrous-item",
       "name": "Craft Wondrous Item",
       "text": "Create wondrous items (caster level 3 normally).",
-      "effects": [],
+      "scripts": [],
       "kind": "feature",
       "acquired": {
         "kind": "feat"
@@ -604,7 +518,7 @@
       "id": "ranger-spells",
       "name": "Ranger Spells",
       "text": "From ranger level 4: divine spells from the ranger list, prepared daily, Wis-based (DC 10 + spell level + Wis mod). Caster level = half ranger level. Base 1st-level slots: 0 at ranger 4-5, 1 at 6-13, 2 at 14+; plus 1 bonus 1st-level slot for Wis 12-19 (2 for Wis 20+). Set the per-day totals in character vars rangerSpells1..rangerSpells4.",
-      "effects": [],
+      "scripts": [],
       "kind": "feature",
       "acquired": {
         "kind": "class"
@@ -620,8 +534,7 @@
             "label": "1st-level spells"
           },
           "cost": [],
-          "onUse": [],
-          "whileActive": []
+          "scripts": []
         }
       ],
       "pools": []
@@ -630,7 +543,7 @@
       "id": "wild-empathy",
       "name": "Wild Empathy",
       "text": "Improve the attitude of an animal like a Diplomacy check: 1d20 + ranger level + Cha mod.",
-      "effects": [],
+      "scripts": [],
       "kind": "feature",
       "acquired": {
         "kind": "class"
@@ -644,41 +557,16 @@
       "name": "Point Blank Shot",
       "text": "+1 on attack and damage rolls with ranged weapons at ranges up to 30 feet.",
       "sourceRef": "PHB p.98",
-      "effects": [
+      "scripts": [
         {
           "id": "pbs",
           "label": "Point Blank Shot",
-          "trigger": "always",
-          "when": {
-            "all": [
-              {
-                "compare": "attack.kind",
-                "op": "=",
-                "value": "ranged"
-              },
-              {
-                "compare": "target.distance",
-                "op": "<=",
-                "value": 30
-              }
-            ]
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": 1,
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "damage",
-              "value": 1,
-              "type": "untyped",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "if (attack.isRanged && target.within(30)) {\n  bonus('attack', 1);\n  bonus('damage', 1);\n}",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "feature",
@@ -694,21 +582,15 @@
       "name": "Precise Shot",
       "text": "No -4 penalty for shooting into melee.",
       "sourceRef": "PHB p.98",
-      "effects": [
+      "scripts": [
         {
           "id": "n",
-          "trigger": "always",
-          "when": {
-            "compare": "attack.kind",
-            "op": "=",
-            "value": "ranged"
-          },
-          "do": [
-            {
-              "verb": "note",
-              "text": "Precise Shot: no -4 for firing into melee."
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "if (attack.isRanged) {\n  note('Precise Shot: no -4 for firing into melee.');\n}",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "feature",
@@ -724,26 +606,15 @@
       "name": "Rapid Shot",
       "text": "One extra ranged attack at your highest bonus during a full attack; all attacks that round take -2.",
       "sourceRef": "PHB p.99",
-      "effects": [
+      "scripts": [
         {
           "id": "mode",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "attack",
-              "mode": {
-                "id": "rapid-shot",
-                "label": "Rapid Shot",
-                "base": "full"
-              },
-              "extraAttacks": 1,
-              "penaltyAll": -2,
-              "attackKind": "ranged"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "attackMode({ id: 'rapid-shot', label: 'Rapid Shot', base: 'full', extra: 1, penalty: -2, kind: 'ranged' });",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "feature",
@@ -759,27 +630,15 @@
       "name": "Manyshot",
       "text": "As a standard action fire two arrows at a single target within 30 ft with one attack roll at -4 (three arrows at BAB +11 for -6, four at +16 for -8). Precision damage applies once.",
       "sourceRef": "PHB p.97",
-      "effects": [
+      "scripts": [
         {
           "id": "mode",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "attack",
-              "mode": {
-                "id": "manyshot",
-                "label": "Manyshot (2 arrows)",
-                "base": "single",
-                "note": "Manyshot: one roll, both arrows hit or miss together; roll weapon damage twice, precision/extra dice once. Target within 30 ft."
-              },
-              "extraAttacks": 0,
-              "penaltyAll": -4,
-              "attackKind": "ranged"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "attackMode({ id: 'manyshot', label: 'Manyshot (2 arrows)', base: 'single', penalty: -4, kind: 'ranged', note: 'Manyshot: one roll, both arrows hit or miss together; roll weapon damage twice, precision/extra dice once. Target within 30 ft.' });",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "feature",
@@ -795,24 +654,15 @@
       "name": "Weapon Focus (ranged weapon)",
       "text": "+1 on attack rolls with the chosen weapon.",
       "sourceRef": "PHB p.102",
-      "effects": [
+      "scripts": [
         {
           "id": "wf",
-          "trigger": "always",
-          "when": {
-            "compare": "attack.kind",
-            "op": "=",
-            "value": "ranged"
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": 1,
-              "type": "untyped",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "if (attack.isRanged) {\n  bonus('attack', 1);\n}",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "feature",
@@ -826,22 +676,15 @@
     {
       "id": "improved-initiative",
       "name": "Improved Initiative",
-      "effects": [
+      "scripts": [
         {
           "id": "ii",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "init",
-              "value": 4,
-              "type": "untyped",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "bonus('init', 4);",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "feature",
@@ -856,22 +699,15 @@
       "id": "dodge",
       "name": "Dodge",
       "text": "+1 dodge bonus to AC against one designated opponent.",
-      "effects": [
+      "scripts": [
         {
           "id": "d",
-          "trigger": "always",
-          "when": {
-            "is": "battle.toggle.dodge-target"
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "ac",
-              "value": 1,
-              "type": "dodge",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "if (battle.on('dodge-target')) {\n  bonus('ac', 1, 'dodge');\n}",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "feature",
@@ -886,118 +722,52 @@
       "id": "haste",
       "name": "Haste",
       "text": "One extra attack at full BAB on a full attack, +1 dodge to attack and AC, +1 Reflex, +30 ft speed.",
-      "effects": [
+      "scripts": [
         {
           "id": "h",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "attack",
-              "extraAttacks": 1,
-              "penaltyAll": 0,
-              "appliesToBase": "full"
-            },
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": 1,
-              "type": "dodge",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "ac",
-              "value": 1,
-              "type": "dodge",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "save.ref",
-              "value": 1,
-              "type": "dodge",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "speed",
-              "value": 30,
-              "type": "untyped",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "fn.haste();",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "status",
       "harmful": false,
-      "duration": {
-        "rounds": 10
-      }
+      "duration": 60
     },
     {
       "id": "bless",
       "name": "Bless",
-      "effects": [
+      "scripts": [
         {
           "id": "b",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": 1,
-              "type": "morale",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "save.will",
-              "value": 1,
-              "type": "morale",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "bonus('attack', 1, 'morale');\nbonus('save.will', 1, 'morale');",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "status",
       "harmful": false,
-      "duration": {
-        "rounds": 10
-      }
+      "duration": 60
     },
     {
       "id": "inspire-courage-1",
       "name": "Inspire Courage +1",
       "text": "Bard song: +1 morale on attack and weapon damage, +1 vs charm and fear.",
-      "effects": [
+      "scripts": [
         {
           "id": "ic",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": 1,
-              "type": "morale",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "damage",
-              "value": 1,
-              "type": "morale",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "bonus('attack', 1, 'morale');\nbonus('damage', 1, 'morale');",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "status",
@@ -1007,29 +777,15 @@
     {
       "id": "inspire-courage-2",
       "name": "Inspire Courage +2",
-      "effects": [
+      "scripts": [
         {
           "id": "ic",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": 2,
-              "type": "morale",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "damage",
-              "value": 2,
-              "type": "morale",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "bonus('attack', 2, 'morale');\nbonus('damage', 2, 'morale');",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "status",
@@ -1039,98 +795,33 @@
     {
       "id": "prayer",
       "name": "Prayer",
-      "effects": [
+      "scripts": [
         {
           "id": "p",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": 1,
-              "type": "luck",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "damage",
-              "value": 1,
-              "type": "luck",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "save.fort",
-              "value": 1,
-              "type": "luck",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "save.ref",
-              "value": 1,
-              "type": "luck",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "save.will",
-              "value": 1,
-              "type": "luck",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "bonus('attack', 1, 'luck');\nbonus('damage', 1, 'luck');\nbonus('save.fort', 1, 'luck');\nbonus('save.ref', 1, 'luck');\nbonus('save.will', 1, 'luck');",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "status",
       "harmful": false,
-      "duration": {
-        "rounds": 6
-      }
+      "duration": 36
     },
     {
       "id": "shaken",
       "name": "Shaken",
-      "effects": [
+      "scripts": [
         {
           "id": "s",
-          "trigger": "always",
-          "when": {
-            "all": []
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": -2,
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "save.fort",
-              "value": -2,
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "save.ref",
-              "value": -2,
-              "type": "untyped",
-              "mode": "add"
-            },
-            {
-              "verb": "modify",
-              "to": "save.will",
-              "value": -2,
-              "type": "untyped",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "bonus('attack', -2);\nbonus('save.fort', -2);\nbonus('save.ref', -2);\nbonus('save.will', -2);",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "status",
@@ -1141,24 +832,15 @@
       "id": "prone-self",
       "name": "Prone",
       "text": "Prone: -4 melee attack, cannot use bows effectively (crossbows ok), +4 AC vs ranged, -4 AC vs melee.",
-      "effects": [
+      "scripts": [
         {
           "id": "p",
-          "trigger": "always",
-          "when": {
-            "compare": "attack.kind",
-            "op": "=",
-            "value": "melee"
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": -4,
-              "type": "untyped",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "if (attack.isMelee) {\n  bonus('attack', -4);\n}",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "status",
@@ -1168,24 +850,15 @@
     {
       "id": "higher-ground",
       "name": "Higher ground",
-      "effects": [
+      "scripts": [
         {
           "id": "h",
-          "trigger": "always",
-          "when": {
-            "compare": "attack.kind",
-            "op": "=",
-            "value": "melee"
-          },
-          "do": [
-            {
-              "verb": "modify",
-              "to": "attack",
-              "value": 1,
-              "type": "untyped",
-              "mode": "add"
-            }
-          ]
+          "events": [
+            "always"
+          ],
+          "source": "if (attack.isMelee) {\n  bonus('attack', 1);\n}",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "status",
@@ -1671,5 +1344,7 @@
       "level": 20,
       "xp": 190000
     }
-  ]
+  ],
+  "functions": [],
+  "globals": {}
 }
