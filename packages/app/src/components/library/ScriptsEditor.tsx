@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import type { Script, ScriptError } from '@hl/engine';
+import type { Ability, Script, ScriptError } from '@hl/engine';
 import { Button, Chip, inputCls } from '../ui';
 import { ScriptEditor } from './ScriptEditor';
+import { ScriptPreview } from './ScriptPreview';
 
 /** Events a script may listen to. `always` is the compute phase and cannot be combined with the others. */
 export const EVENTS = ['always', 'hit', 'miss', 'crit', 'damaged', 'roundStart', 'roundEnd', 'use', 'equip', 'unequip'] as const;
@@ -16,7 +17,7 @@ export function newScript(taken: string[]): Script {
   return { id: uniqueId('s1', taken), events: ['always'], source: '', enabled: true, priority: 0 };
 }
 
-export function ScriptsEditor({ value, onChange, addLabel = '+ add script', errors = [] }: { value: Script[]; onChange: (s: Script[]) => void; addLabel?: string; errors?: ScriptError[] }) {
+export function ScriptsEditor({ value, onChange, addLabel = '+ add script', errors = [], ability }: { value: Script[]; onChange: (s: Script[]) => void; addLabel?: string; errors?: ScriptError[]; ability?: Ability }) {
   const set = (i: number, patch: Partial<Script>) => onChange(value.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   const toggleEvent = (i: number, ev: string) => {
     const s = value[i]!;
@@ -41,6 +42,7 @@ export function ScriptsEditor({ value, onChange, addLabel = '+ add script', erro
           </div>
           <ScriptEditor value={s.source} onChange={(source) => set(i, { source })} errors={errors.filter((e) => e.scriptId === s.id)} />
           {errors.filter((e) => e.scriptId === s.id).map((e) => <div key={e.message} className="mt-1 rounded-lg border border-red-900 bg-red-950/40 px-2 py-1 text-xs text-red-200">{e.phase === 'compile' ? 'Does not compile' : 'Failed'}{e.line !== undefined ? ` (line ${e.line})` : ''}: {e.message}</div>)}
+          {ability && <ScriptPreview ability={ability} script={s} />}
           <div className="mt-1 flex items-center gap-4 text-xs text-zinc-400">
             <label className="flex items-center gap-1"><input type="checkbox" checked={s.enabled} onChange={(e) => set(i, { enabled: e.target.checked })} /> enabled</label>
             <label className="flex items-center gap-1">priority <input className={inputCls + ' w-16 py-1'} inputMode="numeric" value={s.priority} onChange={(e) => set(i, { priority: Number(e.target.value) || 0 })} /></label>

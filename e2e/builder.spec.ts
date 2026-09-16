@@ -63,3 +63,24 @@ test('script editor: events are a multi-select and always is exclusive', async (
   const json = JSON.parse(await sheet.locator('textarea').inputValue());
   expect(json.scripts[0]).toMatchObject({ events: ['hit', 'crit'], source: "target.mark('shaken', 3 * ROUND)" });
 });
+
+test('script preview: probes the script against the live character', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Library' }).click();
+  await page.getByRole('button', { name: '+ New feature' }).click();
+  const sheet = page.locator('.fixed.inset-0');
+  await sheet.getByLabel('Name').fill('Test Preview');
+  await sheet.getByLabel(/^Id/).fill('test-preview');
+  await sheet.getByRole('button', { name: '+ add script' }).click();
+  await sheet.locator('[data-role="script-source"] .cm-content').click();
+  await page.keyboard.type("bonus('attack', 2)");
+  const preview = sheet.locator('[data-role="script-preview"]');
+  await expect(preview).toContainText('attack');
+  await expect(preview).toContainText('+2');
+
+  await sheet.locator('[data-role="script-source"] .cm-content').click();
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.type("need(false, 'never'); bonus('attack', 2)");
+  await expect(preview).toContainText('needs never');
+});
