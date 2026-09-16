@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { AbilitySchema, SLOTS, WeaponMetaSchema, type Ability, type Condition, type Feature, type Item, type ItemCategory, type Spell, type Status } from '@hl/engine';
+import { AbilitySchema, ROUND, SLOTS, WeaponMetaSchema, type Ability, type Feature, type Item, type ItemCategory, type Spell, type Status } from '@hl/engine';
 import { Button, Chip, Field, cx, inputCls } from '../ui';
-import { BlocksEditor, uniqueId } from './BlocksEditor';
+import { ScriptsEditor, uniqueId } from './ScriptsEditor';
 import { ActivationEditor } from './ActivationEditor';
-import { DurationPicker } from './EffectEditor';
-import type { Preset } from './ConditionEditor';
+import { DurationPicker } from './DurationPicker';
 import { useStore } from '../../store/store';
 
 const ITEM_CATEGORIES: ItemCategory[] = ['weapon', 'armor', 'shield', 'ammunition', 'wondrous', 'potion', 'scroll', 'wand', 'tool', 'trophy', 'material', 'gear'];
@@ -14,10 +13,10 @@ const RESETS = ['round', 'encounter', 'day', 'never'] as const;
 export function freshRecord(kind: Ability['kind'], over: Partial<Item['item']> = {}): Ability {
   const id = `${kind}-${Date.now().toString(36)}`;
   switch (kind) {
-    case 'feature': return { id, name: '', kind, acquired: { kind: 'feat' }, enabledByDefault: true, effects: [], activations: [], pools: [] };
-    case 'item': return { id, name: '', kind, item: { category: 'gear', tags: [], ...over }, effects: [], activations: [], pools: [] };
-    case 'spell': return { id, name: '', kind, castingAction: 'standard', effects: [] };
-    case 'status': return { id, name: '', kind, harmful: false, effects: [] };
+    case 'feature': return { id, name: '', kind, acquired: { kind: 'feat' }, enabledByDefault: true, scripts: [], activations: [], pools: [] };
+    case 'item': return { id, name: '', kind, item: { category: 'gear', tags: [], ...over }, scripts: [], activations: [], pools: [] };
+    case 'spell': return { id, name: '', kind, castingAction: 'standard', scripts: [] };
+    case 'status': return { id, name: '', kind, harmful: false, scripts: [] };
   }
 }
 
@@ -47,10 +46,6 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
       onSave(parsed);
     } catch (e) { setErr((e as Error).message); }
   };
-  const presets: Preset[] = [
-    ...(a.kind === 'item' ? [{ label: 'only with this weapon', make: (): Condition => ({ compare: 'attack.weapon.id', op: '=', value: a.id }) }] : []),
-    { label: 'only while a slot is filled', make: (): Condition => ({ compare: 'self.equipped.slot.arms', op: '>=', value: 1 }) },
-  ];
   const KIND_TITLE = { feature: 'Feature', item: 'Item', spell: 'Spell', status: 'Status' }[a.kind];
 
   return (
@@ -71,8 +66,8 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
           <Field label="Rules text"><textarea className={inputCls} value={a.text ?? ''} onChange={(e) => set({ text: e.target.value || undefined })} /></Field>
           <Field label="Source reference"><input className={inputCls} value={a.sourceRef ?? ''} onChange={(e) => set({ sourceRef: e.target.value || undefined })} placeholder="PHB p.98, DM card…" /></Field>
 
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">{{ feature: 'Passive effects (while enabled)', item: 'Passive effects (while equipped)', spell: 'Effects (while the spell lasts; instant spells apply them once)', status: 'Effects (while active)' }[a.kind]}</div>
-          <BlocksEditor value={a.effects} onChange={(effects) => set({ effects })} presets={presets} />
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">{{ feature: 'Scripts (while enabled)', item: 'Scripts (while equipped)', spell: 'Scripts (while the spell lasts)', status: 'Scripts (while active)' }[a.kind]}</div>
+          <ScriptsEditor value={a.scripts} onChange={(scripts) => set({ scripts })} />
 
           {(a.kind === 'feature' || a.kind === 'item') && (() => {
             /** Activation ids double as pool ids, so a new id of either sort must dodge both lists. */
@@ -81,8 +76,8 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
             <div className="mt-4">
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Activations (things you do with it)</div>
               <div className="space-y-3">
-                {a.activations.map((act, i) => <ActivationEditor key={i} value={act} presets={presets} onChange={(n) => set({ activations: a.activations.map((x, j) => (j === i ? n : x)) } as Partial<Ability>)} onRemove={() => set({ activations: a.activations.filter((_, j) => j !== i) } as Partial<Ability>)} />)}
-                <Button onClick={() => set({ activations: [...a.activations, { id: uniqueId(a.id, takenIds), action: 'standard', cost: [], onUse: [], whileActive: [] }] } as Partial<Ability>)}>+ add activation</Button>
+                {a.activations.map((act, i) => <ActivationEditor key={i} value={act} onChange={(n) => set({ activations: a.activations.map((x, j) => (j === i ? n : x)) } as Partial<Ability>)} onRemove={() => set({ activations: a.activations.filter((_, j) => j !== i) } as Partial<Ability>)} />)}
+                <Button onClick={() => set({ activations: [...a.activations, { id: uniqueId(a.id, takenIds), action: 'standard', cost: [], scripts: [] }] } as Partial<Ability>)}>+ add activation</Button>
               </div>
               <Field label="Shared pools (only when several activations or records spend the same charges)">
                 {a.pools.map((p, i) => (
@@ -187,7 +182,7 @@ function SpellFields({ a, set }: { a: Spell; set: (p: Partial<Ability>) => void 
     <div className="mb-3 grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 p-2">
       <Field label="Spell level"><input className={inputCls} inputMode="numeric" value={a.level ?? ''} onChange={(e) => set({ level: e.target.value === '' ? undefined : Number(e.target.value) })} /></Field>
       <Field label="Casting action"><select className={inputCls} value={typeof a.castingAction === 'string' ? a.castingAction : 'minutes'} onChange={(e) => set({ castingAction: e.target.value === 'minutes' ? { minutes: 1 } : (e.target.value as 'standard') })}>{['free', 'swift', 'immediate', 'move', 'standard', 'fullRound', 'minutes'].map((k) => <option key={k} value={k}>{k}</option>)}</select></Field>
-      <div className="col-span-2"><Field label="Duration (blank = instant)">{a.duration !== undefined ? <div className="flex items-center gap-2"><DurationPicker value={a.duration} onChange={(d) => set({ duration: d })} /><button type="button" className="text-xs text-zinc-500" onClick={() => set({ duration: undefined })}>clear</button></div> : <button type="button" className="text-sm text-amber-300" onClick={() => set({ duration: { rounds: 10 } })}>+ set duration</button>}</Field></div>
+      <div className="col-span-2"><Field label="Duration (blank = instant)">{a.duration !== undefined ? <div className="flex items-center gap-2"><DurationPicker value={a.duration} onChange={(d) => set({ duration: d })} /><button type="button" className="text-xs text-zinc-500" onClick={() => set({ duration: undefined })}>clear</button></div> : <button type="button" className="text-sm text-amber-300" onClick={() => set({ duration: 10 * ROUND })}>+ set duration</button>}</Field></div>
     </div>
   );
 }
@@ -196,7 +191,7 @@ function StatusFields({ a, set }: { a: Status; set: (p: Partial<Ability>) => voi
   return (
     <div className="mb-3 rounded-2xl border border-zinc-800 p-2">
       <div className="mb-2 flex gap-1"><Chip tone="green" active={!a.harmful} onClick={() => set({ harmful: false })}>buff</Chip><Chip tone="red" active={a.harmful} onClick={() => set({ harmful: true })}>harmful condition</Chip></div>
-      <Field label="Default duration (blank = until removed)">{a.duration !== undefined ? <div className="flex items-center gap-2"><DurationPicker value={a.duration} onChange={(d) => set({ duration: d })} /><button type="button" className="text-xs text-zinc-500" onClick={() => set({ duration: undefined })}>clear</button></div> : <button type="button" className="text-sm text-amber-300" onClick={() => set({ duration: { rounds: 10 } })}>+ set duration</button>}</Field>
+      <Field label="Default duration (blank = until removed)">{a.duration !== undefined ? <div className="flex items-center gap-2"><DurationPicker value={a.duration} onChange={(d) => set({ duration: d })} /><button type="button" className="text-xs text-zinc-500" onClick={() => set({ duration: undefined })}>clear</button></div> : <button type="button" className="text-sm text-amber-300" onClick={() => set({ duration: 10 * ROUND })}>+ set duration</button>}</Field>
     </div>
   );
 }

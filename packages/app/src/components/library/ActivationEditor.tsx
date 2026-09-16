@@ -1,15 +1,14 @@
 import type { Activation, Cost } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Chip, Field, inputCls } from '../ui';
-import { DurationPicker } from './EffectEditor';
-import { BlocksEditor } from './BlocksEditor';
-import type { Preset } from './ConditionEditor';
+import { DurationPicker } from './DurationPicker';
+import { ScriptsEditor } from './ScriptsEditor';
 
 const ACTIONS = ['free', 'swift', 'immediate', 'move', 'standard', 'fullRound'] as const;
 const RESETS = ['round', 'encounter', 'day', 'never'] as const;
 const COST_LABELS: Record<Cost['kind'], string> = { charge: 'from a pool', hp: 'hit points', item: 'consume an item', spellSlot: 'spell slot', gold: 'gold', xp: 'XP' };
 
-export function ActivationEditor({ value, onChange, onRemove, presets }: { value: Activation; onChange: (a: Activation) => void; onRemove: () => void; presets?: Preset[] }) {
+export function ActivationEditor({ value, onChange, onRemove }: { value: Activation; onChange: (a: Activation) => void; onRemove: () => void }) {
   const abilities = useStore((s) => s.library.abilities);
   const set = (patch: Partial<Activation>) => onChange({ ...value, ...patch });
   const spells = Object.values(abilities).filter((a) => a.kind === 'spell').sort((a, b) => a.name.localeCompare(b.name));
@@ -60,12 +59,9 @@ export function ActivationEditor({ value, onChange, onRemove, presets }: { value
       <Field label="Lasts (blank = instant; 'this attack' shows as a pre-roll chip)">
         {value.duration !== undefined ? <div className="flex items-center gap-2"><DurationPicker value={value.duration} onChange={(d) => set({ duration: d })} /><button type="button" className="text-xs text-zinc-500" onClick={() => set({ duration: undefined })}>clear</button></div> : <button type="button" className="text-sm text-amber-300" onClick={() => set({ duration: 'untilMyNextTurn' })}>+ set duration</button>}
       </Field>
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">When used</div>
-      <BlocksEditor value={value.onUse} onChange={(b) => set({ onUse: b })} showTrigger={false} family="when" presets={presets} addLabel="+ add on-use block" />
-      {value.duration !== undefined && <>
-        <div className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">While active</div>
-        <BlocksEditor value={value.whileActive} onChange={(b) => set({ whileActive: b })} showTrigger={false} family="while" presets={presets} addLabel="+ add while-active block" />
-      </>}
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">Scripts</div>
+      <p className="mb-2 text-xs text-zinc-500">`use` scripts run once when the activation is used; `always` scripts apply for its duration.</p>
+      <ScriptsEditor value={value.scripts} onChange={(scripts) => set({ scripts })} addLabel="+ add script" />
     </div>
   );
 }
