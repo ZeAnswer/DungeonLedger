@@ -84,3 +84,25 @@ test('script preview: probes the script against the live character', async ({ pa
   await page.keyboard.type("need(false, 'never'); bonus('attack', 2)");
   await expect(preview).toContainText('needs never');
 });
+
+test('call form: a stored function call round-trips through the form', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Library' }).click();
+  await page.getByRole('button', { name: '+ New feature' }).click();
+  const sheet = page.locator('.fixed.inset-0');
+  await sheet.getByLabel('Name').fill('Test Caller');
+  await sheet.getByLabel(/^Id/).fill('test-caller');
+  await sheet.getByRole('button', { name: '+ add script' }).click();
+  await sheet.getByRole('button', { name: 'call a function' }).click();
+  await sheet.locator('[data-role="call-fn"]').selectOption('favoredEnemy');
+  await sheet.locator('[data-role="arg-amount"] input').fill('4');
+  await sheet.locator('[data-role="arg-types"] button', { hasText: 'ƒx' }).click();
+  await sheet.locator('[data-role="arg-types"] input').fill('params.types');
+  await sheet.getByRole('button', { name: 'JSON' }).click();
+  const json = JSON.parse(await sheet.locator('textarea').inputValue());
+  expect(json.scripts[0].call).toEqual({ fn: 'favoredEnemy', args: { types: { k: 'expr', v: 'params.types' }, amount: { k: 'lit', v: 4 } } });
+  // and back: reopening the form shows the same values
+  await sheet.getByRole('button', { name: 'Feature' }).click();
+  await expect(sheet.locator('[data-role="arg-amount"] input')).toHaveValue('4');
+  await expect(sheet.locator('[data-role="arg-types"] input')).toHaveValue('params.types');
+});
