@@ -1,4 +1,4 @@
-import { activationsOf, poolsOf, type Ability, type AttackKind, type AttackProfile, type Battle, type Character, type ClassTable, type Combatant, type Expr, type ResetOn, type Skill, type Tag } from './schema';
+import { activationsOf, poolsOf, type Ability, type AttackKind, type AttackProfile, type Battle, type Character, type ClassTable, type Combatant, type Expr, type FunctionDef, type ResetOn, type Skill, type Tag, type VarValue } from './schema';
 export type { ResetOn };
 
 export type Library = {
@@ -7,6 +7,8 @@ export type Library = {
   skills: Record<string, Skill>;
   classTables: Record<string, ClassTable>;
   xpTable: { level: number; xp: number }[];
+  functions: Record<string, FunctionDef>;
+  globals: Record<string, VarValue>;
 };
 
 export type AttackCtx = {

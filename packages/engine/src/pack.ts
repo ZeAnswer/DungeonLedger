@@ -12,7 +12,7 @@ export type MergeReport = {
 };
 
 export function emptyLibrary(): LibraryWithMeta {
-  return { abilities: {}, tags: {}, skills: {}, classTables: {}, xpTable: [], meta: {} };
+  return { abilities: {}, tags: {}, skills: {}, classTables: {}, xpTable: [], functions: {}, globals: {}, meta: {} };
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -21,7 +21,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export function mergePack(library: Library & { meta?: Record<string, PackItemMeta> }, pack: Pack, opts: { overwrite?: boolean } = {}): { library: LibraryWithMeta; report: MergeReport } {
   const lib: LibraryWithMeta = {
     abilities: { ...library.abilities }, tags: { ...library.tags }, skills: { ...library.skills },
-    classTables: { ...library.classTables }, xpTable: [...library.xpTable], meta: { ...(library.meta ?? {}) },
+    classTables: { ...library.classTables }, xpTable: [...library.xpTable],
+    functions: { ...library.functions }, globals: { ...library.globals }, meta: { ...(library.meta ?? {}) },
     ...(library as { monsters?: Record<string, unknown>; characters?: Record<string, unknown> }).monsters ? { monsters: { ...(library as { monsters?: Record<string, unknown> }).monsters } } : {},
     ...(library as { characters?: Record<string, unknown> }).characters ? { characters: { ...(library as { characters?: Record<string, unknown> }).characters } } : {},
   } as LibraryWithMeta;
@@ -63,5 +64,7 @@ export function libraryToPack(library: Library & { monsters?: Record<string, Pac
     monsters: Object.values(library.monsters ?? {}),
     characters: Object.values(library.characters ?? {}),
     xpTable: library.xpTable,
+    functions: Object.values(library.functions ?? {}),
+    globals: library.globals ?? {},
   };
 }

@@ -1,66 +1,39 @@
-import { AbilitySchema, PackSchema, ConditionSchema, BattleSchema, activationsOf, poolsOf } from '../src/schema';
+import { AbilitySchema, PackSchema, ScriptSchema, FunctionDefSchema, DurationSchema, BattleSchema, activationsOf } from '../src/schema';
 
-const woodlandArcher = {
-  id: 'woodland-archer', name: 'Woodland Archer', kind: 'feature',
-  effects: [{ id: 'adjust-for-range', label: 'Adjust for Range', when: { all: [{ compare: 'attack.kind', op: '=', value: 'ranged' }, { history: { event: 'miss', vs: 'current', scope: 'thisRound' } }] }, do: [{ verb: 'modify', to: 'attack', value: 4 }] }],
-};
-
-test('accepts a well-formed feature with defaults', () => {
-  const a = AbilitySchema.parse(woodlandArcher);
-  expect(a.kind).toBe('feature');
-  if (a.kind !== 'feature') throw new Error('kind');
-  expect(a.acquired).toEqual({ kind: 'feat' });
-  expect(a.activations).toEqual([]);
-  expect(a.pools).toEqual([]);
-  expect(a.enabledByDefault).toBe(true);
-  expect(a.effects[0]).toMatchObject({ trigger: 'always' });
+test('a feature carries scripts; always cannot mix with events; call form validates', () => {
+  const a = AbilitySchema.parse({ id: 'pbs', name: 'Point Blank Shot', kind: 'feature', scripts: [{ id: 's1', source: "if (attack.isRanged && target.within(30)) bonus(['attack','damage'], 1)" }] });
+  if (a.kind !== 'feature') throw new Error();
+  expect(a.scripts[0]).toMatchObject({ events: ['always'], enabled: true, priority: 0 });
+  expect(ScriptSchema.safeParse({ id: 'x', events: ['always', 'hit'], source: '' }).success).toBe(false);
+  expect(ScriptSchema.safeParse({ id: 'x', events: ['hit', 'crit'], source: 'target.mark("flanked", UNTIL_MY_NEXT_TURN)' }).success).toBe(true);
+  expect(ScriptSchema.safeParse({ id: 'x', events: ['custom:rage-ended'], source: '' }).success).toBe(true);
+  expect(ScriptSchema.safeParse({ id: 'x', events: ['bogus'], source: '' }).success).toBe(false);
+  expect(ScriptSchema.parse({ id: 'c', call: { fn: 'favoredEnemy', args: { types: { k: 'ref', v: 'params.types' }, amount: { k: 'lit', v: 4 } } } }).call?.fn).toBe('favoredEnemy');
 });
 
-test('item requires item meta; activation defaults; charges is optional (at will)', () => {
-  expect(AbilitySchema.safeParse({ id: 'x', name: 'X', kind: 'item' }).success).toBe(false);
-  const hog = AbilitySchema.parse({
-    id: 'hand-of-glory', name: 'Hand of Glory', kind: 'item', item: { category: 'wondrous', slot: 'neck' },
-    effects: [{ id: 'slot', do: [{ verb: 'slot', slot: 'ring' }] }],
-    activations: [
-      { id: 'hog-daylight', name: 'Daylight', charges: { max: 1 }, spell: 'daylight' },
-      { id: 'hog-torch', name: 'Torch', action: 'free' },
-    ],
-  });
-  expect(activationsOf(hog)[0]).toMatchObject({ id: 'hog-daylight', action: 'standard', charges: { max: 1, resetOn: 'day' }, cost: [], onUse: [], whileActive: [] });
-  expect(activationsOf(hog)[1]!.charges).toBeUndefined();
-  expect(poolsOf(hog)).toEqual([]);
+test('activations carry scripts instead of onUse/whileActive; old keys are rejected', () => {
+  const boots = AbilitySchema.parse({ id: 'boots', name: 'Boots', kind: 'item', item: { category: 'wondrous', slot: 'feet' }, activations: [{ id: 'boots-rounds', charges: { max: 10 }, duration: 6, scripts: [{ id: 'h', source: 'extraAttack(1); bonus(["attack","ac","save.ref"], 1, "dodge"); bonus("speed", 30)' }] }] });
+  expect(activationsOf(boots)[0]!.scripts).toHaveLength(1);
+  expect(AbilitySchema.safeParse({ id: 'b', name: 'B', kind: 'feature', effects: [] }).success).toBe(false);
+  expect(AbilitySchema.safeParse({ id: 'b', name: 'B', kind: 'item', item: { category: 'gear' }, activations: [{ id: 'a', onUse: [] }] }).success).toBe(false);
 });
 
-test('spell and status carry only their own fields', () => {
-  const s = AbilitySchema.parse({ id: 'daylight', name: 'Daylight', kind: 'spell', level: 3, duration: { minutes: 50 } });
-  expect(s).toMatchObject({ kind: 'spell', castingAction: 'standard', level: 3 });
-  expect(AbilitySchema.safeParse({ id: 'd', name: 'D', kind: 'spell', activations: [] }).success).toBe(false);
-  const st = AbilitySchema.parse({ id: 'shaken', name: 'Shaken', kind: 'status', harmful: true, effects: [{ id: 's', do: [{ verb: 'modify', to: 'attack', value: -2 }] }] });
-  expect(st).toMatchObject({ kind: 'status', harmful: true });
-  expect(activationsOf(st)).toEqual([]);
+test('durations are seconds or a sentinel', () => {
+  expect(DurationSchema.parse(50 * 60)).toBe(3000);
+  expect(DurationSchema.parse('untilMyNextTurn')).toBe('untilMyNextTurn');
+  expect(DurationSchema.safeParse({ rounds: 3 }).success).toBe(false);
+  expect(DurationSchema.safeParse('endOfRound').success).toBe(false);
 });
 
-test('rejects dropped vocabulary: origin, binding, old durations, old resets, old triggers', () => {
-  expect(AbilitySchema.safeParse({ ...woodlandArcher, origin: 'feat' }).success).toBe(false);
-  expect(AbilitySchema.safeParse({ ...woodlandArcher, binding: 'none' }).success).toBe(false);
-  expect(AbilitySchema.safeParse({ id: 'h', name: 'H', kind: 'status', duration: 'endOfRound' }).success).toBe(false);
-  expect(AbilitySchema.safeParse({ id: 'i', name: 'I', kind: 'item', item: { category: 'gear' }, activations: [{ id: 'a', charges: { max: 1, resetOn: 'rest' } }] }).success).toBe(false);
-  expect(AbilitySchema.safeParse({ ...woodlandArcher, effects: [{ id: 'e', trigger: 'onUse', do: [{ verb: 'note', text: 'x' }] }] }).success).toBe(false);
+test('function definitions, globals and widened vars', () => {
+  const f = FunctionDefSchema.parse({ id: 'trophy', name: 'Trophy bonus', params: [{ name: 'stat', type: 'stat' }, { name: 'base', type: 'number', default: 2 }], source: 'bonus(stat, base * vars.trophyMultiplier, "enhancement")' });
+  expect(f.params[1]).toMatchObject({ required: false, default: 2 });
+  const p = PackSchema.parse({ id: 'p', name: 'P', version: 1, functions: [f], globals: { season: 'winter', dm: true, roundsPerMinute: 10 } });
+  expect(p.globals.season).toBe('winter');
+  expect(PackSchema.parse({ id: 'q', name: 'Q', version: 1, characters: [{ id: 'c', name: 'C', abilityScores: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, hp: { max: 1, current: 1 }, vars: { flag: true, note: 'x' } }] }).characters[0]!.vars).toEqual({ flag: true, note: 'x' });
 });
 
-test('rejects unknown condition forms and bad selectors', () => {
-  expect(ConditionSchema.safeParse({ kind: 'target.isRed' }).success).toBe(false);
-  expect(ConditionSchema.safeParse({ is: 'nowhere.x' }).success).toBe(false);
-  expect(ConditionSchema.safeParse({ is: 'target.tag.red' }).success).toBe(true);
-});
-
-test('battle has statuses and buffs carry activation id and expiry', () => {
-  const b = BattleSchema.parse({ id: 'b', startedAt: 'now', activeBuffs: [{ instanceId: 'x', abilityId: 'boots', activationId: 'boots-rounds', expires: 'untilMyNextTurn', remainingRounds: 1 }] });
-  expect(b.statuses).toEqual([]);
-  expect(b.activeBuffs[0]).toMatchObject({ activationId: 'boots-rounds', expires: 'untilMyNextTurn', suppressed: false });
-});
-
-test('pack parses v3 records', () => {
-  const r = PackSchema.safeParse({ id: 'p', name: 'P', version: 1, tags: [{ id: 'aquatic', label: 'Aquatic', category: 'habitat' }], abilities: [woodlandArcher] });
-  expect(r.success).toBe(true);
+test('battle undo records var changes', () => {
+  const b = BattleSchema.parse({ id: 'b', startedAt: 'now', log: [{ id: 'e', round: 1, seq: 1, kind: 'use', undo: { vars: [{ scope: 'global', name: 'x', before: 1 }] } }] });
+  expect(b.log[0]!.undo!.vars[0]).toEqual({ scope: 'global', name: 'x', before: 1 });
 });

@@ -39,29 +39,13 @@ export const StatIdSchema = z.string().regex(
 );
 export type StatId = z.infer<typeof StatIdSchema>;
 
-export const DurationSchema = z.union([
-  z.literal('thisAttack'), z.literal('thisTurn'), z.literal('untilMyNextTurn'),
-  z.object({ rounds: z.union([z.number().int().positive(), z.string()]) }), z.object({ minutes: z.number().positive() }),
-  z.literal('encounter'), z.literal('untilRemoved'),
-]);
+export const DurationSentinelSchema = z.enum(['thisAttack', 'untilMyNextTurn', 'encounter', 'untilRemoved']);
+/** Seconds (ROUND = 6) or a sentinel. */
+export const DurationSchema = z.union([z.number().nonnegative(), DurationSentinelSchema]);
 export type Duration = z.infer<typeof DurationSchema>;
 
 export const ResetOnSchema = z.enum(['round', 'encounter', 'day', 'never']);
 export type ResetOn = z.infer<typeof ResetOnSchema>;
-
-// ---------- selectors ----------
-/**
- * Dot-path naming a piece of state, shared by conditions, effect targets and expressions. Domains:
- * self.stat.<statId> · self.skill.<id>.(ranks|total|classSkill) · self.class.<id>.level · self.tag.<tag> · self.ability.<id>.(enabled|active|usesLeft|used)
- * self.equipped.(item.<id>|slot.<slot>|category.<cat>|count.tag.<tag>) · self.param.<name> · self.var.<name> · self.hp.(current|max)
- * target.(exists|tags|type|size|hurt|distance|revealed|tag.<tag>|condition.<tag>) · attack.(exists|kind|index|isFirstThisRound|mode|weapon.id|weapon.category|weapon.tag.<tag>)
- * battle.(round|toggle.<id>|prompt.<id>|tag.<tag>) · flag.<name>
- */
-export const SelectorSchema = z.string().regex(/^(self|target|attack|battle|flag|history)(\.[A-Za-z0-9_-]+)+$/, 'selector must be a dot path like target.tag.aquatic');
-export type Selector = z.infer<typeof SelectorSchema>;
-
-export const CompareOpSchema = z.enum(['=', '!=', '<', '<=', '>', '>=']);
-export type CompareOp = z.infer<typeof CompareOpSchema>;
 
 export const HistoryFilterSchema = z.object({
   event: z.enum(['hit', 'miss', 'crit', 'attack', 'used', 'activated', 'damaged', 'moved']),
@@ -69,84 +53,40 @@ export const HistoryFilterSchema = z.object({
   /** current = the selected target; sameCategory = any target sharing the current target's tag in `category` */
   vs: z.enum(['current', 'any', 'sameCategory']).default('current'),
   category: z.string().optional(),
-  scope: z.enum(['thisAttackSequence', 'thisRound', 'lastRound', 'encounter', 'day']).default('thisRound'),
+  scope: z.enum(['attack', 'round', 'lastRound', 'encounter', 'day']).default('round'),
   abilityId: z.string().optional(),
 });
 export type HistoryFilter = z.infer<typeof HistoryFilterSchema>;
 
-// ---------- conditions ----------
-export type Condition =
-  | { all: Condition[] }
-  | { any: Condition[] }
-  | { none: Condition[] }
-  | { not: Condition }
-  | { count: Condition[]; atLeast: number }
-  | { is: Selector }
-  | { exists: Selector }
-  | { compare: Selector; op: CompareOp; value: number | string }
-  | { in: Selector; set?: string[]; param?: string }
-  | { history: HistoryFilter; op?: CompareOp; value?: number };
-
-export const ConditionSchema: z.ZodType<Condition> = z.lazy(() =>
-  z.union([
-    z.object({ all: z.array(ConditionSchema) }).strict(),
-    z.object({ any: z.array(ConditionSchema) }).strict(),
-    z.object({ none: z.array(ConditionSchema) }).strict(),
-    z.object({ not: ConditionSchema }).strict(),
-    z.object({ count: z.array(ConditionSchema), atLeast: z.number().int() }).strict(),
-    z.object({ is: SelectorSchema }).strict(),
-    z.object({ exists: SelectorSchema }).strict(),
-    z.object({ compare: SelectorSchema, op: CompareOpSchema, value: z.union([z.number(), z.string()]) }).strict(),
-    z.object({ in: SelectorSchema, set: z.array(z.string()).optional(), param: z.string().optional() }).strict(),
-    z.object({ history: HistoryFilterSchema, op: CompareOpSchema.optional(), value: z.number().optional() }).strict(),
-  ]),
-) as z.ZodType<Condition>;
-
-export const ALWAYS: Condition = { all: [] };
-
-// ---------- effects (verbs) ----------
-export const TableValueSchema = z.object({
-  prompt: z.string(),
-  per: z.string().optional(),
-  table: z.array(z.object({ upTo: z.number().optional(), value: z.number() })).min(1),
-});
-export const ValueSchema = z.union([ExprSchema, TableValueSchema]);
-export type Value = z.infer<typeof ValueSchema>;
-
-export const EffectSchema = z.discriminatedUnion('verb', [
-  z.object({ verb: z.literal('modify'), to: StatIdSchema, value: ValueSchema, type: BonusTypeSchema.default('untyped'), mode: z.enum(['add', 'set', 'multiply']).default('add'), attackKind: AttackKindSchema.optional() }),
-  z.object({ verb: z.literal('dice'), dice: z.string().regex(/^\d+d\d+$/), damageType: z.string().optional(), label: z.string().optional(), attackKind: AttackKindSchema.optional() }),
-  z.object({ verb: z.literal('flag'), flag: z.string(), value: z.boolean().default(true) }),
-  z.object({ verb: z.literal('tag'), to: z.enum(['self', 'target', 'allEnemies']), tag: z.string(), duration: DurationSchema.default('untilRemoved') }),
-  z.object({ verb: z.literal('grant'), ability: z.string(), duration: DurationSchema.optional() }),
-  z.object({ verb: z.literal('suppress'), ability: z.string() }),
-  z.object({ verb: z.literal('resource'), id: z.string(), op: z.enum(['consume', 'restore', 'set']).default('consume'), amount: ExprSchema.default(1) }),
-  z.object({
-    verb: z.literal('attack'),
-    mode: z.object({ id: z.string(), label: z.string(), base: z.enum(['single', 'full']), note: z.string().optional() }).optional(),
-    extraAttacks: z.number().int().default(0), penaltyAll: z.number().int().default(0), appliesToBase: z.enum(['single', 'full', 'any']).optional(),
-    naturalAttack: z.object({ name: z.string(), dice: z.string(), count: z.number().int().positive().default(1), attackBonus: z.number().int().default(0) }).optional(),
-    attackKind: AttackKindSchema.optional(),
-  }),
-  z.object({ verb: z.literal('slot'), slot: SlotIdSchema, count: z.number().int().default(1) }),
-  z.object({ verb: z.literal('hp'), op: z.enum(['damage', 'heal', 'temp']), amount: ExprSchema }),
-  z.object({ verb: z.literal('prompt'), id: z.string(), label: z.string().optional(), per: z.string().optional(), remember: z.enum(['encounter', 'day']).default('encounter') }),
-  z.object({ verb: z.literal('note'), text: z.string(), dc: ExprSchema.optional() }),
-  z.object({ verb: z.literal('reveal') }),
+// ---------- scripts ----------
+export const ScriptEventSchema = z.string().regex(/^(always|hit|miss|crit|damaged|roundStart|roundEnd|use|equip|unequip|custom:[A-Za-z0-9_-]+)$/, 'unknown event');
+export type ScriptEvent = z.infer<typeof ScriptEventSchema>;
+export const ArgValueSchema = z.discriminatedUnion('k', [
+  z.object({ k: z.literal('lit'), v: z.union([z.number(), z.string(), z.boolean(), z.array(z.string())]) }),
+  z.object({ k: z.literal('ref'), v: z.string().min(1) }),
+  z.object({ k: z.literal('expr'), v: z.string().min(1) }),
 ]);
-export type Effect = z.infer<typeof EffectSchema>;
-
-export const TriggerSchema = z.enum(['always', 'onHit', 'onMiss', 'onCrit', 'onDamaged', 'onRoundStart', 'onRoundEnd']);
-export type Trigger = z.infer<typeof TriggerSchema>;
-
-export const EffectBlockSchema = z.object({
-  id: z.string(),
+export type ArgValue = z.infer<typeof ArgValueSchema>;
+export const ScriptSchema = z.object({
+  id: z.string().min(1),
   label: z.string().optional(),
-  trigger: TriggerSchema.default('always'),
-  when: ConditionSchema.default(ALWAYS),
-  do: z.array(EffectSchema).min(1),
+  events: z.array(ScriptEventSchema).min(1).default(['always']),
+  source: z.string().default(''),
+  call: z.object({ fn: z.string().min(1), args: z.record(ArgValueSchema).default({}) }).optional(),
+  enabled: z.boolean().default(true),
+  priority: z.number().int().default(0),
+}).refine((s) => !(s.events.includes('always') && s.events.length > 1), { message: "'always' cannot be combined with events" });
+export type Script = z.infer<typeof ScriptSchema>;
+
+export const ParamTypeSchema = z.enum(['number', 'string', 'bool', 'dice', 'path', 'ref', 'stat', 'bonusType', 'duration', 'tag', 'tags', 'recordId', 'event']);
+export const FunctionDefSchema = z.object({
+  id: z.string().min(1), name: z.string().min(1), description: z.string().optional(),
+  params: z.array(z.object({ name: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), type: ParamTypeSchema, label: z.string().optional(), default: z.union([z.number(), z.string(), z.boolean(), z.array(z.string())]).optional(), required: z.boolean().default(false) })).default([]),
+  source: z.string(),
 });
-export type EffectBlock = z.infer<typeof EffectBlockSchema>;
+export type FunctionDef = z.infer<typeof FunctionDefSchema>;
+export const VarValueSchema = z.union([z.number(), z.string(), z.boolean()]);
+export type VarValue = z.infer<typeof VarValueSchema>;
 
 // ---------- activations ----------
 export const ActionSchema = z.union([z.enum(['free', 'swift', 'immediate', 'move', 'standard', 'fullRound']), z.object({ minutes: z.number().positive() }), z.object({ hours: z.number().positive() })]);
@@ -179,9 +119,8 @@ export const ActivationSchema = z.object({
   duration: DurationSchema.optional(),
   /** Casts this library spell: its effects (and duration, unless overridden) apply. */
   spell: z.string().optional(),
-  onUse: z.array(EffectBlockSchema).default([]),
-  whileActive: z.array(EffectBlockSchema).default([]),
-});
+  scripts: z.array(ScriptSchema).default([]),
+}).strict();
 export type Activation = z.infer<typeof ActivationSchema>;
 
 export const ParamDefSchema = z.discriminatedUnion('kind', [
@@ -234,8 +173,8 @@ const recordBase = {
   text: z.string().optional(),
   sourceRef: z.string().optional(),
   todo: z.string().optional(),
-  /** Passive blocks: apply while the feature is enabled / the item equipped / the status or spell active. */
-  effects: z.array(EffectBlockSchema).default([]),
+  /** Scripts: run on the events they declare while the feature is enabled / the item equipped / the status or spell active. */
+  scripts: z.array(ScriptSchema).default([]),
 };
 
 export const FeatureSchema = z.object({
@@ -409,8 +348,8 @@ export const CharacterSchema = z.object({
   })).default([]),
   /** Free-text history: level-ups, HP changes, edits. Newest last. */
   journal: z.array(z.object({ at: z.string(), kind: z.enum(['levelUp', 'hp', 'xp', 'edit', 'rest', 'note']), text: z.string() })).default([]),
-  /** Free numeric variables usable in pack expressions, e.g. favoredEnemyBonus1, trophyMultiplier. */
-  vars: z.record(z.number()).default({}),
+  /** Free variables usable in pack scripts/expressions, e.g. favoredEnemyBonus1, trophyMultiplier. */
+  vars: z.record(VarValueSchema).default({}),
   notes: z.string().optional(),
 });
 export type Character = z.infer<typeof CharacterSchema>;
@@ -430,6 +369,8 @@ const PackInnerSchema = z.object({
   classTables: z.array(ClassTableSchema).default([]),
   characters: z.array(CharacterSchema).default([]),
   xpTable: XpTableSchema.optional(),
+  functions: z.array(FunctionDefSchema).default([]),
+  globals: z.record(VarValueSchema).default({}),
 });
 /** Packs written in the v1 or v2 format are converted on parse. */
 export const PackSchema = z.preprocess((raw) => convertPack(raw), PackInnerSchema);
@@ -460,6 +401,8 @@ export const ActiveBuffSchema = z.object({
   owner: z.string().default('self'),
   remainingRounds: z.number().int().optional(),
   expires: DurationSchema.optional(),
+  /** The round the buff started; set by the engine. */
+  appliedRound: z.number().int().optional(),
   suppressed: z.boolean().default(false),
   label: z.string().optional(),
 });
@@ -491,6 +434,7 @@ export const LogEventSchema = z.object({
     resources: z.array(z.object({ id: z.string(), delta: z.number() })).default([]),
     buffs: z.array(z.string()).default([]),
     hp: z.number().optional(),
+    vars: z.array(z.object({ scope: z.enum(['character', 'global']), name: z.string(), before: VarValueSchema.optional() })).default([]),
   }).optional(),
 });
 export type LogEvent = z.infer<typeof LogEventSchema>;

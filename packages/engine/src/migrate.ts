@@ -2,7 +2,7 @@
  * Converts rules written in the v1 format (kind-based conditions/effects, `source`, `resources.per`) to v2
  * (selectors + verbs + envelope). Idempotent: v2 input is returned unchanged.
  */
-import type { Condition, Duration, Effect } from './schema';
+import type { Duration } from './schema';
 
 type Any = Record<string, unknown>;
 const isObj = (x: unknown): x is Any => !!x && typeof x === 'object' && !Array.isArray(x);
@@ -21,9 +21,9 @@ export function convertDuration(d: unknown): Duration | undefined {
   return d as Duration;
 }
 
-export function convertCondition(c: unknown): Condition {
+export function convertCondition(c: unknown): Any {
   if (!isObj(c)) return { all: [] };
-  if (!('kind' in c)) return c as Condition; // already v2
+  if (!('kind' in c)) return c as Any; // already v2
   const k = c.kind as string;
   const of = (c.of as unknown[]) ?? [];
   switch (k) {
@@ -58,7 +58,7 @@ export function convertCondition(c: unknown): Condition {
     case 'toggle': return { is: `battle.toggle.${c.id}` };
     case 'prompt': return c.atLeast !== undefined ? { compare: `battle.prompt.${c.id}`, op: '>=', value: c.atLeast as number } : { exists: `battle.prompt.${c.id}` };
     case 'round': {
-      const parts: Condition[] = [];
+      const parts: Any[] = [];
       if (c.atLeast !== undefined) parts.push({ compare: 'battle.round', op: '>=', value: c.atLeast as number });
       if (c.atMost !== undefined) parts.push({ compare: 'battle.round', op: '<=', value: c.atMost as number });
       return parts.length === 1 ? parts[0]! : { all: parts };
@@ -68,9 +68,9 @@ export function convertCondition(c: unknown): Condition {
   }
 }
 
-export function convertEffect(e: unknown): Effect {
+export function convertEffect(e: unknown): Any {
   if (!isObj(e)) throw new Error('bad effect');
-  if ('verb' in e) return e as Effect;
+  if ('verb' in e) return e as Any;
   const k = e.kind as string;
   switch (k) {
     case 'bonus': return { verb: 'modify', to: e.to as string, value: e.value as number | string, type: (e.bonusType as never) ?? 'untyped', mode: 'add', ...(e.attackKind ? { attackKind: e.attackKind as 'ranged' } : {}) };
@@ -262,4 +262,10 @@ export function convertBattle(raw: unknown, lookup: (id: string) => { kind: stri
     });
   }
   return out;
+}
+
+// ---------- v3 → v4 ----------
+/** Stub: v3→v4 (scripts replace effect blocks) lands in Task 5. v4 input is returned as-is. */
+export function convertToV4(a: unknown): unknown {
+  return a;
 }
