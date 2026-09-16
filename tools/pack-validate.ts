@@ -46,7 +46,12 @@ const walk = (c: unknown): void => {
 const resourceIds = new Map<string, string>(); // activation ids and pool ids share one namespace (findResourceDef looks in both)
 for (const a of Object.values(lib.abilities)) {
   owner = `ability ${a.id}`;
-  const blocks = [...a.effects, ...activationsOf(a).flatMap((x) => [...x.onUse, ...x.whileActive])];
+  // Effect blocks are the v3 shape: a pack still written in v3 is converted on parse, so these lists
+  // are empty for anything already printed to scripts. The v4 cross-reference walk (over script
+  // sources) lands with the regenerated packs.
+  type V3Blocks = { effects?: { when?: unknown; do: Record<string, string>[] }[]; onUse?: never[]; whileActive?: never[] };
+  const v3 = a as unknown as V3Blocks;
+  const blocks = [...(v3.effects ?? []), ...activationsOf(a).flatMap((x) => { const y = x as unknown as V3Blocks; return [...(y.onUse ?? []), ...(y.whileActive ?? [])]; })];
   for (const b of blocks) {
     walk(b.when);
     for (const e of b.do) {
@@ -87,7 +92,8 @@ for (const ch of Object.values(characters)) {
     }
     for (const act of activationsOf(a)) { if (act.charges) { try { evalExpr(act.charges.max, vars); } catch (e) { problems.push(`${a.id}/${act.id}: ${(e as Error).message}`); } } }
     for (const p of poolsOf(a)) { try { evalExpr(p.max, vars); } catch (e) { problems.push(`${a.id} pool ${p.id}: ${(e as Error).message}`); } }
-    for (const b of a.effects) for (const e of b.do) if (e.verb === 'modify' && typeof e.value === 'string') { try { evalExpr(e.value, vars); } catch (err) { problems.push(`${a.id}/${b.id}: ${(err as Error).message}`); } }
+    // v3 only (see above): expressions in v4 scripts are checked when the script runs.
+    for (const b of ((a as unknown as { effects?: { id: string; do: Record<string, string>[] }[] }).effects ?? [])) for (const e of b.do) if (e.verb === 'modify' && typeof e.value === 'string') { try { evalExpr(e.value, vars); } catch (err) { problems.push(`${a.id}/${b.id}: ${(err as Error).message}`); } }
   }
   // smoke: every stat and attack mode resolves
   for (const stat of ['ac', 'ac.touch', 'ac.flatFooted', 'save.fort', 'save.ref', 'save.will', 'init', ...Object.keys(ch.skills).map((s) => `skill.${s}`)]) {

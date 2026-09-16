@@ -44,6 +44,19 @@ export function mergePack(library: Library & { meta?: Record<string, PackItemMet
   }
 
   for (const t of pack.tags) put('tag', lib.tags, t);
+  for (const f of pack.functions) put('function', lib.functions, f);
+  // Globals are plain key/value rather than id'd documents, so they merge key-wise under the same
+  // policy as `put`: a new key is seeded, a newer version of the same pack updates it, and a value
+  // another pack already set is kept and reported as a conflict.
+  for (const [k, v] of Object.entries(pack.globals)) {
+    const key = `global:${k}`;
+    const meta = lib.meta[key];
+    const stamp = () => { lib.meta[key] = { packId: pack.id, version: pack.version }; };
+    if (!(k in lib.globals)) { lib.globals[k] = v; stamp(); report.added.push(key); }
+    else if (lib.globals[k] === v) { stamp(); report.unchanged.push(key); }
+    else if ((meta?.packId === pack.id && pack.version > meta.version) || opts.overwrite) { lib.globals[k] = v; stamp(); report.updated.push(key); }
+    else report.conflicts.push({ key, existingPack: meta?.packId ?? 'unknown', incomingPack: pack.id });
+  }
   for (const a of pack.abilities) put('ability', lib.abilities, AbilitySchema.parse(a));
   for (const s of pack.skills) put('skill', lib.skills, s);
   for (const c of pack.classTables) put('class', lib.classTables, c);

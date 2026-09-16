@@ -9,3 +9,4 @@ export * from './budget';
 export * from './diagnostics';
 export * from './compute';
 export * from './events';
+export * from './print';

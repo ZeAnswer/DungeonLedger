@@ -45,9 +45,8 @@ test('library round-trips through a pack', () => {
 
 const readPack = (rel: string) => PackSchema.parse(JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')));
 
-// The shipped packs are still written in v3 (effect blocks). Task 7 lands `convertToV4` (the block
-// printer) and Task 8 regenerates them; until then this pack cannot be parsed against the v4 schema.
-test.skip('merging memento v10 over a stored v9 install leaves no duplicate activation ids and applies Hunter\'s Instinct once', () => {
+// Both packs are still written in v3 (effect blocks); `PackSchema` converts them on parse.
+test('merging memento v10 over a stored v9 install leaves no duplicate activation ids and applies Hunter\'s Instinct once', () => {
   const v9 = readPack('./fixtures/memento-v9.json'); // trimmed copy of packs/memento.json at git 57b1f07
   const current = readPack('../../../packs/memento.json');
   const stored = mergePack(emptyLibrary(), v9).library; // what an old install has in storage
@@ -68,4 +67,37 @@ test.skip('merging memento v10 over a stored v9 install leaves no duplicate acti
   const entries = resolveStat({ character, library }, 'skill.knowledge-monsters').entries.filter((e) => e.label.includes('Hunter\'s Instinct'));
   expect(entries).toHaveLength(1);
   expect(entries[0]!.source).toBe('vaelors-manual');
+});
+
+test('merging carries functions and globals: new keys are added, existing globals kept', () => {
+  const withFns = PackSchema.parse({
+    id: 'core', name: 'Core', version: 1,
+    functions: [{ id: 'sneak', name: 'Sneak Attack', params: [{ name: 'dice', type: 'dice' }], source: "dice(args.dice);" }],
+    globals: { trophyMultiplier: 2, favoredEnemyBonus1: 4 },
+  });
+  const { library, report } = mergePack(emptyLibrary(), withFns);
+  expect(library.functions.sneak?.name).toBe('Sneak Attack');
+  expect(library.globals).toEqual({ trophyMultiplier: 2, favoredEnemyBonus1: 4 });
+  expect(report.added).toEqual(['function:sneak', 'global:trophyMultiplier', 'global:favoredEnemyBonus1']);
+
+  const other = PackSchema.parse({ id: 'other', name: 'Other', version: 1, globals: { trophyMultiplier: 9, newOne: 1 } });
+  const second = mergePack(library, other);
+  const merged = second.library;
+  expect(merged.globals).toEqual({ trophyMultiplier: 2, favoredEnemyBonus1: 4, newOne: 1 }); // existing value kept
+  expect(second.report.conflicts).toEqual([{ key: 'global:trophyMultiplier', existingPack: 'core', incomingPack: 'other' }]);
+  expect(second.report.added).toEqual(['global:newOne']);
+  // the pack that owns the key may change it in a newer version
+  expect(mergePack(library, PackSchema.parse({ ...withFns, version: 2, globals: { trophyMultiplier: 3 } })).library.globals.trophyMultiplier).toBe(3);
+
+  const pack = libraryToPack(merged, { id: 'backup', name: 'Backup', version: 1 });
+  expect(pack.functions).toHaveLength(1);
+  expect(pack.globals).toEqual(merged.globals);
+  expect(mergePack(emptyLibrary(), PackSchema.parse(pack)).library.functions.sneak).toEqual(library.functions.sneak);
+});
+
+test('the shipped v3 packs parse through the v4 converter', () => {
+  for (const rel of ['../../../packs/core-3.5e.json', '../../../packs/memento.json', '../../../packs/bestiary.json']) {
+    const pack = readPack(rel);
+    expect(pack.abilities.every((a) => Array.isArray(a.scripts)), rel).toBe(true);
+  }
 });

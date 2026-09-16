@@ -1,8 +1,11 @@
 /**
- * Converts rules written in the v1 format (kind-based conditions/effects, `source`, `resources.per`) to v2
- * (selectors + verbs + envelope). Idempotent: v2 input is returned unchanged.
+ * Every stored-format hop, oldest first: v1 (kind-based conditions/effects, `source`, `resources.per`)
+ * → v2 (selectors + verbs + envelope) → v3 (record kinds + activations) → v4 (scripts instead of effect
+ * blocks, durations in seconds). `convertToV3` — the name the app calls — runs the whole chain and hands
+ * back the current format; every hop is idempotent, so already-current input comes back unchanged.
  */
-import type { Duration, HistoryFilter } from './schema';
+import { printBlock, type V3Block } from './scripts/print';
+import type { Duration, HistoryFilter, Script } from './schema';
 
 type Any = Record<string, unknown>;
 const isObj = (x: unknown): x is Any => !!x && typeof x === 'object' && !Array.isArray(x);
@@ -233,18 +236,84 @@ export function convertV2(a: unknown, lookup: (id: string) => Any | undefined = 
   return { ...base, acquired, ...(isObj(a.params) ? { params: a.params } : {}), enabledByDefault: a.enabledByDefault ?? true, effects: passive, activations, pools };
 }
 
-/** v1 or v2 → v3. Idempotent. */
-export function convertToV3(a: unknown, lookup?: (id: string) => Any | undefined): Any {
-  return convertV2(convertV1(a), lookup ? (id) => { const x = lookup(id); return x ? convertV1(x) : undefined; } : undefined);
+// ---------- v3 → v4 ----------
+const ROUND_SECONDS = 6, MINUTE_SECONDS = 60;
+
+/** v3 durations were spans (`{rounds:2}`, `thisTurn`); v4 counts seconds, keeping the sentinels. */
+export function convertDurationV4(d: unknown): Duration | undefined {
+  if (d === undefined || d === null) return undefined;
+  if (typeof d === 'number') return d;
+  if (d === 'thisTurn') return ROUND_SECONDS;
+  if (typeof d === 'string') return d as Duration;
+  if (isObj(d)) {
+    const n = (k: string) => (typeof d[k] === 'number' ? (d[k] as number) : typeof d[k] === 'string' ? Number(d[k]) : NaN);
+    // An expression-valued span has no v4 equivalent (durations are plain seconds): it becomes open-ended.
+    if ('rounds' in d) { const v = n('rounds'); return Number.isFinite(v) ? v * ROUND_SECONDS : 'untilRemoved'; }
+    if ('minutes' in d) { const v = n('minutes'); return Number.isFinite(v) ? v * MINUTE_SECONDS : 'untilRemoved'; }
+  }
+  return d as Duration;
 }
+
+/** Ids are unique inside one scripts array; a block id that repeats gets a numbered suffix. */
+function printScripts(blocks: unknown, phase: 'always' | 'use', ownerId: string, seen: Set<string>): Script[] {
+  return (Array.isArray(blocks) ? blocks : []).filter(isObj).map((b) => {
+    const s = printBlock(b as V3Block, phase, ownerId);
+    let id = s.id;
+    for (let i = 2; seen.has(id); i++) id = `${s.id}-${i}`;
+    seen.add(id);
+    return { ...s, id };
+  });
+}
+
+const isV4Record = (a: Any) => Array.isArray(a.scripts) && !('effects' in a)
+  && !(Array.isArray(a.activations) && (a.activations as Any[]).some((x) => isObj(x) && ('onUse' in x || 'whileActive' in x)));
+
+/** v3 → v4: effect blocks become scripts, spans become seconds. v4 input is returned untouched. */
+export function convertV3toV4(a: unknown): unknown {
+  if (!isObj(a) || isV4Record(a)) return a;
+  const out: Any = { ...a };
+  const seen = new Set<string>();
+  out.scripts = [...printScripts(out.effects, 'always', String(out.id ?? ''), seen), ...(Array.isArray(out.scripts) ? (out.scripts as Script[]) : [])];
+  delete out.effects;
+  if ('duration' in out) { const d = convertDurationV4(out.duration); if (d === undefined) delete out.duration; else out.duration = d; }
+  if (Array.isArray(out.activations)) {
+    out.activations = (out.activations as unknown[]).map((raw) => {
+      if (!isObj(raw)) return raw;
+      const act: Any = { ...raw };
+      const ids = new Set<string>();
+      const id = String(act.id ?? out.id ?? '');
+      act.scripts = [
+        ...printScripts(act.onUse, 'use', id, ids),
+        ...printScripts(act.whileActive, 'always', id, ids),
+        ...(Array.isArray(act.scripts) ? (act.scripts as Script[]) : []),
+      ];
+      delete act.onUse;
+      delete act.whileActive;
+      if ('duration' in act) { const d = convertDurationV4(act.duration); if (d === undefined) delete act.duration; else act.duration = d; }
+      return act;
+    });
+  }
+  return out;
+}
+
+/** v1, v2 or v3 → the current format (v4). Idempotent. */
+export function convertToV3(a: unknown, lookup?: (id: string) => Any | undefined): Any {
+  const v3 = convertV2(convertV1(a), lookup ? (id) => { const x = lookup(id); return x ? convertV1(x) : undefined; } : undefined);
+  return convertV3toV4(v3) as Any;
+}
+/** The same chain under the version it converts *to*; `convertToV3` keeps its name for the app's callers. */
+export const convertToV4 = convertToV3;
 
 /** Convert every ability of a pack-like object (packs, library exports, backups); other fields untouched. */
 export function convertPack(raw: unknown): unknown {
   if (!isObj(raw) || !Array.isArray(raw.abilities)) return raw;
   const v2 = (raw.abilities as unknown[]).map((a) => convertV1(a));
   const byId = new Map(v2.filter(isObj).map((a) => [a.id as string, a] as const));
-  return { ...raw, abilities: v2.map((a) => convertV2(a, (id) => byId.get(id))) };
+  return { ...raw, abilities: v2.map((a) => convertV3toV4(convertV2(a, (id) => byId.get(id)))) };
 }
+
+const durationsIn = (list: unknown, key: string): unknown =>
+  (Array.isArray(list) ? list.map((x) => { if (!isObj(x) || !(key in x)) return x; const d = convertDurationV4(x[key]); return d === undefined ? x : { ...x, [key]: d }; }) : list);
 
 /** Stored battles: `situational` → `statuses`; in a v2 battle, buffs on records with activations get the first activation's id. Idempotent. */
 export function convertBattle(raw: unknown, lookup: (id: string) => { kind: string; activations?: { id: string }[] } | undefined = () => undefined): unknown {
@@ -254,7 +323,7 @@ export function convertBattle(raw: unknown, lookup: (id: string) => { kind: stri
   // in v3 a buff started by the `grant` verb deliberately has none.
   const isV2Battle = Array.isArray(out.situational);
   if (isV2Battle) {
-    out.statuses = [...((out.statuses as unknown[]) ?? []), ...(out.situational as unknown[]).map((s) => { const r = convertToV3(s); return r.kind === 'status' ? r : { id: r.id, name: r.name, kind: 'status', effects: r.effects ?? [] }; })];
+    out.statuses = [...((out.statuses as unknown[]) ?? []), ...(out.situational as unknown[]).map((s) => { const r = convertToV3(s); return r.kind === 'status' ? r : { id: r.id, name: r.name, kind: 'status', scripts: r.scripts ?? [] }; })];
     delete out.situational;
   }
   if (isV2Battle && Array.isArray(out.activeBuffs)) {
@@ -265,11 +334,9 @@ export function convertBattle(raw: unknown, lookup: (id: string) => { kind: stri
       return first && rec.kind !== 'status' ? { ...b, activationId: first.id } : b;
     });
   }
+  if (Array.isArray(out.statuses)) out.statuses = (out.statuses as unknown[]).map((s) => convertV3toV4(s));
+  if (Array.isArray(out.activeBuffs)) out.activeBuffs = durationsIn(out.activeBuffs, 'expires');
+  if (Array.isArray(out.selfConditions)) out.selfConditions = durationsIn(out.selfConditions, 'expires');
+  if (Array.isArray(out.combatants)) out.combatants = (out.combatants as unknown[]).map((c) => (isObj(c) && Array.isArray(c.conditions) ? { ...c, conditions: durationsIn(c.conditions, 'expires') } : c));
   return out;
-}
-
-// ---------- v3 → v4 ----------
-/** Stub: v3→v4 (scripts replace effect blocks) lands in Task 5. v4 input is returned as-is. */
-export function convertToV4(a: unknown): unknown {
-  return a;
 }

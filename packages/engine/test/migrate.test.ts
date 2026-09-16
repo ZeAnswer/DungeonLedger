@@ -1,11 +1,14 @@
-import { convertV1, isV1Ability, convertToV3, convertPack, convertBattle } from '../src/migrate';
+import { readFileSync } from 'node:fs';
+import { convertV1, convertV2, isV1Ability, convertToV3, convertToV4, convertV3toV4, convertDurationV4, convertPack, convertBattle } from '../src/migrate';
+import { AbilitySchema, BattleSchema } from '../src/schema';
 
 /**
  * These cases pin the v1/v2 → v3 hop. Since the schema now validates rules format v4 (scripts), the
  * v3 shape is asserted on the raw converted object; Task 7's printer adds the v4 assertions.
  */
 type Any = Record<string, any>;
-const v3 = (a: unknown, lookup?: (id: string) => Any | undefined): Any => convertToV3(a, lookup) as Any;
+/** The v1→v2→v3 hop on its own: `convertToV3` now runs the whole chain and hands back v4. */
+const v3 = (a: unknown, lookup?: (id: string) => Any | undefined): Any => convertV2(convertV1(a), lookup ? (id) => { const x = lookup(id); return x ? convertV1(x) : undefined; } : undefined);
 const acts = (a: Any): Any[] => (a.activations ?? []) as Any[];
 const pools = (a: Any): Any[] => (a.pools ?? []) as Any[];
 
@@ -166,5 +169,83 @@ test('convertPack is idempotent on a v2 pack', () => {
 test('a v1 situational entry converts to a status', () => {
   const b = convertBattle({ id: 'b', startedAt: 'now', situational: [{ id: 'flanking', name: 'Flanking', source: 'situational', effects: [{ id: 'f', do: [{ kind: 'bonus', to: 'attack', value: 2, bonusType: 'untyped' }] }] }] }) as Any;
   expect(b.statuses[0]).toMatchObject({ id: 'flanking', name: 'Flanking', kind: 'status', harmful: false });
-  expect(b.statuses[0]!.effects[0]!.do[0]).toEqual({ verb: 'modify', to: 'attack', value: 2, type: 'untyped', mode: 'add' });
+  expect(b.statuses[0]!.effects).toBeUndefined();
+  expect(b.statuses[0]!.scripts[0]!.source).toBe("bonus('attack', 2);");
+});
+
+// ---------- v3 → v4 ----------
+
+test('convertToV4 replaces effect blocks with scripts on the record and on every activation', () => {
+  const a = convertToV4(boots) as Any; // v1/v2 in, v4 out: convertToV3 now runs the whole chain
+  expect(a.effects).toBeUndefined();
+  expect(a.scripts).toEqual([]);
+  const act = acts(a)[0]!;
+  expect(act.onUse).toBeUndefined();
+  expect(act.whileActive).toBeUndefined();
+  expect(act.scripts).toEqual([{ id: 'haste', events: ['always'], source: "extraAttack(1, { base: 'full' });", enabled: true, priority: 0 }]);
+  expect(AbilitySchema.safeParse(a).success).toBe(true);
+});
+
+test('convertToV4 prints onUse blocks as use scripts before the whileActive ones', () => {
+  const a = convertToV4(monsterBlow) as Any;
+  const act = acts(a)[0]!;
+  expect(act.scripts).toEqual([
+    { id: 'use', events: ['use'], source: "charges('monster-blow').use();", enabled: true, priority: 0 },
+    { id: 'declared', events: ['always'], source: "if (target.isOneOf(params.types)) {\n  note('MONSTER BLOW');\n}", enabled: true, priority: 0 },
+  ]);
+});
+
+test('convertToV4 is idempotent: a record that already has scripts is returned untouched', () => {
+  const once = convertToV4(monsterBlow);
+  expect(convertToV4(once)).toEqual(once);
+  const v4 = { id: 'x', name: 'X', kind: 'feature', scripts: [{ id: 's', events: ['always'], source: "bonus('attack', 1);" }], activations: [], pools: [] };
+  expect(convertV3toV4(v4)).toBe(v4);
+  expect(convertToV3(v4)).toBe(v4);
+});
+
+test('durations become seconds; sentinels and numbers pass through', () => {
+  expect(convertDurationV4({ rounds: 10 })).toBe(60);
+  expect(convertDurationV4({ minutes: 2 })).toBe(120);
+  expect(convertDurationV4('thisTurn')).toBe(6);
+  expect(convertDurationV4('untilMyNextTurn')).toBe('untilMyNextTurn');
+  expect(convertDurationV4('encounter')).toBe('encounter');
+  expect(convertDurationV4(42)).toBe(42);
+  expect(convertDurationV4(undefined)).toBeUndefined();
+  const spell = convertV3toV4({ id: 's', name: 'S', kind: 'spell', castingAction: 'standard', duration: { rounds: 10 }, effects: [] }) as Any;
+  expect(spell.duration).toBe(60);
+  const item = convertV3toV4({ id: 'i', name: 'I', kind: 'item', item: { category: 'wondrous', tags: [] }, effects: [], pools: [], activations: [{ id: 'i', cost: [], duration: { minutes: 1 }, onUse: [], whileActive: [] }] }) as Any;
+  expect(acts(item)[0]!.duration).toBe(60);
+});
+
+test('convertPack converts the shipped v3 memento pack: no record keeps an effects key', () => {
+  const raw = JSON.parse(readFileSync(new URL('../../../packs/memento.json', import.meta.url), 'utf8'));
+  const pack = convertPack(raw) as { abilities: Any[] };
+  for (const a of pack.abilities) {
+    expect(a.effects, `${a.id} still has effects`).toBeUndefined();
+    expect(Array.isArray(a.scripts), `${a.id} has no scripts`).toBe(true);
+    for (const act of (a.activations ?? []) as Any[]) {
+      expect(act.onUse).toBeUndefined();
+      expect(act.whileActive).toBeUndefined();
+    }
+    expect(AbilitySchema.safeParse(a).success, `${a.id}: ${JSON.stringify(AbilitySchema.safeParse(a).error?.issues?.[0])}`).toBe(true);
+  }
+});
+
+test('convertBattle converts stored statuses and every duration it carries', () => {
+  const raw = {
+    id: 'b', startedAt: 'now', round: 2,
+    statuses: [{ id: 'shaken', name: 'Shaken', kind: 'status', harmful: true, duration: { rounds: 3 }, effects: [{ id: 's', trigger: 'always', when: { all: [] }, do: [{ verb: 'modify', to: 'attack', value: -2, type: 'untyped', mode: 'add' }] }] }],
+    activeBuffs: [{ instanceId: 'i', abilityId: 'boots-of-speed', activationId: 'boots-rounds', owner: 'self', expires: { rounds: 1 } }],
+    selfConditions: [{ tag: 'raging', expires: { minutes: 1 } }],
+    combatants: [{ id: 'c', name: 'Gorgon', conditions: [{ tag: 'flanked', expires: 'thisTurn' }] }],
+  };
+  const b = convertBattle(raw) as Any;
+  expect(b.statuses[0]!.effects).toBeUndefined();
+  expect(b.statuses[0]!.duration).toBe(18);
+  expect(b.statuses[0]!.scripts[0]!.source).toBe("bonus('attack', -2);");
+  expect(b.activeBuffs[0]!.expires).toBe(6);
+  expect(b.selfConditions[0]!.expires).toBe(60);
+  expect(b.combatants[0]!.conditions[0]!.expires).toBe(6);
+  expect(BattleSchema.safeParse(raw).success).toBe(true);
+  expect(convertBattle(b)).toEqual(b);
 });
