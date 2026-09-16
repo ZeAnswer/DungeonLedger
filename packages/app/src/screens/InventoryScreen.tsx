@@ -139,7 +139,7 @@ export function InventoryScreen() {
       ); })()}
 
       {/* pick from library / storage for a slot */}
-      {pickFor && <PickSheet ctx={ctx} slot={pickFor} onClose={() => setPickFor(undefined)} onEquipExisting={(e) => { doEquip(e); setPickFor(undefined); }} onAddFromLibrary={(a, equip) => { let next = addItemInstance(c, a.id); if (equip) { const r = equipItem({ ...ctx, character: next }, next.inventory.at(-1)!.id, { replace: true }); next = r.character; } setCharacter(next); showToast(`${a.name} added`); setPickFor(undefined); }} onCreate={() => { setPickFor(undefined); setCreating(freshRecord('item', { category: pickFor === 'any' ? 'gear' : 'wondrous', ...(pickFor !== 'any' ? { slot: pickFor } : {}) })); }} />}
+      {pickFor && <PickSheet ctx={ctx} slot={pickFor} onClose={() => setPickFor(undefined)} onEquipExisting={(e) => { doEquip(e); setPickFor(undefined); }} onAddFromLibrary={(a, equip) => { let next = addItemInstance(c, a.id); if (equip) { const r = equipItem({ ...ctx, character: next }, next.inventory.at(-1)!.id, { replace: true }); next = r.character; if (r.battle) setBattle(r.battle); } setCharacter(next); showToast(`${a.name} added`); setPickFor(undefined); }} onCreate={() => { setPickFor(undefined); setCreating(freshRecord('item', { category: pickFor === 'any' ? 'gear' : 'wondrous', ...(pickFor !== 'any' ? { slot: pickFor } : {}) })); }} />}
 
       <Sheet open={!!creating} onClose={() => setCreating(undefined)} title="New item" tall>
         {creating && <RecordEditor key={creating.id} initial={creating} onSave={saveNew} onCancel={() => setCreating(undefined)} />}
