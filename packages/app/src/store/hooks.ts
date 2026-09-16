@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { activationsOf, compile, type EvalContext } from '@hl/engine';
+import { activationsOf, compile, type EvalContext, type Script } from '@hl/engine';
 import { ctxLibrary, useStore } from './store';
 
 export function useCtx(): EvalContext | undefined {
@@ -27,9 +27,9 @@ export function useCtx(): EvalContext | undefined {
  */
 export function collectToggles(ctx: EvalContext): { id: string; abilities: string[] }[] {
   const map = new Map<string, Set<string>>();
-  const scan = (source: string, abilityName: string) => {
+  const scan = (source: string, abilityName: string, paramNames?: string[]) => {
     if (!source.trim()) return;
-    const c = compile(source);
+    const c = compile(source, paramNames);
     if (!c.ok) return;
     for (const id of c.toggles) {
       const e = map.get(id) ?? new Set<string>();
@@ -42,8 +42,13 @@ export function collectToggles(ctx: EvalContext): { id: string; abilities: strin
     if (!inst.enabled || suppressed.has(inst.abilityId)) continue;
     const a = ctx.library.abilities[inst.abilityId];
     if (!a) continue;
-    for (const s of a.scripts) if (s.enabled) scan(s.source, a.name);
-    for (const act of activationsOf(a)) for (const s of act.scripts) if (s.enabled) scan(s.source, a.name);
+    const scanScript = (s: Script) => {
+      if (!s.enabled) return;
+      if (s.call) { const def = ctx.library.functions[s.call.fn]; if (def) scan(def.source, a.name, def.params.map((p) => p.name)); return; }
+      scan(s.source, a.name);
+    };
+    a.scripts.forEach(scanScript);
+    for (const act of activationsOf(a)) act.scripts.forEach(scanScript);
   }
   return [...map.entries()].map(([id, abilities]) => ({ id, abilities: [...abilities] }));
 }

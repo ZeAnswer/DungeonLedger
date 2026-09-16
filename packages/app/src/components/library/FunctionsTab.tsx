@@ -9,7 +9,7 @@ const ScriptEditor = lazy(() => import('./ScriptEditor').then((m) => ({ default:
 const EDITOR_FALLBACK = <div className="flex h-16 items-center justify-center rounded-xl border border-zinc-700 text-sm text-zinc-500">loading editor…</div>;
 
 /** Records that call this function, whether through a stored `call` or a `fn.x(…)` / `fn["x"](…)` in a source. */
-export function usedBy(abilities: Record<string, Ability>, fnId: string): string[] {
+export function usedBy(abilities: Record<string, Ability>, fnId: string, functions: Record<string, FunctionDef> = {}): string[] {
   const esc = fnId.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
   const re = new RegExp(`fn\\s*(?:\\.\\s*${esc}\\b|\\[\\s*['"\`]${esc}['"\`]\\s*\\])`);
   const out: string[] = [];
@@ -17,6 +17,7 @@ export function usedBy(abilities: Record<string, Ability>, fnId: string): string
     const scripts = [...a.scripts, ...activationsOf(a).flatMap((x) => x.scripts)];
     if (scripts.some((s) => s.call?.fn === fnId || re.test(s.source))) out.push(a.name);
   }
+  for (const f of Object.values(functions)) if (f.id !== fnId && re.test(f.source)) out.push(`ƒ ${f.name || f.id}`);
   return out.sort((x, y) => x.localeCompare(y));
 }
 
@@ -47,7 +48,7 @@ export function FunctionsTab() {
   };
   const remove = () => {
     if (!editing) return;
-    const users = usedBy(library.abilities, editing.id);
+    const users = usedBy(library.abilities, editing.id, library.functions);
     if (users.length) {
       if (!confirm(`${editing.name} is called by ${users.join(', ')}. Deleting it will break them — continue?`)) return;
       if (!confirm(`Really delete ${editing.name}? This cannot be undone.`)) return;
@@ -64,7 +65,7 @@ export function FunctionsTab() {
       <div className="mb-3"><Button onClick={() => openEditor({ id: `fn-${Date.now().toString(36)}`, name: '', params: [], source: '' }, false)}>+ New function</Button></div>
       <div className="space-y-1">
         {list.map((f) => {
-          const users = usedBy(library.abilities, f.id);
+          const users = usedBy(library.abilities, f.id, library.functions);
           return (
             <button key={f.id} type="button" data-function={f.id} onClick={() => openEditor(f, true)} className="flex w-full items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2 text-left">
               <span className="min-w-0"><span className="truncate">{f.name}</span><span className="block truncate text-xs text-zinc-500">{f.id}({f.params.map((p) => p.name).join(', ')}) · {users.length ? `used by ${users.join(', ')}` : 'not used yet'}</span></span>
@@ -98,7 +99,7 @@ export function FunctionsTab() {
               <button type="button" className="text-sm text-amber-300" onClick={() => patch({ params: [...editing.params, { name: `p${editing.params.length + 1}`, type: 'number', required: false }] })}>+ add parameter</button>
             </Field>
             <Field label="Body (parameters are bare names)"><Suspense fallback={EDITOR_FALLBACK}><ScriptEditor value={editing.source} onChange={(source) => patch({ source })} errors={[]} /></Suspense></Field>
-            <div className="mb-3 text-xs text-zinc-500">Used by: {usedBy(library.abilities, editing.id).join(', ') || 'nothing yet'}</div>
+            <div className="mb-3 text-xs text-zinc-500">Used by: {usedBy(library.abilities, editing.id, library.functions).join(', ') || 'nothing yet'}</div>
             {err && <div className="mb-2 rounded-lg border border-red-900 bg-red-950/40 px-2 py-1 text-xs text-red-200">{err}</div>}
             <div className="flex gap-2">
               <Button variant="primary" onClick={save}>Save</Button>

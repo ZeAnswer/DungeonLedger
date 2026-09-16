@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { callSource, type Ability, type EvalContext, type Script, type ScriptError } from '@hl/engine';
+import { callSource, type Ability, type EvalContext, type Script, type ScriptError, activationsOf } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Button, Chip, inputCls } from '../ui';
 import { ScriptPreview } from './ScriptPreview';
@@ -26,6 +26,8 @@ export function newScript(taken: string[]): Script {
 
 export function ScriptsEditor({ value, onChange, addLabel = '+ add script', errors = [], ability }: { value: Script[]; onChange: (s: Script[]) => void; addLabel?: string; errors?: ScriptError[]; ability?: Ability }) {
   const functions = useStore((s) => s.library.functions);
+  // Ids stay unique across the whole record (its own scripts and every activation's), so an error line names one script only.
+  const takenIds = ability ? [...ability.scripts, ...activationsOf(ability).flatMap((x) => x.scripts), ...value].map((s) => s.id) : value.map((s) => s.id);
   const set = (i: number, patch: Partial<Script>) => onChange(value.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   const toggleEvent = (i: number, ev: string) => {
     const s = value[i]!;
@@ -78,7 +80,7 @@ export function ScriptsEditor({ value, onChange, addLabel = '+ add script', erro
           </div>
         </div>
       ))}
-      <Button onClick={() => onChange([...value, newScript(value.map((s) => s.id))])}>{addLabel}</Button>
+      <Button onClick={() => onChange([...value, newScript(takenIds)])}>{addLabel}</Button>
     </div>
   );
 }
