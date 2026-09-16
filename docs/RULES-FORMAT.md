@@ -99,6 +99,8 @@ Script = {
 
 A script is the same shape wherever it appears: in a record's `scripts` or in an activation's. `events` is a multi-select beside the code, not a registration inside it — the engine has to pick the relevant scripts without executing them.
 
+In the app, this is Library › the record's tab › the record, "Scripts": the label, the events multi-select, the enabled switch, the priority and the source box are the fields of this object, and the JSON tab shows exactly what is stored. A script's errors appear under its box and as a red dot on the record in the list.
+
 | Event | When it runs |
 |---|---|
 | `always` | The **compute phase**: re-run on every refresh, for every (character, battle, target, attack). Cannot be combined with any other event. |
@@ -113,7 +115,7 @@ A script is the same shape wherever it appears: in a record's `scripts` or in an
 
 *Always* scripts run constantly, so they must never change state. In that phase every façade object (`player`, `target`, `attack`, `battle`, `vars`, …) is frozen **and** set-trapped: `player.mod.cha += 1` throws *"mod is read-only: use a helper (bonus, setVar, heal…) to change values"*, and the record shows the error. `vars.x = 1` throws too — assign vars with `setVar` in an event script. The compute helpers (`bonus`, `note`, `attackMode`, …) throw in event scripts, and the event helpers (`heal`, `charges().use`, `target.mark`, …) throw in always scripts, each with a message naming the phase.
 
-Run order: `priority` ascending, then record kind (feature, item, spell, status), then sheet order. An always script that reads a stat sees what earlier scripts contributed; reading the stat it is contributing to yields the base value only (no infinite recursion).
+Run order: `priority` ascending, then record kind (feature, item, spell, status), then sheet order. An always script that reads a stat sees what earlier scripts contributed; reading the stat it is contributing to yields the base value only (no infinite recursion). A script's own `bonus()` calls (and its other sink writes) are not visible to itself: they commit to the shared sink only once the script finishes, so it cannot read back its own contribution mid-run, even though earlier scripts' contributions are already there to read.
 
 ### "Not applying: … needs …"
 
@@ -206,6 +208,8 @@ Every name below is destructured into scope; there is no `api.` prefix. `Math`, 
 
 Enums are ordinals, so ordinary comparisons work: `if (target.size >= SIZE.LARGE && target.hurt >= HURT.BLOODIED) …`.
 
+`evalExpr` and the other places that still take a legacy expression (`charges.max`, …) require every bare identifier to resolve to a number: a character or global var holding text throws "Unknown variable" if referenced directly, while a dotted selector path that resolves to a boolean (a tag test, say) is silently coerced to `1` or `0`.
+
 ## Functions
 
 A pack may ship a **function library**: shared script bodies with typed parameters, editable as a form.
@@ -241,9 +245,11 @@ fn.trophy({ stat: 'init', base: 4 });                    // in a script's source
 
 **Where a function may live.** Functions merge into one library namespace, but a pack has to work when it is the only one installed alongside core, so a record may only call a function defined in **its own pack** or in **`core-3.5e`**; the validator rejects anything else. The bundled functions are `haste()` and `favoredEnemy({ types, amount })` in `packs/core-3.5e.json` (core records call them) and `trophy({ stat, base, type })` in `packs/memento.json` (only Monster Hunter trophies use it).
 
+Library › Functions edits these: name, description, a parameter table (name, type, label, required) and the body. The same screen lists the records that call each function — through `script.call.fn` or a `fn.<id>(…)` in a source. A record's script switches between "code" and "call a function" with the chips above its box; the call form renders one control per parameter type and an ƒx switch that turns any box into a raw expression (`{ "k": "expr" }`); a `path` or `ref` parameter stores `{ "k": "ref" }`.
+
 ## Globals
 
-`Pack.globals` (and the app's `hl.globals` store) hold values shared by every character: `vars.<name>` reads the character's var first, then the global. `setVar` writes the character's var when it has one, otherwise the global. The Globals tab warns when a character var shadows a global.
+`Pack.globals` and the app's `hl.globals` slice hold values shared by every character: `vars.<name>` reads the character's var first, then the global. `setVar` writes the character's var when it has one, otherwise the global. Library › Globals adds, edits and deletes them and warns when the active character's own var shadows one; they travel in the full backup and in an exported library pack. Importing a pack seeds keys the app does not have yet and keeps the values it does.
 
 ## The loop guard, budgets and `// @noguard`
 
@@ -252,6 +258,8 @@ Every script is parsed with acorn and a `__g()` tick is spliced into every loop 
 ## Safe mode
 
 `setScriptMode('off')` disables every script: base values still resolve, the compute pass returns an empty sink, and the app shows a banner offering to switch back on (wired to `?safe=1` / `localStorage hl.safeMode`). Use it to recover from a pack whose scripts break the screen.
+
+In the app it is Settings › Scripts, and a banner at the top of every screen offers to turn scripts back on. Two starts in a row that never finish rendering switch it on by themselves.
 
 ## Trust
 
