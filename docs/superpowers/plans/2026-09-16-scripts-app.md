@@ -20,7 +20,7 @@
 - **The app has no unit-test runner and this plan does not add one.** The repo's discipline is: engine = vitest, app = `tsc` + Playwright. Every task's red/green signal is named explicitly — usually `npm run typecheck` (the compiler is the test) and/or a Playwright spec that is written *before* the implementation and watched to fail.
 - **Commands** (from the repo root unless stated): `npm run typecheck`, `npm run build`, `npm run e2e`, `npx playwright test e2e/<file>.spec.ts`, `npm run validate-packs`; from `packages/engine`: `npx vitest run`.
 - **Commit after every task.** End commit messages with the attribution lines from the session's system reminder.
-- Never edit `packs/*.json` or `packages/engine/src` beyond the one fix named in Task 1 — engine behaviour is settled.
+- Never edit `packs/*.json` or `packages/engine/src` — engine behaviour is settled (the `ScriptSkip` erasable-syntax fix already landed in `ccf3b05`). If a task truly needs an engine export that does not exist, stop and report NEEDS_CONTEXT rather than adding it.
 
 ---
 
@@ -45,7 +45,7 @@
 | `packages/app/src/boot.ts` | Safe-mode flag, boot-failure guard, `setScriptModePersisted`. |
 | `e2e/globals.spec.ts`, `e2e/diagnostics.spec.ts`, `e2e/safemode.spec.ts`, `e2e/import.spec.ts`, `e2e/paths.spec.ts` | One spec per feature area added here. |
 
-**Modified:** `packages/engine/src/scripts/api.ts` (one line, Task 1), `packages/app/src/store/store.ts`, `store/hooks.ts`, `components/library/RecordEditor.tsx`, `ActivationEditor.tsx`, `screens/LibraryScreen.tsx`, `CharacterScreen.tsx`, `InventoryScreen.tsx`, `BattleScreen.tsx`, `SettingsScreen.tsx`, `components/battle/AttackPanel.tsx`, `BuffsDrawer.tsx`, `SituationalSheet.tsx`, `components/character/AbilitySheet.tsx`, `ChargesSheet.tsx`, `App.tsx`, `main.tsx`, `packages/app/package.json`, `e2e/builder.spec.ts`, `README.md`, `docs/RULES-FORMAT.md`.
+**Modified:** `packages/app/src/store/store.ts`, `store/hooks.ts`, `components/library/RecordEditor.tsx`, `ActivationEditor.tsx`, `screens/LibraryScreen.tsx`, `CharacterScreen.tsx`, `InventoryScreen.tsx`, `BattleScreen.tsx`, `SettingsScreen.tsx`, `components/battle/AttackPanel.tsx`, `BuffsDrawer.tsx`, `SituationalSheet.tsx`, `components/character/AbilitySheet.tsx`, `ChargesSheet.tsx`, `App.tsx`, `main.tsx`, `packages/app/package.json`, `e2e/builder.spec.ts`, `README.md`, `docs/RULES-FORMAT.md`.
 
 **Deleted:** `packages/app/src/components/library/BlocksEditor.tsx`, `ConditionEditor.tsx`, `EffectEditor.tsx`, `SelectorPicker.tsx`.
 
