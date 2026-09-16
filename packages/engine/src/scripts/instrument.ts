@@ -43,6 +43,10 @@ function patternNames(n: AnyNode | undefined, out: Set<string>) {
  *   and function body, so `compile`'s `run(api, guard)` can bound runaway scripts;
  * - scans for `battle.toggles.<name>` reads, `battle.on('<name>')` calls and `emit('<name>')` calls,
  *   for diagnostics/UI;
+ * - also notes `battle.on(<identifier>)` — a shared library function's toggle gated by one of its own
+ *   parameters (`bonusWhenSwitch({ switchName })`'s `battle.on(switchName)`) — as a *candidate* in
+ *   `toggleIdentifiers`; `compile` intersects that with the compiled param names so a caller with a
+ *   literal argument for that parameter can still be discovered as a toggle (see `collectToggles`);
  * - honors a real `// @noguard` (or `/* @noguard *\/`) comment — read from acorn's comment stream, not a
  *   regex over the raw source, so a string literal that merely contains that text does not count — by
  *   skipping the splice;
@@ -50,11 +54,12 @@ function patternNames(n: AnyNode | undefined, out: Set<string>) {
  *   a plain `var __g = () => 0` (unlike `let`/`const`, which already collide as a redeclaration) would
  *   otherwise silently swap out the guard.
  */
-export function instrument(src: string): { code: string; toggles: string[]; emits: string[]; noguard: boolean } {
+export function instrument(src: string): { code: string; toggles: string[]; toggleIdentifiers: string[]; emits: string[]; noguard: boolean } {
   const comments: string[] = [];
   const ast = parse(src, { ecmaVersion: 2022, allowReturnOutsideFunction: true, onComment: (_block, text) => { comments.push(String(text)); } }) as unknown as AnyNode;
   const noguard = comments.some((c) => /@noguard\b/.test(c));
   const toggles = new Set<string>();
+  const toggleIdentifiers = new Set<string>();
   const emits = new Set<string>();
   const declared = new Set<string>();
   const edits: { at: number; text: string }[] = [];
@@ -74,6 +79,7 @@ export function instrument(src: string): { code: string; toggles: string[]; emit
       if (callee.type === 'MemberExpression' && !callee.computed && (callee.object as AnyNode).name === 'battle' && (callee.property as AnyNode).name === 'on') {
         const a0 = (n.arguments as AnyNode[])[0];
         if (a0?.type === 'Literal') toggles.add(String(a0.value));
+        else if (a0?.type === 'Identifier') toggleIdentifiers.add(String(a0.name));
       }
     }
     if (n.type === 'VariableDeclarator') patternNames(n.id as AnyNode, declared);
@@ -102,5 +108,5 @@ export function instrument(src: string): { code: string; toggles: string[]; emit
   edits.sort((a, b) => b.at - a.at);
   let code = src;
   for (const e of edits) code = code.slice(0, e.at) + e.text + code.slice(e.at);
-  return { code, toggles: [...toggles], emits: [...emits], noguard };
+  return { code, toggles: [...toggles], toggleIdentifiers: [...toggleIdentifiers], emits: [...emits], noguard };
 }

@@ -18,6 +18,20 @@ test('battle.on(...) calls are scanned as toggles too, the same as battle.toggle
   expect(instrument("if (battle.toggles.a) {}\nif (battle.on('b')) {}").toggles.sort()).toEqual(['a', 'b']);
 });
 
+test('battle.on(<identifier>) is not a literal toggle, but is noted as a toggle-identifier candidate; compile() keeps only the ones that are compiled param names', () => {
+  const r = instrument('if (battle.on(switchName)) bonus(stat, amount)');
+  expect(r.toggles).toEqual([]);
+  expect(r.toggleIdentifiers).toEqual(['switchName']);
+  // A shared function's own source can never know the switch's name (it's the caller's argument) — that's
+  // exactly what `toggleParams` records, so `collectToggles` can still discover it from a literal call arg.
+  const c = compile('if (battle.on(switchName)) bonus(stat, amount)', ['stat', 'amount', 'switchName']);
+  expect(c.ok).toBe(true);
+  if (c.ok) { expect(c.toggles).toEqual([]); expect(c.toggleParams).toEqual(['switchName']); }
+  // An identifier that isn't a compiled param at all contributes nothing: it can never be resolved to a value.
+  const noParams = compile('if (battle.on(switchName)) bonus(stat, amount)');
+  if (noParams.ok) expect(noParams.toggleParams).toEqual([]);
+});
+
 test('@noguard is read from real comments, not from a string that merely contains the text', () => {
   expect(instrument("note('// @noguard'); while (true) {}").noguard).toBe(false);
   expect(instrument("note('// @noguard'); while (true) {}").code).toContain('__g()');

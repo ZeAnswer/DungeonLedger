@@ -103,22 +103,25 @@ test('the shipped v3 packs parse through the v4 converter', () => {
   }
 });
 
-test('both shipped packs that use battle.on(...) now yield a non-empty toggle list from the static scan', () => {
+test('both shipped packs that use battle.on(...) now yield a non-empty toggle list from the static scan (a literal name directly, or — for a shared function body — a toggleParams candidate resolved at each call site)', () => {
   let sawOne = false;
   for (const rel of ['../../../packs/core-3.5e.json', '../../../packs/memento.json']) {
     const pack = readPack(rel);
-    const check = (source: string, owner: string) => {
+    const check = (source: string, owner: string, paramNames?: string[]) => {
       if (!source.includes('battle.on(')) return;
       sawOne = true;
-      const c = compile(source);
+      const c = compile(source, paramNames);
       expect(c.ok, `${owner} (${rel}): ${c.ok ? '' : c.error}`).toBe(true);
-      if (c.ok) expect(c.toggles.length, `${owner} (${rel}) toggles`).toBeGreaterThan(0);
+      // A record's own script must resolve a literal toggle name. A shared function's *body* may instead
+      // gate on one of its own parameters (the name is only known at the call site — see compile.test.ts
+      // and hooks.ts's collectToggles); either counts as "the static scan can still find this switch".
+      if (c.ok) expect(c.toggles.length + c.toggleParams.length, `${owner} (${rel}) toggles/toggleParams`).toBeGreaterThan(0);
     };
     for (const a of pack.abilities) {
       for (const s of a.scripts) check(s.source, `${a.id}/${s.id}`);
       for (const act of activationsOf(a)) for (const s of act.scripts) check(s.source, `${a.id}/${act.id}/${s.id}`);
     }
-    for (const f of pack.functions) check(f.source, `fn:${f.id}`);
+    for (const f of pack.functions) check(f.source, `fn:${f.id}`, f.params.map((p) => p.name));
   }
   expect(sawOne).toBe(true); // otherwise this test would be checking nothing
 });

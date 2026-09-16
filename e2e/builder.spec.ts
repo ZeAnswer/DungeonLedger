@@ -241,3 +241,29 @@ test('call form: a stored function call round-trips through the form', async ({ 
   await expect(row.locator('[data-role="arg-amount"] input')).toHaveValue('4');
   await expect(row.locator('[data-role="arg-types"] input')).toHaveValue('params.types');
 });
+
+test('bonusWhenSwitch: a call with a literal switch name is discoverable as a toggle chip in battle', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Library' }).click();
+  await page.getByRole('button', { name: '+ New feature' }).click();
+  const sheet = page.locator('.fixed.inset-0');
+  await sheet.getByLabel('Name').fill('Test Sniping');
+  await sheet.getByLabel(/^Id/).fill('test-sniping');
+  await sheet.getByRole('button', { name: '+ add script' }).click();
+  const row = sheet.locator('[data-role="script"]').first();
+  await row.getByRole('button', { name: 'use a function instead' }).click();
+  await row.locator('[data-role="call-fn"]').selectOption('bonusWhenSwitch');
+  await row.locator('[data-role="arg-stat"] select').selectOption('attack');
+  await row.locator('[data-role="arg-amount"] input').fill('1');
+  await row.locator('[data-role="arg-switchName"] input').fill('sniping');
+  await sheet.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Test Sniping')).toBeVisible();
+
+  // put it on the sheet, then start a battle: the switch's name is only a literal in this call's own
+  // args (the shared function's body just reads `switchName`), so this exercises collectToggles picking
+  // it up from `call.args`, not from the function source alone.
+  await page.locator('[data-record="test-sniping"]').getByRole('button', { name: 'add' }).click();
+  await page.getByRole('navigation').getByRole('button', { name: 'Battle' }).click();
+  await page.getByRole('button', { name: /New battle/ }).click();
+  await expect(page.getByRole('button', { name: 'Sniping', exact: true })).toBeVisible();
+});

@@ -2,7 +2,7 @@ import { API_NAMES, type ScriptApi } from './api';
 import { instrument } from './instrument';
 
 export type Compiled =
-  | { ok: true; run: (api: ScriptApi, guard: () => void) => void; toggles: string[]; emits: string[]; noguard: boolean }
+  | { ok: true; run: (api: ScriptApi, guard: () => void) => void; toggles: string[]; toggleParams: string[]; emits: string[]; noguard: boolean }
   | { ok: false; error: string; line?: number };
 
 /** Built on first use: `api.ts` reaches this module through an import cycle, so it may still be initialising. */
@@ -25,7 +25,10 @@ export function compile(source: string, paramNames: string[] = []): Compiled {
     const ins = instrument(source);
     const argLine = paramNames.length ? `const { ${paramNames.join(', ')} } = args;\n` : '';
     const f = new Function('api', '__g', `"use strict";\n${PREAMBLE()}${argLine}${ins.code}\n`) as (api: ScriptApi, g: () => void) => void;
-    out = { ok: true, run: f, toggles: ins.toggles, emits: ins.emits, noguard: ins.noguard };
+    // A `battle.on(<identifier>)` whose identifier is a compiled param name: the toggle's name is only
+    // known at the call site (the caller's literal argument for that param), not in this source alone.
+    const toggleParams = ins.toggleIdentifiers.filter((name) => paramNames.includes(name));
+    out = { ok: true, run: f, toggles: ins.toggles, toggleParams, emits: ins.emits, noguard: ins.noguard };
   } catch (e) {
     const err = e as Error & { loc?: { line: number } };
     const m = /Identifier '(\w+)' has already been declared/.exec(err.message);
