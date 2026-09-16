@@ -3,6 +3,8 @@ import { evalExpr } from './expr';
 import { derivedFromLevels } from './levels';
 import { resolveFlags, resolveStat } from './resolve';
 import { countHistory } from './history';
+import { resolveStatVia } from './scripts/registry';
+import { ROUND } from './scripts/units';
 import type { Ability } from './schema';
 
 export type SelValue = number | boolean | string | string[] | undefined;
@@ -36,6 +38,7 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
         }
         case 'class': { const id = p.slice(2, -1).join('.'); return c.classLevels.find((x) => x.classId === id)?.level ?? 0; }
         case 'tag': return !!ctx.battle?.selfConditions.some((x) => x.tag === rest);
+        case 'tags': return ctx.battle?.selfConditions.map((x) => x.tag) ?? [];
         case 'ability': {
           const id = p.slice(2, -1).join('.'); const what = p[p.length - 1];
           const inst = c.abilities.find((a) => a.abilityId === id);
@@ -71,11 +74,15 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
           return [];
         }
         case 'var': return c.vars[rest];
-        case 'hp': return rest === 'max' ? resolveStat(ctx, 'hp.max').total : c.hp.current;
+        case 'hp': return rest === 'max' ? resolveStat(ctx, 'hp.max').total : rest === 'temp' ? c.hp.temp : rest === 'nonlethal' ? c.hp.nonlethal : c.hp.current;
         case 'level': return derivedFromLevels(c, ctx.library).level;
         case 'bab': return derivedFromLevels(c, ctx.library).bab;
         case 'size': return c.size;
-        case 'mod': return abilityMod(c.abilityScores[rest as 'str'] ?? 10);
+        case 'mod': {
+          // effective score (items, buffs and scripts included); base score while no resolver is registered
+          const key = rest as 'str';
+          try { return abilityMod(resolveStatVia(ctx, `ability.${key}`).total); } catch { return abilityMod(c.abilityScores[key] ?? 10); }
+        }
         default: return undefined;
       }
     }
@@ -110,6 +117,7 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
           const w = a.weaponAbilityId ? ctx.library.abilities[a.weaponAbilityId] : undefined;
           if (rest === 'id') return a.weaponAbilityId;
           if (rest === 'category') return itemMeta(w)?.category;
+          if (rest === 'tags') return itemMeta(w)?.tags ?? [];
           if (p[2] === 'tag') return !!itemMeta(w)?.tags.includes(p.slice(3).join('.'));
           return undefined;
         }
@@ -122,6 +130,8 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
         case 'round': return b?.round ?? 1;
         case 'toggle': return !!b?.toggles[rest];
         case 'tag': return !!b?.tags?.includes(rest);
+        case 'tags': return b?.tags ?? [];
+        case 'elapsed': return ((b?.round ?? 1) - 1) * ROUND;
         case 'prompt': {
           if (!b) return undefined;
           if (b.prompts[rest] !== undefined) return b.prompts[rest];
@@ -135,8 +145,8 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
     case 'flag': return !!resolveFlags(ctx)[p.slice(1).join('.')];
     case 'history': {
       // history.<event>.<by>.<vs>.<scope>[.<abilityId>]
-      const [, event, by = 'me', vs = 'current', scope = 'thisRound', abilityId] = p;
-      return countHistory(ctx, { event: event as 'hit', by: by as 'me', vs: vs as 'current', scope: scope as 'thisRound', ...(abilityId ? { abilityId } : {}) });
+      const [, event, by = 'me', vs = 'current', scope = 'round', abilityId] = p;
+      return countHistory(ctx, { event: event as 'hit', by: by as 'me', vs: vs as 'current', scope: scope as 'round', ...(abilityId ? { abilityId } : {}) });
     }
     default: return undefined;
   }

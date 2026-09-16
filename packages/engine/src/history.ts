@@ -3,7 +3,7 @@ import type { Battle, HistoryFilter, LogEvent } from './schema';
 
 function inScope(e: LogEvent, battle: Battle, scope: HistoryFilter['scope']): boolean {
   switch (scope) {
-    case 'thisRound': case 'thisAttackSequence': return e.round === battle.round;
+    case 'round': case 'attack': return e.round === battle.round;
     case 'lastRound': return e.round === battle.round - 1;
     default: return true;
   }

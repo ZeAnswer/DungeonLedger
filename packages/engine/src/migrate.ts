@@ -2,10 +2,14 @@
  * Converts rules written in the v1 format (kind-based conditions/effects, `source`, `resources.per`) to v2
  * (selectors + verbs + envelope). Idempotent: v2 input is returned unchanged.
  */
-import type { Duration } from './schema';
+import type { Duration, HistoryFilter } from './schema';
 
 type Any = Record<string, unknown>;
 const isObj = (x: unknown): x is Any => !!x && typeof x === 'object' && !Array.isArray(x);
+
+/** v1/v2 history scope names (and the v1 `used` scopes) in the current HistoryFilter vocabulary. */
+const HISTORY_SCOPE: Record<string, HistoryFilter['scope']> = { thisRound: 'round', round: 'round', thisAttackSequence: 'attack', attack: 'attack', lastRound: 'lastRound', encounter: 'encounter', day: 'day' };
+const historyScope = (raw: unknown): HistoryFilter['scope'] => HISTORY_SCOPE[String(raw)] ?? 'round';
 
 export function isV1Ability(a: unknown): boolean {
   if (!isObj(a)) return false;
@@ -44,11 +48,11 @@ export function convertCondition(c: unknown): Any {
     case 'attack.isFirstThisRound': return { is: 'attack.isFirstThisRound' };
     case 'attack.index': return { compare: 'attack.index', op: '=', value: c.index as number };
     case 'log': return {
-      history: { event: c.event === 'use' ? 'used' : (c.event as 'hit' | 'miss' | 'crit'), by: 'me', vs: (c.target as 'current' | 'any') ?? 'current', scope: c.scope as 'thisRound', ...(c.abilityId ? { abilityId: c.abilityId as string } : {}) },
+      history: { event: c.event === 'use' ? 'used' : (c.event as 'hit' | 'miss' | 'crit'), by: 'me', vs: (c.target as 'current' | 'any') ?? 'current', scope: historyScope(c.scope), ...(c.abilityId ? { abilityId: c.abilityId as string } : {}) },
       op: '>=', value: (c.min as number) ?? 1,
     };
     case 'used': {
-      const scope = ({ round: 'thisRound', encounter: 'encounter', day: 'day' } as const)[c.scope as 'round' | 'encounter' | 'day'];
+      const scope = historyScope(c.scope);
       return {
         history: { event: 'used', by: 'me', vs: c.perTagCategory ? 'sameCategory' : 'any', scope, abilityId: c.abilityId as string, ...(c.perTagCategory ? { category: c.perTagCategory as string } : {}) },
         op: '>=', value: 1,

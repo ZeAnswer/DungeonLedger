@@ -1,0 +1,132 @@
+import type { EvalContext } from '../../src/context';
+import { AbilitySchema } from '../../src/schema';
+import { API_NAMES, makeApi, ScriptSkip, type Patch, type Trace } from '../../src/scripts/api';
+import { setStatResolver } from '../../src/scripts/registry';
+import { newSink } from '../../src/scripts/sink';
+import { HURT, ROUND, SIZE } from '../../src/scripts/units';
+import { makeBattle, makeCharacter, makeCombatant, makeCtx } from '../fixtures';
+
+// Task 6 registers the real resolveStat; here a stand-in over the raw character.
+setStatResolver((ctx: EvalContext, stat: string) => {
+  const ability = /^ability\.(str|dex|con|int|wis|cha)$/.exec(stat);
+  if (ability) return { total: ctx.character.abilityScores[ability[1] as 'dex'] };
+  if (stat === 'hp.max') return { total: ctx.character.hp.max };
+  return { total: 0 };
+});
+
+const feat = AbilitySchema.parse({ id: 'f', name: 'Feat', kind: 'feature', params: { types: { kind: 'tags', category: 'creatureType' } } });
+
+function setup(phase: 'always' | 'event' = 'always') {
+  const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1', tags: ['aberration', 'aquatic'], size: 'large', hurt: 'bloodied', distanceFeet: 20 })], toggles: { sniping: true }, prompts: { 'knowledge:aberration': 24 } });
+  const ctx = makeCtx({
+    character: makeCharacter({ abilities: [{ abilityId: 'f', enabled: true, paramValues: { types: ['aberration'] } }], vars: { trophyMultiplier: 2 } }),
+    battle,
+    target: battle.combatants[0],
+    attack: { profile: { id: 'bow', name: 'Bow', kind: 'ranged', baseDice: '1d8', enhancement: 1, critRange: 20, critMult: 3, attackAbility: 'dex', damageAbilityMultiplier: 1 }, kind: 'ranged', index: 2, modeId: 'full' },
+  });
+  ctx.library.abilities['f'] = feat;
+  ctx.library.globals = { season: 'winter' };
+  const sink = newSink();
+  const patches: Patch[] = [];
+  const trace: Trace = { emitted: false };
+  const api = makeApi(
+    ctx,
+    {
+      phase,
+      source: { ability: feat, instance: ctx.character.abilities[0], label: 'Feat' },
+      script: { id: 's', events: [phase === 'always' ? 'always' : 'hit'], source: '', enabled: true, priority: 0 },
+      ...(phase === 'event' ? { event: { kind: 'hit' as const, result: 'hit' as const, damage: 9, targetId: 'c1' } } : {}),
+    },
+    sink,
+    patches,
+    trace,
+  );
+  return { ctx, sink, patches, trace, api };
+}
+
+test('reads: paths, enums, predicates trace themselves', () => {
+  const { api, trace } = setup();
+  expect(api.player.level).toBe(6); expect(api.player.mod.dex).toBe(3); expect(api.player.skills.spot!.ranks).toBe(9); expect(api.player.classes.ranger).toBe(5);
+  expect(api.target.size).toBe(SIZE.LARGE); expect(api.target.hurt).toBe(HURT.BLOODIED); expect(api.target.distance).toBe(20);
+  expect(api.target.is('aquatic')).toBe(true); expect(trace.last).toEqual({ text: 'target is Aquatic', result: true });
+  expect(api.target.within(10)).toBe(false); expect(trace.last).toEqual({ text: 'target within 10 ft', result: false });
+  expect(api.target.isOneOf(api.params.types!)).toBe(true);
+  expect(api.attack.isRanged).toBe(true); expect(api.attack.index).toBe(2);
+  expect(api.battle.on('sniping')).toBe(true); expect(api.battle.prompts.knowledge).toBe(24);
+  expect(api.vars.trophyMultiplier).toBe(2); expect(api.vars.season).toBe('winter'); expect(api.vars.nope).toBeUndefined();
+});
+
+test('API_NAMES matches the api object exactly (the preamble destructures it)', () => {
+  const { api } = setup();
+  expect(Object.keys(api).sort()).toEqual([...API_NAMES].sort());
+});
+
+test('compute helpers fill the sink with source attribution; event helpers throw in always phase', () => {
+  const { api, sink } = setup();
+  api.bonus(['attack', 'damage'], 2, 'morale'); api.bonus('ac', 1, 'dodge', { as: 'Dodging' }); api.dice('1d6', 'fire'); api.flag('ignoreConcealment'); api.note('hi'); api.slot('ring'); api.attackMode({ id: 'rs', label: 'Rapid Shot', base: 'full', extra: 1, penalty: -2, kind: 'ranged' }); api.extraAttack(1);
+  expect(sink.bonuses.map((b) => [b.stat, b.value, b.bonusType, b.label, b.source])).toEqual([['attack', 2, 'morale', 'Feat', 'f'], ['damage', 2, 'morale', 'Feat', 'f'], ['ac', 1, 'dodge', 'Dodging', 'f']]);
+  expect(sink.dice[0]).toMatchObject({ dice: '1d6', damageType: 'fire' }); expect(sink.flags).toEqual({ ignoreConcealment: true }); expect(sink.slots.ring).toBe(1); expect(sink.modes[0]!.modeId).toBe('rs'); expect(sink.extraAttacks[0]).toMatchObject({ n: 1, base: 'full' });
+  expect(sink.notes[0]).toEqual({ text: 'hi', source: 'f', sourceName: 'Feat' });
+  expect(() => api.bonus('attac', 1)).toThrow(/unknown stat/);
+  expect(() => api.bonus('attack', 1, 'moral')).toThrow(/unknown bonus type/);
+  expect(() => api.heal(5)).toThrow(/only in event scripts/);
+  expect(() => { (api.player as unknown as { level: number }).level = 3; }).toThrow();
+});
+
+test('the remaining compute and event helpers reach the sink and the patch list', () => {
+  const { api, sink, trace } = setup();
+  expect(trace.emitted).toBe(false);
+  api.penalty('attack', 2, 'circumstance'); api.setStat('speed', 20); api.scale('damage', 2); api.naturalAttack({ name: 'Bite', dice: '1d6' });
+  expect(trace.emitted).toBe(true);
+  expect(sink.bonuses[0]).toMatchObject({ stat: 'attack', value: -2, bonusType: 'circumstance' });
+  expect(sink.sets[0]).toEqual({ stat: 'speed', value: 20, source: 'f' });
+  expect(sink.multipliers[0]).toEqual({ stat: 'damage', factor: 2, source: 'f' });
+  expect(sink.naturals[0]).toEqual({ name: 'Bite', dice: '1d6', count: 1, attackBonus: 0, source: 'f', sourceName: 'Feat' });
+  expect(() => api.dice('d6')).toThrow(/bad dice/);
+  expect(() => api.slot('pocket')).toThrow(/unknown slot/);
+
+  const ev = setup('event');
+  ev.api.condition('self', 'raging', 3 * ROUND); ev.api.target.unmark('flanked'); ev.api.hurt(2); ev.api.temp(5); ev.api.charges('rage').restore();
+  expect(ev.patches).toEqual([
+    { k: 'tag', to: 'self', tag: 'raging', duration: 18 },
+    { k: 'untag', to: 'target', tag: 'flanked' },
+    { k: 'hp', op: 'damage', amount: 2 },
+    { k: 'hp', op: 'temp', amount: 5 },
+    { k: 'resource', id: 'rage', op: 'restore', amount: 1 },
+  ]);
+});
+
+test('ask registers a prompt when unanswered and returns the stored value otherwise; tier maps', () => {
+  const { api, sink } = setup();
+  expect(api.ask('knowledge', { per: 'creatureType' })).toBe(24);
+  expect(api.ask('spellcraft')).toBe(0); expect(sink.prompts[0]).toMatchObject({ promptId: 'spellcraft', source: 'f' });
+  expect(api.tier(24, [15, 1], [25, 2], [Infinity, 5])).toBe(2);
+});
+
+test('event helpers queue patches; compute helpers throw in event phase', () => {
+  const { api, patches } = setup('event');
+  api.target.mark('flanked', ROUND); api.heal(5); api.charges('boots-rounds').use(2); api.setVar('kills', 1); api.emit('rage-ended', { by: 'f' }); api.grant('haste', 3 * ROUND); api.suppress('dodge'); api.reveal(); api.log('hi');
+  expect(patches.map((p) => p.k)).toEqual(['tag', 'hp', 'resource', 'setVar', 'emit', 'grant', 'suppress', 'reveal', 'log']);
+  expect(patches[0]).toEqual({ k: 'tag', to: 'target', tag: 'flanked', duration: 6 });
+  expect(api.event!.damage).toBe(9); expect(api.player.lastDamage).toBe(9);
+  expect(() => api.bonus('attack', 1)).toThrow(/only in always scripts/);
+});
+
+const skipReason = (fn: () => void): string | undefined => {
+  try { fn(); } catch (e) { return e instanceof ScriptSkip ? e.because : `not a skip: ${String(e)}`; }
+  return undefined;
+};
+
+test('need() throws a skip carrying the last false predicate', () => {
+  const { api, trace } = setup();
+  api.target.within(10);
+  expect(skipReason(() => api.need(trace.last?.result))).toBe('target within 10 ft');
+  expect(skipReason(() => api.need(false, 'you must be raging'))).toBe('you must be raging');
+  expect(skipReason(() => api.need(true))).toBeUndefined();
+});
+
+test('history helper counts with friendly defaults', () => {
+  const { api, ctx } = setup();
+  ctx.battle!.log.push({ id: 'e1', round: 1, seq: 1, kind: 'attack', actor: 'self', targetId: 'c1', result: 'miss' }, { id: 'e2', round: 1, seq: 2, kind: 'attack', actor: 'self', targetId: 'c1', result: 'miss' });
+  expect(api.history('miss')).toBe(2); expect(api.history('hit')).toBe(0); expect(api.history('miss', { since: 'lastRound' })).toBe(0);
+});
