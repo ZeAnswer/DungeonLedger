@@ -3,8 +3,8 @@ import { activationsOf, type Script } from '../schema';
 import { makeApi, ScriptSkip, type Patch, type RunContext, type RunSource, type Trace } from './api';
 import { Budget, ScriptTimeout } from './budget';
 import { compile } from './compile';
-import { diagnostics, getScriptMode } from './diagnostics';
-import { newSink, type Sink } from './sink';
+import { diagnostics, getScriptMode, setQuarantineHook } from './diagnostics';
+import { cloneSink, newSink, type Sink } from './sink';
 
 export type ScriptSource = RunSource & { kind: 'ability' | 'buff' | 'activation'; scripts: Script[] };
 
@@ -103,46 +103,78 @@ export function clearComputeCache(): void {
   cache = new WeakMap();
 }
 
+// A script quarantined mid-pass (or a plain diagnostics.clear()) invalidates every cached pass: see
+// the comment on `setQuarantineHook`.
+setQuarantineHook(clearComputeCache);
+
 export type RunOutcome = 'ok' | 'skipped' | 'error';
+
+/**
+ * Fields a script actually *contributes*: merged into the real sink only when the script finishes 'ok',
+ * mirroring how `events.ts` buffers patches and merges them only on `'ok'`. `skipped`/`errors` (and
+ * `warnings`, which scripts never write) are bookkeeping, not contributions, so they always merge.
+ */
+const mergeAlways = (real: Sink, work: Sink, outcome: RunOutcome): void => {
+  real.skipped = work.skipped;
+  real.errors = work.errors;
+  if (outcome !== 'ok') return;
+  real.bonuses = work.bonuses;
+  real.sets = work.sets;
+  real.multipliers = work.multipliers;
+  real.dice = work.dice;
+  real.notes = work.notes;
+  real.modes = work.modes;
+  real.extraAttacks = work.extraAttacks;
+  real.naturals = work.naturals;
+  real.slots = work.slots;
+  real.prompts = work.prompts;
+  real.flags = work.flags;
+};
 
 /**
  * Compile (or synthesize from `call`) and run one script; errors go to the sink and diagnostics, skips
  * to `sink.skipped`. The outcome tells the caller whether the script finished: a skipped or failed
- * script must not leave half its patches behind.
+ * script must not leave half its patches — or, in an always script, half its bonuses/dice/flags/etc. —
+ * behind. An always-phase run writes into a scratch sink (seeded with whatever earlier scripts already
+ * contributed, so `flags.x` and friends still read correctly) and is merged into the caller's sink only
+ * once the outcome is known.
  */
 export function runOne(ctx: EvalContext, run: RunContext, sink: Sink, patches: Patch[]): RunOutcome {
   const key = [run.source.ability.id, run.source.activation?.id, run.script.id].filter(Boolean).join('/');
   if (!run.probe && diagnostics.quarantined(key)) return 'error';
-  const near = (failed: string) => sink.skipped.push({ source: run.source.ability.id, sourceName: run.source.label, label: run.script.label ?? run.source.label, summary: '', failed });
+  const always = run.phase === 'always';
+  const work = always ? cloneSink(sink) : sink;
+  const near = (failed: string) => work.skipped.push({ source: run.source.ability.id, sourceName: run.source.label, label: run.script.label ?? run.source.label, summary: '', failed });
   const fail = (phase: 'compile' | 'run', message: string, line?: number) => {
     const e = { recordId: run.source.ability.id, scriptId: run.script.id, label: run.script.label ?? run.source.label, phase, message, ...(line !== undefined ? { line } : {}) };
-    sink.errors.push(e);
+    work.errors.push(e);
     if (run.probe) return; // a probe run is not the script's real turn: it must not quarantine it
     diagnostics.record(e);
     diagnostics.noteFailure(key);
   };
+  const finish = (outcome: RunOutcome): RunOutcome => { if (always) mergeAlways(sink, work, outcome); return outcome; };
   const source = run.script.call ? callSource(ctx, run.script.call) : run.script.source;
-  if (source === undefined) { fail('compile', `unknown function "${run.script.call?.fn}"`); return 'error'; }
+  if (source === undefined) { fail('compile', `unknown function "${run.script.call?.fn}"`); return finish('error'); }
   const compiled = compile(source);
-  if (!compiled.ok) { fail('compile', compiled.error, compiled.line); return 'error'; }
+  if (!compiled.ok) { fail('compile', compiled.error, compiled.line); return finish('error'); }
   const trace: Trace = { emitted: false };
   // A fresh budget per script run: a nested pass (a script reading a stat) must not reset the outer one.
   const budget = new Budget();
   // This record's own instance, so `sel('self.param.x')` and the api read this record's choices.
   const rctx: EvalContext = { ...ctx, abilityInstance: run.source.instance };
-  const fns = fnTable(rctx, run, sink, patches, trace, 0, budget);
-  const api = makeApi(rctx, { ...run, fns }, sink, patches, trace);
+  const fns = fnTable(rctx, run, work, patches, trace, 0, budget);
+  const api = makeApi(rctx, { ...run, fns }, work, patches, trace);
   budget.start(run.phase === 'always' ? 4 : 16);
   try {
     compiled.run(api, compiled.noguard ? () => {} : budget.tick);
   } catch (e) {
-    if (e instanceof ScriptSkip) { near(e.because); return 'skipped'; }
+    if (e instanceof ScriptSkip) { near(e.because); return finish('skipped'); }
     fail('run', e instanceof ScriptTimeout || e instanceof Error ? (e as Error).message : String(e));
-    return 'error';
+    return finish('error');
   }
   // Nothing contributed and the last predicate was false: that predicate is the "needs …" reason.
   if (run.phase === 'always' && !trace.emitted && trace.last && !trace.last.result) near(trace.last.text);
-  return 'ok';
+  return finish('ok');
 }
 
 const startedBudget = () => { const b = new Budget(); b.start(16); return b; };

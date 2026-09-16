@@ -31,3 +31,15 @@ export type Sink = {
 };
 
 export const newSink = (): Sink => ({ bonuses: [], sets: [], multipliers: [], dice: [], flags: {}, notes: [], modes: [], extraAttacks: [], naturals: [], slots: {}, prompts: [], skipped: [], errors: [], warnings: [] });
+
+/**
+ * A shallow copy of every field: a script's scratch sink starts as a snapshot of what earlier scripts
+ * already contributed (so reads inside the script — `flags.x`, etc. — see them), and its own new
+ * entries land in fresh arrays/objects that can be thrown away without touching the original.
+ */
+export const cloneSink = (s: Sink): Sink => ({
+  bonuses: [...s.bonuses], sets: [...s.sets], multipliers: [...s.multipliers], dice: [...s.dice],
+  flags: { ...s.flags }, notes: [...s.notes], modes: [...s.modes], extraAttacks: [...s.extraAttacks],
+  naturals: [...s.naturals], slots: { ...s.slots }, prompts: [...s.prompts],
+  skipped: [...s.skipped], errors: [...s.errors], warnings: [...s.warnings],
+});

@@ -12,6 +12,26 @@ test('instrument splices guards into loops and functions and scans toggles and e
   expect(instrument('// @noguard\nwhile (x) {}').code).toBe('// @noguard\nwhile (x) {}');
 });
 
+test('battle.on(...) calls are scanned as toggles too, the same as battle.toggles.<name> reads', () => {
+  expect(instrument("if (battle.toggles.a) {}").toggles).toEqual(['a']);
+  expect(instrument("if (battle.on('b')) {}").toggles).toEqual(['b']);
+  expect(instrument("if (battle.toggles.a) {}\nif (battle.on('b')) {}").toggles.sort()).toEqual(['a', 'b']);
+});
+
+test('@noguard is read from real comments, not from a string that merely contains the text', () => {
+  expect(instrument("note('// @noguard'); while (true) {}").noguard).toBe(false);
+  expect(instrument("note('// @noguard'); while (true) {}").code).toContain('__g()');
+  expect(instrument('/* @noguard */\nwhile (true) {}').noguard).toBe(true);
+});
+
+test('__g and api cannot be declared: shadowing the runtime\'s own parameters would disable the guard silently (var does not raise "already declared")', () => {
+  expect(() => instrument('var __g = () => 0; while (true) {}')).toThrow(/__g/);
+  expect(() => instrument('var api = 1;')).toThrow(/api/);
+  expect(() => instrument('const { __g } = {};')).toThrow(/__g/);
+  expect(() => instrument('function api() {}')).toThrow(/api/);
+  expect(() => instrument('bonus("attack", 1);')).not.toThrow();
+});
+
 test('compile caches, reports syntax errors with a line, and runs with the destructured api', () => {
   const bad = compile('bonus(1,'); expect(bad.ok).toBe(false); if (!bad.ok) expect(bad.error).toMatch(/Unexpected/);
   const good = compile("bonus('attack', 2)"); expect(good.ok).toBe(true);
@@ -19,6 +39,9 @@ test('compile caches, reports syntax errors with a line, and runs with the destr
   expect(calls).toEqual([['attack', 2]]);
   expect(compile("bonus('attack', 2)")).toBe(good);
   const shadow = compile('const bonus = 1'); expect(shadow.ok).toBe(false); if (!shadow.ok) expect(shadow.error).toMatch(/bonus/);
+  // `var __g = ...` doesn't raise a "already declared" error (var may re-bind a parameter) and would
+  // otherwise silently swap out the loop guard; compile() must still reject it.
+  const noBudget = compile('var __g = () => 0; while (true) {}'); expect(noBudget.ok).toBe(false); if (!noBudget.ok) expect(noBudget.error).toMatch(/__g/);
 });
 
 test('budget stops a runaway loop', () => {

@@ -69,8 +69,8 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
         }
         case 'param': {
           const fromInst = ctx.abilityInstance?.paramValues[rest];
-          if (fromInst) return fromInst;
-          for (const inst of c.abilities) if (inst.paramValues[rest]) return inst.paramValues[rest];
+          if (fromInst) return [...fromInst];
+          for (const inst of c.abilities) if (inst.paramValues[rest]) return [...inst.paramValues[rest]];
           return [];
         }
         case 'var': return c.vars[rest];

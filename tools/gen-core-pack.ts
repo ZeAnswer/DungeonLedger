@@ -73,7 +73,7 @@ const pack: Pack = PackSchema.parse({
   abilities: [
     // ---- ranger class features ----
     {
-      // v4: calls the `favoredEnemy` library function (packs/memento.json) instead of six bonus lines.
+      // v4: calls the `favoredEnemy` library function (defined above, in this pack) instead of six bonus lines.
       id: 'favored-enemy-1', name: 'Favored Enemy (1st)', kind: 'feature', acquired: { kind: 'class' }, sourceRef: 'PHB p.47',
       text: '+2 on Bluff, Listen, Sense Motive, Spot and Survival checks and weapon damage rolls against the chosen creature type. Increases by +2 at ranger levels 5, 10, 15, 20 (choose which favored enemy improves).',
       params: { types: { kind: 'tags', label: 'Creature type', category: 'creatureType', count: 1 } },

@@ -1,4 +1,4 @@
-import { resolveStat, resolveAttack, attackProfiles, availableActions, listAttackModes, listPools } from '../src/resolve';
+import { resolveStat, resolveAttack, attackProfiles, availableActions, listAttackModes, listPools, resolveFlags } from '../src/resolve';
 import { activeSources } from '../src/scripts/compute';
 import { makeCtx, makeBattle, makeCombatant, makeAbility, makeCharacter, ev } from './fixtures';
 import { AbilitySchema, type Ability } from '../src/schema';
@@ -281,6 +281,15 @@ test('availableActions lists activations with charges, spell name and declare fl
   expect(src!.scripts).toEqual(daylight.scripts); // the cast spell's scripts run while the activation is up
   const suppressed = { ...c, battle: { ...c.battle!, suppressedAbilities: ['monster-blow'] } };
   expect(listPools(suppressed)).toEqual([]);
+});
+
+test('resolveFlags returns a copy: editing the result cannot edit the cached pass', () => {
+  const flaggy = makeAbility({ id: 'flaggy', name: 'Flaggy', kind: 'feature', scripts: [{ id: 'f', source: "flag('ignoreConcealment')" }] });
+  const c = ctxWith([flaggy]);
+  const flags = resolveFlags(c);
+  flags.ignoreConcealment = false;
+  (flags as Record<string, boolean>).injected = true;
+  expect(resolveFlags(c)).toEqual({ ignoreConcealment: true });
 });
 
 test('a manual attack profile that duplicates an equipped weapon by name is hidden', () => {

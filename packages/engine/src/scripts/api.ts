@@ -41,7 +41,10 @@ export type RunContext = {
 
 /** Thrown by `need()`: not an error, the script simply does not apply and says why. */
 export class ScriptSkip {
-  constructor(public because: string) {}
+  because: string;
+  constructor(because: string) {
+    this.because = because;
+  }
 }
 
 const ABILITY_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
@@ -51,6 +54,11 @@ const readOnly = (k: string | symbol) => new Error(`${String(k)} is read-only: u
  * so every façade object refuses writes with a message that names the helpers instead.
  */
 const freeze = <T extends object>(o: T): T => new Proxy(Object.freeze(o), { set: (_t, k) => { throw readOnly(k); } }) as T;
+/** `event` is shared by every script that runs for the same event: freeze it (and its payload) so one script cannot change what the next one reads. */
+const freezeEvent = (e: EventInfo): EventInfo => {
+  if (e.payload && typeof e.payload === 'object') Object.freeze(e.payload);
+  return freeze(e);
+};
 const proxy = <T>(get: (k: string) => T, set?: (k: string, v: T) => void): Record<string, T> =>
   new Proxy(Object.freeze({}), {
     get: (_, k) => (typeof k === 'string' ? get(k) : undefined),
@@ -175,7 +183,7 @@ export function makeApi(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
 
   const api = {
     player, self: player, target, attack, battle, vars, flags, params,
-    active: activeOwn, event: run.event ?? null, args: run.args ?? {}, fn: run.fns ?? {},
+    active: activeOwn, event: run.event ? freezeEvent(run.event) : null, args: run.args ?? {}, fn: run.fns ?? {},
     sel,
     has: (who: { is: (x: string | string[]) => boolean }, tag: string | string[]) => who.is(tag),
     nameOf: (id: string) => ctx.library.abilities[id]?.name ?? id,

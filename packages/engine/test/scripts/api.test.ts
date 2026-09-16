@@ -1,5 +1,6 @@
 import type { EvalContext } from '../../src/context';
 import { AbilitySchema } from '../../src/schema';
+import { readSelector } from '../../src/selectors';
 import { API_NAMES, makeApi, ScriptSkip, type Patch, type Trace } from '../../src/scripts/api';
 import { compile } from '../../src/scripts/compile';
 import { setStatResolver } from '../../src/scripts/registry';
@@ -113,6 +114,17 @@ test('event helpers queue patches; compute helpers throw in event phase', () => 
   expect(() => api.bonus('attack', 1)).toThrow(/only in always scripts/);
 });
 
+test('event is frozen: one script cannot change what the next script (or this one) reads back', () => {
+  const ev = setup('event');
+  expect(() => { (ev.api.event as unknown as { damage: number }).damage = 999; }).toThrow();
+  expect(ev.api.event!.damage).toBe(9); // the assignment did not stick even though it threw
+  // a second api built off the very same run.event object (as runEventScripts does for every
+  // script in one event) still sees the original value
+  const api2 = makeApi(ev.ctx, { phase: 'event', source: { ability: feat, instance: ev.ctx.character.abilities[0], label: 'Feat' }, script: { id: 's2', events: ['hit'], source: '', enabled: true, priority: 0 }, event: { kind: 'hit', result: 'hit', damage: 9, targetId: 'c1', payload: { x: 1 } } }, ev.sink, ev.patches, ev.trace);
+  expect(() => { (api2.event as unknown as { payload: { x: number } }).payload.x = 2; }).toThrow();
+  expect(api2.event!.payload).toEqual({ x: 1 });
+});
+
 const skipReason = (fn: () => void): string | undefined => {
   try { fn(); } catch (e) { return e instanceof ScriptSkip ? e.because : `not a skip: ${String(e)}`; }
   return undefined;
@@ -131,11 +143,21 @@ test('lists are handed out as copies, so a script cannot mutate stored state', (
   api.battle.tags.push('on-fire');
   api.target.tags.push('on-fire');
   api.params.types!.push('dragon');
+  (api.sel('self.param.types') as string[]).push('dragon');
   expect(ctx.battle!.tags).toEqual(['underwater']);
   expect(ctx.target!.tags).toEqual(['aberration', 'aquatic']);
   expect(ctx.character.abilities[0]!.paramValues.types).toEqual(['aberration']);
   expect(api.target.is('on-fire')).toBe(false);
   expect(api.battle.tags).toEqual(['underwater']);
+});
+
+test("sel('self.param.x') hands out a copy, whether read off the record's own instance or found by scanning the character's abilities", () => {
+  const { ctx } = setup();
+  (readSelector(ctx, 'self.param.types') as string[]).push('dragon'); // no ctx.abilityInstance: falls through to the scan-abilities branch
+  expect(ctx.character.abilities[0]!.paramValues.types).toEqual(['aberration']);
+  const withInstance = { ...ctx, abilityInstance: ctx.character.abilities[0] };
+  (readSelector(withInstance, 'self.param.types') as string[]).push('dragon'); // ctx.abilityInstance set: the fromInst branch
+  expect(ctx.character.abilities[0]!.paramValues.types).toEqual(['aberration']);
 });
 
 test('assigning a var is setVar in event scripts and an error in always scripts', () => {

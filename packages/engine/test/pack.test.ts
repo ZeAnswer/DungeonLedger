@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { emptyLibrary, mergePack, libraryToPack } from '../src/pack';
 import { resolveStat } from '../src/resolve';
 import { activationsOf, PackSchema } from '../src/schema';
+import { compile } from '../src/scripts/compile';
 
 const p1 = PackSchema.parse({
   id: 'core', name: 'Core', version: 1,
@@ -100,4 +101,24 @@ test('the shipped v3 packs parse through the v4 converter', () => {
     const pack = readPack(rel);
     expect(pack.abilities.every((a) => Array.isArray(a.scripts)), rel).toBe(true);
   }
+});
+
+test('both shipped packs that use battle.on(...) now yield a non-empty toggle list from the static scan', () => {
+  let sawOne = false;
+  for (const rel of ['../../../packs/core-3.5e.json', '../../../packs/memento.json']) {
+    const pack = readPack(rel);
+    const check = (source: string, owner: string) => {
+      if (!source.includes('battle.on(')) return;
+      sawOne = true;
+      const c = compile(source);
+      expect(c.ok, `${owner} (${rel}): ${c.ok ? '' : c.error}`).toBe(true);
+      if (c.ok) expect(c.toggles.length, `${owner} (${rel}) toggles`).toBeGreaterThan(0);
+    };
+    for (const a of pack.abilities) {
+      for (const s of a.scripts) check(s.source, `${a.id}/${s.id}`);
+      for (const act of activationsOf(a)) for (const s of act.scripts) check(s.source, `${a.id}/${act.id}/${s.id}`);
+    }
+    for (const f of pack.functions) check(f.source, `fn:${f.id}`);
+  }
+  expect(sawOne).toBe(true); // otherwise this test would be checking nothing
 });

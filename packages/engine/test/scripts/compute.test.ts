@@ -41,6 +41,19 @@ test('always scripts fill the sink; a script that emits nothing records its last
   expect(near.bonuses.map((b) => [b.stat, b.value])).toEqual([['attack', 1], ['damage', 1]]);
 });
 
+test('a compute script that contributes and then skips (or throws) leaves nothing behind but the near-miss/error record', () => {
+  const skips = AbilitySchema.parse({ id: 'partial-skip', name: 'Partial Skip', kind: 'feature', scripts: [{ id: 's', source: "bonus('attack', 5); need(false, 'nope'); bonus('damage', 5);" }] });
+  const skipped = computePass(ctxWith([skips]));
+  expect(skipped.bonuses).toEqual([]);
+  expect(skipped.skipped).toEqual([{ source: 'partial-skip', sourceName: 'Partial Skip', label: 'Partial Skip', summary: '', failed: 'nope' }]);
+
+  const throws = AbilitySchema.parse({ id: 'partial-throw', name: 'Partial Throw', kind: 'feature', scripts: [{ id: 's', source: "bonus('attack', 5); notAFunction();" }] });
+  const errored = computePass(ctxWith([throws]));
+  expect(errored.bonuses).toEqual([]);
+  expect(errored.errors[0]).toMatchObject({ recordId: 'partial-throw' });
+  diagnostics.clear();
+});
+
 test('a throwing script is reported, quarantined after three passes, and never breaks the pass', () => {
   diagnostics.clear();
   const bad = AbilitySchema.parse({ id: 'bad', name: 'Bad', kind: 'feature', scripts: [{ id: 's', source: 'player.mod.cha += 1' }] });
@@ -100,6 +113,24 @@ test('a library edit (a new library object) is a new pass', () => {
   expect(computePass(c).bonuses[0]!.value).toBe(1);
   const after = { ...c, library: { ...c.library, abilities: { ...c.library.abilities, r: edited } } };
   expect(computePass(after).bonuses[0]!.value).toBe(5);
+});
+
+test('quarantining a script drops the compute cache, and so does diagnostics.clear()', () => {
+  diagnostics.clear();
+  const rec = AbilitySchema.parse({ id: 'q', name: 'Q', kind: 'feature', scripts: [{ id: 's', source: "bonus('init', 1)" }] });
+  const c = ctxWith([rec]);
+  const s1 = computePass(c);
+  expect(computePass(c)).toBe(s1);
+  diagnostics.noteFailure('other/x');
+  diagnostics.noteFailure('other/x');
+  expect(computePass(c)).toBe(s1); // two failures: not quarantined yet, cache untouched
+  diagnostics.noteFailure('other/x'); // third failure quarantines "other/x" and must drop the cache
+  expect(computePass(c)).not.toBe(s1);
+  const s2 = computePass(c);
+  expect(computePass(c)).toBe(s2);
+  diagnostics.clear();
+  expect(computePass(c)).not.toBe(s2); // clear() drops the cache too
+  diagnostics.clear();
 });
 
 test('the pass is cached per character/battle/library/target/attack and a nested stat read sees earlier scripts', () => {

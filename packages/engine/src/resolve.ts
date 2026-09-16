@@ -90,7 +90,7 @@ function promptWarning(ctx: EvalContext, p: PromptRequest): string {
 // ---------- flags ----------
 /** Boolean flags set by active scripts (ignoreConcealment, neverFlatFooted, immune.x, sense.x). */
 export function resolveFlags(ctx: EvalContext): Record<string, boolean> {
-  return computePass(ctx).flags;
+  return { ...computePass(ctx).flags };
 }
 
 // ---------- attack profiles ----------
