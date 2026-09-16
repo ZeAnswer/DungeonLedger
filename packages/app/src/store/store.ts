@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import {
-  AbilitySchema, BattleSchema, CharacterSchema, PackSchema, convertToV3, convertBattle, emptyLibrary, mergePack, libraryToPack, newBattle, activationsOf, clearComputeCache, diagnostics,
+  AbilitySchema, BattleSchema, CharacterSchema, convertToV3, convertBattle, emptyLibrary, mergePack, libraryToPack, newBattle, activationsOf, clearComputeCache, diagnostics,
   type Battle, type Character, type EvalContext, type LibraryWithMeta, type MergeReport, type Monster, type MonsterOverlay, type Pack, type VarValue, type ScriptError,
 } from '@hl/engine';
 import { storage } from '../storage';
 import { defaultPacks } from '../data/defaultPacks';
+import { clearBootState } from '../boot';
 
 export type FullLibrary = LibraryWithMeta & { monsters: Record<string, Monster>; characters: Record<string, Character>; monsterOverlay: Record<string, MonsterOverlay> };
 
@@ -41,7 +42,6 @@ type Actions = {
   /** Remember a tag change for every future copy of a bestiary monster. */
   setMonsterOverlay(monsterId: string, overlay: MonsterOverlay): void;
   importPack(pack: Pack, opts?: { overwrite?: boolean }): MergeReport;
-  importText(text: string, opts?: { overwrite?: boolean }): { report?: MergeReport; error?: string };
   exportLibraryText(): string;
   exportBackupText(): string;
   restoreBackupText(text: string): string | undefined;
@@ -110,7 +110,10 @@ export const useStore = create<Store>((set, get) => ({
       let lib = fullEmpty();
       for (const p of defaultPacks) lib = { ...lib, ...(mergePack(lib, p).library as FullLibrary) };
       const ch = Object.values(lib.characters)[0];
-      set({ library: lib, globals: lib.globals, character: ch, hydrated: true, screen: 'battle' });
+      // Globals live only in the live slice, never in the persisted library blob (same reason as
+      // importPack and the built-in-pack update path below).
+      const { globals: freshGlobals, ...libNoGlobals } = lib;
+      set({ library: libNoGlobals as FullLibrary, globals: freshGlobals, character: ch, hydrated: true, screen: 'battle' });
       return;
     }
     // Built-in packs newer than what this install has seen get merged in (same-pack newer version wins; user edits to other packs untouched).
@@ -174,17 +177,6 @@ export const useStore = create<Store>((set, get) => ({
     return m.report;
   },
 
-  importText(text, opts) {
-    try {
-      const raw = JSON.parse(text);
-      const r = PackSchema.safeParse(raw);
-      if (!r.success) return { error: r.error.issues.slice(0, 5).map((i) => `${i.path.join('.')}: ${i.message}`).join('\n') };
-      return { report: get().importPack(r.data, opts) };
-    } catch (e) {
-      return { error: (e as Error).message };
-    }
-  },
-
   exportLibraryText() {
     const { library, globals, character } = get();
     const lib = { ...library, globals, ...(character ? { characters: { ...library.characters, [character.id]: character } } : {}) };
@@ -229,7 +221,10 @@ export const useStore = create<Store>((set, get) => ({
   async resetToDefaults() {
     const s = storage();
     for (const k of Object.values(KEYS)) await s.remove(k);
-    set({ hydrated: false, library: fullEmpty(), globals: {}, character: undefined, battle: undefined, pastBattles: [], targetId: undefined });
+    // `hl.safeMode`/`hl.bootFails` live outside the KEYS above (see boot.ts): without this, a factory
+    // reset performed while safe mode is on (or mid boot-loop) comes right back in safe mode on reload.
+    clearBootState();
+    set({ hydrated: false, library: fullEmpty(), globals: {}, character: undefined, battle: undefined, pastBattles: [], targetId: undefined, safeMode: false, safeModeAuto: false });
     await get().hydrate();
   },
 

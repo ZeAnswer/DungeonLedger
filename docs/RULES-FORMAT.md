@@ -135,7 +135,7 @@ Every name below is destructured into scope; there is no `api.` prefix. `Math`, 
 |---|---|
 | `player.level` `.bab` `.size` | number (`size` is a `SIZE.*` ordinal). `self` is an alias of `player` |
 | `player.hp.current` `.max` `.temp` `.nonlethal` | number |
-| `player.stats.<stat>` | resolved stat: `attack`, `damage`, `ac`, `ac.touch`, `save.will`, `init`, `speed`, `hp.max`, `critRange`, `str`…`cha` |
+| `player.stats.<stat>` | resolved stat: `attack`, `damage`, `ac`, `ac.touch`, `save.will`, `init`, `speed`, `hp.max`, `critRange`, `str`…`cha`. A dotted stat id must be bracket-quoted (`player.stats['save.will']`, `player.stats['ac.touch']`) — dotted-form chaining reads the wrong thing |
 | `player.mod.<ability>` | ability modifier of the effective score |
 | `player.skills.<id>.total` `.ranks` `.classSkill` | number / number / boolean |
 | `player.classes.<id>` | class level |

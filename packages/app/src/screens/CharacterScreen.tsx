@@ -10,6 +10,13 @@ import { LevelLedger } from '../components/character/LevelLedger';
 import { ChargesSheet } from '../components/character/ChargesSheet';
 import { CharacterOverrideSheet, LedgerOverrideSheet, SkillsEditSheet, StatsEditSheet } from '../components/character/EditSheets';
 
+/** `player.stats.<id>` reads as a Proxy getter: a plain id (`str`, `speed`) chains fine, but a dotted id
+ * (`save.will`, `ac.touch`) would first read `stat('save')` and then `.will` off the resulting number, so
+ * it must be bracket-quoted instead: `player.stats['save.will']`. */
+export function statPath(id: string): string {
+  return id.includes('.') ? `player.stats['${id}']` : `player.stats.${id}`;
+}
+
 const GROUPS: { id: string; title: string; test: (a: Ability) => boolean }[] = [
   { id: 'feats', title: 'Feats', test: (a) => a.kind === 'feature' && a.acquired.kind === 'feat' },
   { id: 'class', title: 'Class abilities', test: (a) => a.kind === 'feature' && (a.acquired.kind === 'class' || a.acquired.kind === 'race') },
@@ -162,7 +169,7 @@ export function CharacterScreen() {
 }
 
 function AbilityTile({ k, eff, raw, onPick }: { k: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'; eff: number; raw: number; onPick: () => void }) {
-  const press = usePathLongPress(`player.stats.${k}`);
+  const press = usePathLongPress(statPath(k));
   return (
     <button type="button" onClick={onPick} {...press} className="rounded-xl bg-zinc-900 py-1 active:bg-zinc-800">
       <div className="text-[10px] uppercase text-zinc-500">{k}</div>
@@ -173,7 +180,7 @@ function AbilityTile({ k, eff, raw, onPick }: { k: 'str' | 'dex' | 'con' | 'int'
 }
 
 function StatTile({ id, label, total, onPick }: { id: StatId; label: string; total: number; onPick: () => void }) {
-  const press = usePathLongPress(`player.stats.${id}`);
+  const press = usePathLongPress(statPath(id), `my ${label}`);
   return (
     <button type="button" onClick={onPick} {...press} className="rounded-xl border border-zinc-700 bg-zinc-900 py-2 text-center active:bg-zinc-800">
       <div className="text-[10px] uppercase text-zinc-500">{label}</div>

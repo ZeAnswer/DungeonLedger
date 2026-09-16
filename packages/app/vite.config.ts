@@ -15,6 +15,18 @@ export default defineConfig({
   // GitHub Pages serves the app under /<repo>/; set BASE_PATH in CI. Local dev/preview stay at '/'.
   base: process.env.BASE_PATH ?? '/',
   define: { __BUILD__: JSON.stringify(buildStamp()) },
+  build: {
+    rollupOptions: {
+      output: {
+        // CodeMirror (lazy-loaded from ScriptEditor.tsx) is only reachable from Library › a record and
+        // Library › Functions; grouping it into its own chunk keeps it out of the main entry so every
+        // other screen — and every release's re-download on `autoUpdate` — doesn't pay for it.
+        manualChunks: (id) => {
+          if (id.includes('node_modules') && (id.includes('@codemirror/') || id.includes('@lezer/'))) return 'codemirror';
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

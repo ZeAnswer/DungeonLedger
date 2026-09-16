@@ -43,3 +43,14 @@ export function setSafeMode(on: boolean): void {
   setScriptMode(on ? 'off' : 'on');
   clearComputeCache();
 }
+
+/**
+ * A factory reset must not come back in safe mode or trip it by coincidence: `hl.safeMode` /
+ * `hl.bootFails` live in `localStorage` (see the top of this file), outside the IndexedDB-backed
+ * `storage()` slices `resetToDefaults` clears. Turns scripts back on (syncing the engine, same as
+ * `setSafeMode(false)`) and forgets the boot-failure count.
+ */
+export function clearBootState(): void {
+  setSafeMode(false);
+  write(FAILS, undefined);
+}

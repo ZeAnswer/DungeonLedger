@@ -27,6 +27,16 @@ test('long-press on an ability score reveals its path', async ({ page }) => {
   await expect(page.locator('[data-role="path-toast"]')).toContainText('player.stats.dex');
 });
 
+test('long-press on a dotted stat (Will save) reveals a bracket-quoted, usable path', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Memento/ }).click();
+  await page.getByRole('button', { name: /^▸ Stats/ }).click();
+  await longPress(page, `[data-path="player.stats['save.will']"]`);
+  const toast = page.locator('[data-role="path-toast"]');
+  await expect(toast).toContainText("player.stats['save.will']");
+  await expect(toast).toContainText('my Will');
+});
+
 test('a cancelled long-press does not swallow the next ordinary tap', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /New battle/ }).click();

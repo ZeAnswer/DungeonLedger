@@ -1,4 +1,4 @@
-import type { Activation, Cost } from '@hl/engine';
+import type { Ability, Activation, Cost, ScriptError } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Chip, Field, inputCls } from '../ui';
 import { DurationPicker } from './DurationPicker';
@@ -8,7 +8,7 @@ const ACTIONS = ['free', 'swift', 'immediate', 'move', 'standard', 'fullRound'] 
 const RESETS = ['round', 'encounter', 'day', 'never'] as const;
 const COST_LABELS: Record<Cost['kind'], string> = { charge: 'from a pool', hp: 'hit points', item: 'consume an item', spellSlot: 'spell slot', gold: 'gold', xp: 'XP' };
 
-export function ActivationEditor({ value, onChange, onRemove }: { value: Activation; onChange: (a: Activation) => void; onRemove: () => void }) {
+export function ActivationEditor({ value, onChange, onRemove, errors, ability }: { value: Activation; onChange: (a: Activation) => void; onRemove: () => void; errors?: ScriptError[]; ability?: Ability }) {
   const abilities = useStore((s) => s.library.abilities);
   const set = (patch: Partial<Activation>) => onChange({ ...value, ...patch });
   const spells = Object.values(abilities).filter((a) => a.kind === 'spell').sort((a, b) => a.name.localeCompare(b.name));
@@ -61,7 +61,7 @@ export function ActivationEditor({ value, onChange, onRemove }: { value: Activat
       </Field>
       <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">Scripts</div>
       <p className="mb-2 text-xs text-zinc-500">`use` scripts run once when the activation is used; `always` scripts apply for its duration.</p>
-      <ScriptsEditor value={value.scripts} onChange={(scripts) => set({ scripts })} addLabel="+ add script" />
+      <ScriptsEditor value={value.scripts} onChange={(scripts) => set({ scripts })} addLabel="+ add script" errors={errors} ability={ability} />
     </div>
   );
 }

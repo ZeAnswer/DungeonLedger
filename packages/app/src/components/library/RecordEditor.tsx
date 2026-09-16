@@ -80,7 +80,7 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
             <div className="mt-4">
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Activations (things you do with it)</div>
               <div className="space-y-3">
-                {a.activations.map((act, i) => <ActivationEditor key={i} value={act} onChange={(n) => set({ activations: a.activations.map((x, j) => (j === i ? n : x)) } as Partial<Ability>)} onRemove={() => set({ activations: a.activations.filter((_, j) => j !== i) } as Partial<Ability>)} />)}
+                {a.activations.map((act, i) => <ActivationEditor key={i} value={act} onChange={(n) => set({ activations: a.activations.map((x, j) => (j === i ? n : x)) } as Partial<Ability>)} onRemove={() => set({ activations: a.activations.filter((_, j) => j !== i) } as Partial<Ability>)} errors={scriptErrors.filter((e) => e.recordId === a.id)} ability={a} />)}
                 <Button onClick={() => set({ activations: [...a.activations, { id: uniqueId(a.id, takenIds), action: 'standard', cost: [], scripts: [] }] } as Partial<Ability>)}>+ add activation</Button>
               </div>
               <Field label="Shared pools (only when several activations or records spend the same charges)">

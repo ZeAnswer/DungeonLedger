@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { FunctionDefSchema, ParamTypeSchema, activationsOf, compile, type Ability, type FunctionDef } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Button, Field, Sheet, inputCls } from '../ui';
-import { ScriptEditor } from './ScriptEditor';
+
+// See ScriptsEditor.tsx: CodeMirror is split into its own chunk and only loaded once a script editor
+// actually mounts.
+const ScriptEditor = lazy(() => import('./ScriptEditor').then((m) => ({ default: m.ScriptEditor })));
+const EDITOR_FALLBACK = <div className="flex h-16 items-center justify-center rounded-xl border border-zinc-700 text-sm text-zinc-500">loading editor…</div>;
 
 /** Records that call this function, whether through a stored `call` or a `fn.x(…)` / `fn["x"](…)` in a source. */
 export function usedBy(abilities: Record<string, Ability>, fnId: string): string[] {
@@ -93,7 +97,7 @@ export function FunctionsTab() {
               ))}
               <button type="button" className="text-sm text-amber-300" onClick={() => patch({ params: [...editing.params, { name: `p${editing.params.length + 1}`, type: 'number', required: false }] })}>+ add parameter</button>
             </Field>
-            <Field label="Body (parameters are bare names)"><ScriptEditor value={editing.source} onChange={(source) => patch({ source })} errors={[]} /></Field>
+            <Field label="Body (parameters are bare names)"><Suspense fallback={EDITOR_FALLBACK}><ScriptEditor value={editing.source} onChange={(source) => patch({ source })} errors={[]} /></Suspense></Field>
             <div className="mb-3 text-xs text-zinc-500">Used by: {usedBy(library.abilities, editing.id).join(', ') || 'nothing yet'}</div>
             {err && <div className="mb-2 rounded-lg border border-red-900 bg-red-950/40 px-2 py-1 text-xs text-red-200">{err}</div>}
             <div className="flex gap-2">

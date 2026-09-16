@@ -64,6 +64,38 @@ test('script editor: events are a multi-select and always is exclusive', async (
   expect(json.scripts[0]).toMatchObject({ events: ['hit', 'crit'], source: "target.mark('shaken', 3 * ROUND)" });
 });
 
+test('script row: priority accepts a typed negative number, and switching to a function call drops the dead source', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Library' }).click();
+  await page.getByRole('button', { name: '+ New feature' }).click();
+  const sheet = page.locator('.fixed.inset-0');
+  await sheet.getByLabel('Name').fill('Test Priority');
+  await sheet.getByLabel(/^Id/).fill('test-priority');
+  await sheet.getByRole('button', { name: '+ add script' }).click();
+  await sheet.locator('[data-role="script-source"] .cm-content').click();
+  await page.keyboard.type("bonus('attack', 1)");
+
+  const priority = sheet.locator('[data-role="script-priority"]');
+  await priority.click();
+  await priority.press('ControlOrMeta+A');
+  // Typed, not `.fill`, so the leading `-` (which a per-keystroke `Number(...) || 0` used to eat) survives.
+  await priority.pressSequentially('-5');
+  await expect(priority).toHaveValue('-5');
+  await priority.blur();
+  await sheet.getByRole('button', { name: 'JSON' }).click();
+  expect(JSON.parse(await sheet.locator('textarea').inputValue()).scripts[0]).toMatchObject({ priority: -5, source: "bonus('attack', 1)" });
+
+  // Switching that same row to "call a function" must not leave `source` sitting around dead (the engine
+  // prefers `call` over `source`, so a stale one would silently never run again), and must seed `fn` with
+  // a real function rather than an empty selection.
+  await sheet.getByRole('button', { name: 'Feature', exact: true }).click();
+  await sheet.getByRole('button', { name: 'call a function' }).click();
+  await sheet.getByRole('button', { name: 'JSON' }).click();
+  const after = JSON.parse(await sheet.locator('textarea').inputValue()).scripts[0];
+  expect(after.source).toBe('');
+  expect(after.call.fn).not.toBe('');
+});
+
 test('script preview: probes the script against the live character', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Library' }).click();

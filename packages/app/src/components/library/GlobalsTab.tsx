@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { VarValue } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Button, Chip, inputCls } from '../ui';
@@ -6,6 +6,31 @@ import { Button, Chip, inputCls } from '../ui';
 type Kind = 'number' | 'text' | 'yes/no';
 const kindOf = (v: VarValue): Kind => (typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'yes/no' : 'text');
 const coerce = (raw: string, kind: Kind): VarValue => (kind === 'number' ? Number(raw) || 0 : kind === 'yes/no' ? raw === 'true' : raw);
+
+/** A number global's text field, edited freely (so `1.5` → typing `2.75`, or a leading `-`, isn't coerced
+ * away mid-keystroke); committed with `Number(text)` only on blur/Enter, and only when it parses. Syncs
+ * from an external value change (a script writing this global elsewhere) while the field isn't focused. */
+function NumberGlobalInput({ value, onCommit }: { value: number; onCommit: (n: number) => void }) {
+  const [text, setText] = useState(String(value));
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setText(String(value)); }, [value]);
+  const commit = () => {
+    const n = Number(text);
+    if (text.trim() !== '' && !Number.isNaN(n)) onCommit(n);
+    else setText(String(value));
+  };
+  return (
+    <input
+      className={inputCls + ' w-28 py-1'}
+      inputMode="decimal"
+      value={text}
+      onFocus={() => { focused.current = true; }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => { focused.current = false; commit(); }}
+      onKeyDown={(e) => { if (e.key === 'Enter') { commit(); (e.target as HTMLInputElement).blur(); } }}
+    />
+  );
+}
 
 /** Values shared by every character. `vars.<name>` reads the character's var first, then here. */
 export function GlobalsTab() {
@@ -41,6 +66,8 @@ export function GlobalsTab() {
               <span className="w-40 shrink-0 truncate font-mono text-sm">{k}</span>
               {typeof v === 'boolean'
                 ? <Chip tone="green" active={v} onClick={() => put(k, !v)}>{v ? 'true' : 'false'}</Chip>
+                : typeof v === 'number'
+                ? <NumberGlobalInput value={v} onCommit={(n) => put(k, n)} />
                 : <input className={inputCls + ' w-28 py-1'} value={String(v)} onChange={(e) => put(k, coerce(e.target.value, kindOf(v)))} />}
               <span className="text-xs text-zinc-500">{kindOf(v)}</span>
               {shadowed && <span className="text-xs text-amber-300">⚠ shadowed by {character!.name}'s own var ({String(character!.vars[k])})</span>}

@@ -24,18 +24,26 @@ const patchText = (p: Patch): string => {
  */
 export function ScriptPreview({ ability, script }: { ability: Ability; script: Script }) {
   const ctx = useCtx();
+  // Keyed on `ability.id`, not `ability` itself: the record editor hands every row the same draft object,
+  // whose identity changes on every keystroke in *any* row (each edit calls `setA({...})`). Depending on
+  // the object would re-probe every other row each time one is typed in; `ability.id` almost never changes,
+  // so only this row's own edits (a new `script` reference) or a context change re-run it. `ability`'s other
+  // fields aren't read here besides `.id` (via `runOne`) and `.name` (only used for `source.label`, which
+  // this component never renders), so a render-stale closure over `ability` is harmless.
+  const abilityId = ability.id;
   const run = useMemo(() => {
     if (!ctx) return undefined;
     const sink = newSink();
     const patches: Patch[] = [];
-    const instance = ctx.character.abilities.find((x) => x.abilityId === ability.id);
+    const instance = ctx.character.abilities.find((x) => x.abilityId === abilityId);
     const phase = script.events.includes('always') ? 'always' as const : 'event' as const;
     const outcome = runOne(ctx, {
       phase, source: { ability, instance, label: ability.name }, script, probe: true, probeActive: true,
       ...(phase === 'event' ? { event: { kind: script.events[0]! } } : {}),
     }, sink, patches);
     return { sink, patches, outcome };
-  }, [ctx, ability, script]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ability` deliberately excluded; see comment above.
+  }, [ctx, abilityId, script]);
   if (!run) return null;
   const { sink, patches } = run;
   const rows: string[] = [

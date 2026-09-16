@@ -44,10 +44,14 @@ export function FunctionCallForm({ value, onChange }: { value: Call; onChange: (
   };
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-2">
-      <select data-role="call-fn" className={inputCls} value={value.fn} onChange={(e) => onChange({ fn: e.target.value, args: {} })}>
-        <option value="">— pick a function —</option>
-        {Object.values(functions).sort((a, b) => a.name.localeCompare(b.name)).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-      </select>
+      {Object.keys(functions).length === 0 ? (
+        <p className="text-sm text-amber-300">No functions defined — add one in Library › Functions first.</p>
+      ) : (
+        <select data-role="call-fn" className={inputCls} value={value.fn} onChange={(e) => onChange({ fn: e.target.value, args: {} })}>
+          <option value="">— pick a function —</option>
+          {Object.values(functions).sort((a, b) => a.name.localeCompare(b.name)).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+        </select>
+      )}
       {def?.description && <p className="mt-1 text-xs text-zinc-500">{def.description}</p>}
       {def?.params.map((p) => {
         const arg = value.args[p.name];
