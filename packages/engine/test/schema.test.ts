@@ -1,4 +1,4 @@
-import { AbilitySchema, PackSchema, ScriptSchema, FunctionDefSchema, DurationSchema, BattleSchema, activationsOf } from '../src/schema';
+import { AbilitySchema, PackSchema, ScriptSchema, FunctionDefSchema, ParamTypeSchema, DurationSchema, BattleSchema, activationsOf } from '../src/schema';
 
 test('a feature carries scripts; always cannot mix with events; call form validates', () => {
   const a = AbilitySchema.parse({ id: 'pbs', name: 'Point Blank Shot', kind: 'feature', scripts: [{ id: 's1', source: "if (attack.isRanged && target.within(30)) bonus(['attack','damage'], 1)" }] });
@@ -31,6 +31,19 @@ test('function definitions, globals and widened vars', () => {
   const p = PackSchema.parse({ id: 'p', name: 'P', version: 1, functions: [f], globals: { season: 'winter', dm: true, roundsPerMinute: 10 } });
   expect(p.globals.season).toBe('winter');
   expect(PackSchema.parse({ id: 'q', name: 'Q', version: 1, characters: [{ id: 'c', name: 'C', abilityScores: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, hp: { max: 1, current: 1 }, vars: { flag: true, note: 'x' } }] }).characters[0]!.vars).toEqual({ flag: true, note: 'x' });
+});
+
+test('ability, skill and attackKind are valid param types (the function form renders each as a dropdown)', () => {
+  expect(ParamTypeSchema.options).toEqual(expect.arrayContaining(['ability', 'skill', 'attackKind']));
+  const f = FunctionDefSchema.parse({
+    id: 'addToAbility', name: 'Add to ability',
+    params: [{ name: 'ability', type: 'ability', required: true }, { name: 'amount', type: 'number', required: true }, { name: 'type', type: 'bonusType' }],
+    source: "bonus(ability, amount, type ?? 'untyped')",
+  });
+  expect(f.params.map((p) => p.type)).toEqual(['ability', 'number', 'bonusType']);
+  expect(FunctionDefSchema.safeParse({ id: 'x', name: 'X', params: [{ name: 'skill', type: 'skill' }], source: '' }).success).toBe(true);
+  expect(FunctionDefSchema.safeParse({ id: 'y', name: 'Y', params: [{ name: 'onlyFor', type: 'attackKind' }], source: '' }).success).toBe(true);
+  expect(ParamTypeSchema.safeParse('bogus').success).toBe(false);
 });
 
 test('battle undo records var changes', () => {

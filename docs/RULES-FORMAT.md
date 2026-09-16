@@ -226,7 +226,19 @@ A pack may ship a **function library**: shared script bodies with typed paramete
 }]
 ```
 
-Param types: `number | string | bool | dice | path | ref | stat | bonusType | duration | tag | tags | recordId | event`. Inside the body each parameter is a bare name (and all of them are in `args`). A function sees the **calling record's** `params`, instance and trace, shares its sink, patches and budget, and may call other functions (depth 8).
+Param types: `number | string | bool | dice | path | ref | stat | bonusType | duration | tag | tags | recordId | event | ability | skill | attackKind`. Inside the body each parameter is a bare name (and all of them are in `args`). A function sees the **calling record's** `params`, instance and trace, shares its sink, patches and budget, and may call other functions (depth 8).
+
+| Type | Form control | Stored literal |
+|---|---|---|
+| `ability` | Str…Cha dropdown | `ability.str`…`ability.cha` |
+| `skill` | dropdown of `ctx.library.skills` | the skill id (bare, e.g. `listen`) |
+| `attackKind` | Any / Ranged / Melee dropdown | `any` \| `ranged` \| `melee` |
+| `stat` | grouped dropdown (Attack & damage, Defence, Saves, Ability scores — `skill.*` excluded, that's `skill`) | a `StatId` |
+| `bonusType` | dropdown of `BonusTypeSchema`, first option "not specified" | a `BonusType` (`untyped` for "not specified") |
+| `tag` | dropdown of `ctx.library.tags` | a tag id |
+| `duration` | the duration picker | seconds or a sentinel |
+| `event` | the same one-event dropdown a script row uses | an event name |
+| `recordId` | dropdown of records | a record id |
 
 Call it either way — the two are identical to the engine:
 

@@ -1,17 +1,20 @@
-import { BonusTypeSchema, PATHS, type ArgValue, type Script } from '@hl/engine';
+import { AbilityKeySchema, BonusTypeSchema, PATHS, type ArgValue, type Script } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Chip, cx, inputCls } from '../ui';
-import { StatSelect } from './StatSelect';
+import { FunctionStatSelect } from './StatSelect';
 import { DurationPicker } from './DurationPicker';
+import { EVENT_OPTIONS } from './ScriptsEditor';
 
 type Call = NonNullable<Script['call']>;
-const EVENTS = ['always', 'hit', 'miss', 'crit', 'damaged', 'roundStart', 'roundEnd', 'use', 'equip', 'unequip'];
+
+const ABILITY_LABELS: Record<string, string> = { str: 'Str', dex: 'Dex', con: 'Con', int: 'Int', wis: 'Wis', cha: 'Cha' };
 
 const litOf = (a: ArgValue | undefined, fallback: number | string | boolean | string[]) => (a?.k === 'lit' ? a.v : fallback);
 const refOf = (a: ArgValue | undefined, fallback: string) => (a?.k === 'ref' ? a.v : fallback);
 
 /** The zero-ish value for a param's type, used when neither an arg nor a `default` is set. */
-const zeroOf = (type: string): number | string | boolean | string[] => (type === 'number' ? 0 : type === 'bool' ? false : type === 'tags' ? [] : '');
+const zeroOf = (type: string): number | string | boolean | string[] =>
+  type === 'number' ? 0 : type === 'bool' ? false : type === 'tags' ? [] : type === 'ability' ? 'ability.str' : type === 'attackKind' ? 'any' : '';
 
 /** Does a JSON-parsed expression's shape match what this param's `lit` value should be? */
 function litMatches(type: string, v: unknown): v is number | string | boolean | string[] {
@@ -36,6 +39,7 @@ export function FunctionCallForm({ value, onChange }: { value: Call; onChange: (
   const functions = useStore((s) => s.library.functions);
   const tags = useStore((s) => s.library.tags);
   const abilities = useStore((s) => s.library.abilities);
+  const skills = useStore((s) => s.library.skills);
   const def = functions[value.fn];
   const setArg = (name: string, a: ArgValue | undefined) => {
     const args = { ...value.args };
@@ -75,7 +79,7 @@ export function FunctionCallForm({ value, onChange }: { value: Call; onChange: (
             <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
               <span>{p.label ?? p.name}{p.required ? ' *' : ''}</span>
               <span className="text-zinc-600">{p.type}</span>
-              <button type="button" onClick={expr ? toTyped : toExpr} className={cx('ml-auto rounded-full border px-2 py-0.5', expr ? 'border-amber-500 text-amber-300' : 'border-zinc-700 text-zinc-400')}>ƒx</button>
+              <button type="button" onClick={expr ? toTyped : toExpr} className={cx('ml-auto text-xs underline', expr ? 'text-amber-300' : 'text-zinc-500')}>ƒx</button>
             </div>
             {expr ? (
               <input className={inputCls + ' font-mono text-sm'} list="hl-paths" placeholder="player.mod.str" value={arg.v} onChange={(e) => setArg(p.name, { k: 'expr', v: e.target.value })} />
@@ -86,9 +90,19 @@ export function FunctionCallForm({ value, onChange }: { value: Call; onChange: (
             ) : p.type === 'bool' ? (
               <Chip tone="green" active={!!litOf(arg, p.default ?? false)} onClick={() => setArg(p.name, { k: 'lit', v: !litOf(arg, false) })}>{litOf(arg, false) ? 'true' : 'false'}</Chip>
             ) : p.type === 'stat' ? (
-              <StatSelect value={String(litOf(arg, p.default ?? 'attack'))} onChange={(v) => setArg(p.name, { k: 'lit', v })} />
+              <FunctionStatSelect value={String(litOf(arg, p.default ?? 'attack'))} onChange={(v) => setArg(p.name, { k: 'lit', v })} />
+            ) : p.type === 'ability' ? (
+              <select className={inputCls} value={String(litOf(arg, p.default ?? 'ability.str'))} onChange={(e) => setArg(p.name, { k: 'lit', v: e.target.value })}>{AbilityKeySchema.options.map((k) => <option key={k} value={`ability.${k}`}>{ABILITY_LABELS[k]}</option>)}</select>
+            ) : p.type === 'skill' ? (
+              <select className={inputCls} value={String(litOf(arg, p.default ?? ''))} onChange={(e) => setArg(p.name, { k: 'lit', v: e.target.value })}><option value="">— pick skill —</option>{Object.values(skills).sort((a, b) => a.name.localeCompare(b.name)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+            ) : p.type === 'attackKind' ? (
+              <select className={inputCls} value={String(litOf(arg, p.default ?? 'any'))} onChange={(e) => setArg(p.name, { k: 'lit', v: e.target.value })}>
+                <option value="any">Any</option>
+                <option value="ranged">Ranged</option>
+                <option value="melee">Melee</option>
+              </select>
             ) : p.type === 'bonusType' ? (
-              <select className={inputCls} value={String(litOf(arg, p.default ?? 'untyped'))} onChange={(e) => setArg(p.name, { k: 'lit', v: e.target.value })}>{BonusTypeSchema.options.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+              <select className={inputCls} value={String(litOf(arg, p.default ?? 'untyped'))} onChange={(e) => setArg(p.name, { k: 'lit', v: e.target.value })}>{BonusTypeSchema.options.map((t) => <option key={t} value={t}>{t === 'untyped' ? 'not specified' : t}</option>)}</select>
             ) : p.type === 'duration' ? (
               <DurationPicker value={typeof litOf(arg, p.default ?? 'encounter') === 'number' ? (litOf(arg, 0) as number) : (litOf(arg, 'encounter') as 'encounter')} onChange={(d) => setArg(p.name, { k: 'lit', v: d })} />
             ) : p.type === 'tag' ? (
@@ -103,7 +117,7 @@ export function FunctionCallForm({ value, onChange }: { value: Call; onChange: (
             ) : p.type === 'recordId' ? (
               <select className={inputCls} value={String(litOf(arg, p.default ?? ''))} onChange={(e) => setArg(p.name, { k: 'lit', v: e.target.value })}><option value="">— pick record —</option>{Object.values(abilities).sort((a, b) => a.name.localeCompare(b.name)).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
             ) : p.type === 'event' ? (
-              <select className={inputCls} value={String(litOf(arg, p.default ?? 'always'))} onChange={(e) => setArg(p.name, { k: 'lit', v: e.target.value })}>{EVENTS.map((e) => <option key={e} value={e}>{e}</option>)}</select>
+              <select className={inputCls} value={String(litOf(arg, p.default ?? 'always'))} onChange={(e) => setArg(p.name, { k: 'lit', v: e.target.value })}>{EVENT_OPTIONS.filter((o) => o.value !== 'custom').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
             ) : (
               <input className={inputCls} placeholder={p.type === 'dice' ? '1d6' : ''} value={String(litOf(arg, p.default ?? ''))} onChange={(e) => setArg(p.name, { k: 'lit', v: e.target.value })} />
             )}

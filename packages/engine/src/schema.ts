@@ -78,7 +78,7 @@ export const ScriptSchema = z.object({
 }).refine((s) => !(s.events.includes('always') && s.events.length > 1), { message: "'always' cannot be combined with events" });
 export type Script = z.infer<typeof ScriptSchema>;
 
-export const ParamTypeSchema = z.enum(['number', 'string', 'bool', 'dice', 'path', 'ref', 'stat', 'bonusType', 'duration', 'tag', 'tags', 'recordId', 'event']);
+export const ParamTypeSchema = z.enum(['number', 'string', 'bool', 'dice', 'path', 'ref', 'stat', 'bonusType', 'duration', 'tag', 'tags', 'recordId', 'event', 'ability', 'skill', 'attackKind']);
 export const FunctionDefSchema = z.object({
   id: z.string().min(1), name: z.string().min(1), description: z.string().optional(),
   params: z.array(z.object({ name: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), type: ParamTypeSchema, label: z.string().optional(), default: z.union([z.number(), z.string(), z.boolean(), z.array(z.string())]).optional(), required: z.boolean().default(false) })).default([]),
