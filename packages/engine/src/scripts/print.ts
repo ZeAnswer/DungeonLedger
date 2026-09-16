@@ -7,29 +7,26 @@
  *  - a **traced** predicate (`attack.isRanged`, `target.within(30)`, `target.is('aquatic')`) joins
  *    the `if (...)` test, so the engine's near-miss trace can say which one failed;
  *  - anything else becomes `need(<js>, '<sentence>')` inside the block, where the sentence is the
- *    v3 condition describer's text (copied here as `describeV3`, since `describe.ts` lost it with
- *    the v3 condition tree).
+ *    v3 condition describer's text: `describeV3` here, over `describe.ts`'s shared, context-free
+ *    `describeSelectorWith` (the condition half of the describer went with the v3 condition tree).
+ *    Pass `names` — the pack being converted — and the sentences name tags, skills and records.
+ *
+ * A verb's own `attackKind` guards only that verb's run of statements, never the whole block, and an
+ * event-only helper left in an always block is printed with a warning comment and reported through
+ * `printWarnings`.
  *
  * Whitespace is part of the contract: two-space indent, one statement per line, `;` terminators,
  * single quotes (backticks only where a value is interpolated or the text carries an apostrophe).
  */
+import { describeSelectorWith, labelOf, type NameLookup } from '../describe';
+import { evalExpr } from '../expr';
 import type { Script, ScriptEvent } from '../schema';
 
 type Any = Record<string, unknown>;
 const isObj = (x: unknown): x is Any => !!x && typeof x === 'object' && !Array.isArray(x);
 
 /** Ids and labels the describer uses for its sentences; anything missing falls back to the id. */
-export type PrintNames = {
-  tags?: Record<string, { label: string } | string>;
-  skills?: Record<string, { name: string } | string>;
-  classes?: Record<string, { name: string } | string>;
-  abilities?: Record<string, { name: string } | string>;
-};
-
-const label = (t: PrintNames['tags'], id: string): string => {
-  const v = t?.[id];
-  return typeof v === 'string' ? v : (v as { label?: string; name?: string } | undefined)?.label ?? (v as { name?: string } | undefined)?.name ?? id;
-};
+export type PrintNames = NameLookup;
 
 // ---------- literals and paths ----------
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -104,15 +101,16 @@ export function selectorToPath(sel: string): string | undefined {
 const value = (sel: string) => selectorToPath(sel) ?? `sel(${q(sel)})`;
 
 // ---------- expressions ----------
-const KNOWN_FN = new Set(['floor', 'ceil', 'round', 'abs', 'min', 'max', 'clamp']);
 const MOD = /^(str|dex|con|int|wis|cha)Mod$/;
 const NAMED: Record<string, string> = { level: 'player.level', bab: 'player.bab', round: 'battle.round', damage: 'player.lastDamage' };
-const TOKEN = /\b(sel|classLevel|prompt)\s*\(\s*([A-Za-z_][A-Za-z0-9_.:-]*)\s*\)|\b([A-Za-z_][A-Za-z0-9_]*)\b(\s*\()?/g;
+/** `sel(x)`/`classLevel(x)`/`prompt(x)`, or a name — which the v3 grammar lets carry dots (`self.class.ranger.level`). */
+const TOKEN = /\b(sel|classLevel|prompt)\s*\(\s*([A-Za-z_][A-Za-z0-9_.:-]*)\s*\)|\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_-]+)*)\b(\s*\()?/g;
 
 /**
  * Rewrites a v3 expression string into script JS, leaving every space and operator where it was:
  * `4 * sel(history.miss.me.current.thisRound)` → `4 * history('miss')`.
- * Bare identifiers that are not part of the v3 vocabulary are character/global vars.
+ * A dotted name is a bare selector (the v3 evaluator resolved those through `resolve`), so it takes
+ * the same road as `sel(...)`; any other bare identifier is a character/global var.
  */
 export function printExpr(expr: string | number): string {
   if (typeof expr === 'number') return String(expr);
@@ -122,67 +120,23 @@ export function printExpr(expr: string | number): string {
       if (fn === 'prompt') return at('battle.prompts', arg!);
       return value(arg!);
     }
-    if (paren !== undefined) return KNOWN_FN.has(name!) ? whole : `${name}${paren}`; // unknown calls keep their name; args are rewritten in place
+    if (paren !== undefined) return whole; // a call keeps its name; its arguments are rewritten in place
+    if (name!.includes('.')) return value(name!);
     const m = MOD.exec(name!);
     if (m) return `player.mod.${m[1]}`;
     return NAMED[name!] ?? at('vars', name!);
   });
 }
 
-// ---------- the v3 condition describer (copied from describe.ts before v4 dropped it) ----------
-function describeSelectorV3(sel: string, names: PrintNames): string {
-  const p = sel.split('.');
-  const rest = p.slice(2).join('.');
-  const nameOf = (id: string) => label(names.abilities as PrintNames['tags'], id);
-  switch (p[0]) {
-    case 'target':
-      switch (p[1]) {
-        case 'tag': case 'condition': return `target is ${label(names.tags, rest)}`;
-        case 'tags': case 'type': return 'target type';
-        case 'size': return 'target size';
-        case 'hurt': return 'target hurt';
-        case 'distance': return 'target distance (ft)';
-        case 'exists': return 'a target is selected';
-        case 'revealed': return 'target lore revealed';
-        default: return `target ${p.slice(1).join(' ')}`;
-      }
-    case 'self':
-      switch (p[1]) {
-        case 'tag': return `you are ${label(names.tags, rest)}`;
-        case 'ability': return `${nameOf(p.slice(2, -1).join('.'))} ${p[p.length - 1] === 'active' ? 'is active' : p[p.length - 1] === 'enabled' ? 'is enabled' : p[p.length - 1]}`;
-        case 'resource': return `${p.slice(2, -1).join('.')} ${p[p.length - 1]}`;
-        case 'equipped': return p[2] === 'item' ? `${nameOf(p.slice(3).join('.'))} equipped` : `equipped ${p.slice(2).join(' ')}`;
-        case 'skill': return `${label(names.skills as PrintNames['tags'], p.slice(2, -1).join('.'))} ${p[p.length - 1]}`;
-        case 'class': return `${label(names.classes as PrintNames['tags'], p.slice(2, -1).join('.'))} level`;
-        case 'stat': return rest;
-        case 'param': return `your ${rest}`;
-        case 'var': return rest;
-        default: return sel;
-      }
-    case 'attack':
-      switch (p[1]) {
-        case 'kind': return 'attack kind';
-        case 'isFirstThisRound': return 'first attack this round';
-        case 'index': return 'attack number';
-        case 'weapon': return p[2] === 'tag' ? `weapon is ${p.slice(3).join('.')}` : `weapon ${rest}`;
-        case 'mode': return 'attack mode';
-        default: return sel;
-      }
-    case 'battle':
-      switch (p[1]) {
-        case 'toggle': return `"${rest}" switched on`;
-        case 'prompt': return `${rest} check entered`;
-        case 'round': return 'round';
-        case 'tag': return `battle is ${label(names.tags, rest)}`;
-        default: return sel;
-      }
-    case 'flag': return p.slice(1).join('.');
-    default: return sel;
-  }
+/** Rejects a `{…}` note placeholder that is not a v3 expression, so a typo cannot reach a pack. */
+function checkExpr(src: string): string {
+  try { evalExpr(src, { resolve: () => 0 }); } catch { throw new Error(`note text: bad {expr} "${src}"`); }
+  return printExpr(src);
 }
 
+// ---------- the v3 condition describer (the rest of it went with the v3 condition tree) ----------
 function describeHistoryV3(f: Any, names: PrintNames): string {
-  const ability = f.abilityId ? label(names.abilities as PrintNames['tags'], f.abilityId as string) : 'ability';
+  const ability = f.abilityId ? labelOf(names.abilities, f.abilityId as string) : 'ability';
   const what = ({ hit: 'hit', miss: 'missed', crit: 'critted', attack: 'attacked', used: `used ${ability}`, activated: 'activated', damaged: 'damaged', moved: 'moved' } as Record<string, string>)[f.event as string] ?? String(f.event);
   const who = f.by === 'target' ? 'the target' : f.by === 'any' ? 'anyone' : 'you';
   const vs = (f.vs ?? 'current') === 'current' ? (f.by === 'target' ? ' you' : ' this target') : f.vs === 'sameCategory' ? ` a ${(f.category as string) ?? 'similar'} target` : '';
@@ -199,18 +153,18 @@ export function describeV3(cond: unknown, names: PrintNames = {}): string {
   if (Array.isArray(c.none)) return `none of: ${list('none').join(' / ')}`;
   if ('not' in c) return `not (${describeV3(c.not, names)})`;
   if (Array.isArray(c.count)) return `at least ${c.atLeast} of: ${list('count').join(' / ')}`;
-  if (typeof c.is === 'string') return describeSelectorV3(c.is, names);
-  if (typeof c.exists === 'string') return describeSelectorV3(c.exists, names);
+  if (typeof c.is === 'string') return describeSelectorWith(c.is, names);
+  if (typeof c.exists === 'string') return describeSelectorWith(c.exists, names);
   if (typeof c.compare === 'string') {
-    const l = describeSelectorV3(c.compare, names);
+    const l = describeSelectorWith(c.compare, names);
     const op = ({ '=': 'is', '!=': 'is not', '<': 'below', '<=': 'at most', '>': 'above', '>=': 'at least' } as Record<string, string>)[c.op as string] ?? String(c.op);
-    const v = typeof c.value === 'string' ? label(names.tags, c.value) : String(c.value);
+    const v = typeof c.value === 'string' ? labelOf(names.tags, c.value) : String(c.value);
     if (c.compare === 'target.hurt' && c.op === '>=') return `target is ${v} or worse`;
     if (c.compare === 'target.size' && c.op === '>=') return `target is ${v} or larger`;
     if (c.compare === 'attack.kind' && c.op === '=') return `${v} attack`;
     return `${l} ${op} ${v}`;
   }
-  if (typeof c.in === 'string') return c.param ? `${describeSelectorV3(c.in, names)} is one of your ${c.param}` : `${describeSelectorV3(c.in, names)} is ${((c.set as string[]) ?? []).map((t) => label(names.tags, t)).join(' / ')}`;
+  if (typeof c.in === 'string') return c.param ? `${describeSelectorWith(c.in, names)} is one of your ${c.param}` : `${describeSelectorWith(c.in, names)} is ${((c.set as string[]) ?? []).map((t) => labelOf(names.tags, t)).join(' / ')}`;
   if (isObj(c.history)) {
     const n = (c.value as number) ?? 1;
     return `${describeHistoryV3(c.history, names)}${n > 1 || (c.op && c.op !== '>=') ? ` (${(c.op as string) ?? '>='} ${n})` : ''}`;
@@ -305,7 +259,9 @@ function printText(text: string, dc?: unknown): string {
   const parts = full.split(/\{([^}]+)\}/);
   const interpolated = parts.length > 1;
   if (!interpolated && !full.includes("'")) return q(full);
-  const body = parts.map((p, i) => (i % 2 ? `\${${printExpr(p)}}` : p.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${'))).join('');
+  // Replacement *functions*: a literal `$` in a replacement string would be read as a capture reference.
+  const literal = (p: string) => p.replace(/\\/g, () => '\\\\').replace(/`/g, () => '\\`').replace(/\$(?=\{)/g, () => '\\$');
+  const body = parts.map((p, i) => (i % 2 ? `\${${checkExpr(p)}}` : literal(p))).join('');
   return `\`${body}\``;
 }
 
@@ -397,6 +353,18 @@ const EVENT_OF_TRIGGER: Record<string, ScriptEvent> = {
   always: 'always', onHit: 'hit', onMiss: 'miss', onCrit: 'crit', onDamaged: 'damaged', onRoundStart: 'roundStart', onRoundEnd: 'roundEnd',
 };
 
+/** Helpers that change state: legal in an event script, a no-op (and a thrown error) in an always one. */
+const EVENT_ONLY = new Set(['tag', 'grant', 'suppress', 'resource', 'hp', 'reveal']);
+export const EVENT_ONLY_WARNING = '// WARNING: event-only helper in an always script; move this to an event';
+
+/**
+ * Every warning raised since the last `clearPrintWarnings()`, in print order — a v3 block that asks
+ * for something a v4 always script cannot do. The converter cannot refuse the record (the pack must
+ * still load), so the validator reads this list.
+ */
+export const printWarnings: string[] = [];
+export function clearPrintWarnings(): void { printWarnings.length = 0; }
+
 /**
  * One v3 effect block → one v4 script. `phase` is where the block sat: a record's/activation's
  * `effects`/`whileActive` list ('always') or an activation's `onUse` list ('use'). `ownerId` names
@@ -405,24 +373,9 @@ const EVENT_OF_TRIGGER: Record<string, ScriptEvent> = {
 export function printBlock(block: V3Block, phase: 'always' | 'use', ownerId: string, names: PrintNames = {}): Script {
   const verbs = (Array.isArray(block.do) ? block.do : []).filter(isObj);
   const when = block.when ?? { all: [] };
+  const event: ScriptEvent = phase === 'use' ? 'use' : EVENT_OF_TRIGGER[block.trigger ?? 'always'] ?? 'always';
 
-  // verbs first: a modify/dice limited to one attack kind adds its predicate to the if test
-  const groups = new Map<string, Group>();
-  const order: string[] = [];
-  const statements: (string | { group: string })[] = [];
-  for (const e of verbs) {
-    const before = order.length;
-    const line = printVerb(e, groups, order, block.label);
-    if (line) statements.push(...[line].flat());
-    else if (order.length > before) statements.push({ group: order[order.length - 1]! });
-  }
-  const body: string[] = [];
-  for (const s of statements) {
-    if (typeof s === 'string') { body.push(s); continue; }
-    const g = groups.get(s.group)!;
-    body.push(g.ask, `if (${g.name}) {`, ...indent(g.rows), '}');
-  }
-
+  // The block's own condition: traced members test in the `if`, the rest become need() lines.
   const test: string[] = [];
   const needs: string[] = [];
   const members = isObj(when) && Array.isArray(when.all) ? (when.all as unknown[]) : undefined;
@@ -435,20 +388,49 @@ export function printBlock(block: V3Block, phase: 'always' | 'use', ownerId: str
   } else if (isObj(when)) {
     test.push(jsCond(when));
   }
+
+  const groups = new Map<string, Group>();
+  const order: string[] = [];
+  const parts: { kind?: string; lines?: string[]; group?: string }[] = [];
+  const stray: string[] = [];
   for (const e of verbs) {
-    if ((e.verb === 'modify' || e.verb === 'dice') && typeof e.attackKind === 'string') {
-      const t = e.attackKind === 'ranged' ? 'attack.isRanged' : 'attack.isMelee';
-      if (!test.includes(t)) test.push(t);
-    }
+    const before = order.length;
+    const line = printVerb(e, groups, order, block.label);
+    // `attackKind` limits the verb it sits on, not the block: it guards only its own run of statements.
+    const kind = (e.verb === 'modify' || e.verb === 'dice') && typeof e.attackKind === 'string' ? (e.attackKind as string) : undefined;
+    if (line) parts.push({ kind, lines: [line].flat() });
+    else if (order.length > before) parts.push({ kind, group: order[order.length - 1]! });
+    if (event === 'always' && EVENT_ONLY.has(String(e.verb))) stray.push(String(e.verb));
+  }
+  const expand = (x: { lines?: string[]; group?: string }): string[] => {
+    if (!x.group) return x.lines ?? [];
+    const g = groups.get(x.group)!;
+    return [g.ask, `if (${g.name}) {`, ...indent(g.rows), '}'];
+  };
+  const runs: { kind?: string; lines: string[] }[] = [];
+  for (const x of parts) {
+    const last = runs[runs.length - 1];
+    if (last && last.kind === x.kind) last.lines.push(...expand(x));
+    else runs.push({ kind: x.kind, lines: expand(x) });
+  }
+  const body: string[] = [];
+  for (const r of runs) {
+    const pred = r.kind === 'ranged' ? 'attack.isRanged' : r.kind === 'melee' ? 'attack.isMelee' : undefined;
+    if (pred && !test.includes(pred)) body.push(`if (${pred}) {`, ...indent(r.lines), '}');
+    else body.push(...r.lines);
   }
 
   const inner = [...needs, ...body];
-  const source = test.length ? [`if (${test.join(' && ')}) {`, ...indent(inner), '}'].join('\n') : inner.join('\n');
+  const lines = test.length ? [`if (${test.join(' && ')}) {`, ...indent(inner), '}'] : inner;
+  if (stray.length) {
+    printWarnings.push(`${ownerId}/${block.id ?? ''}: event-only ${stray.length > 1 ? 'helpers' : 'helper'} (${[...new Set(stray)].join(', ')}) in an always script`);
+    lines.unshift(EVENT_ONLY_WARNING);
+  }
   return {
     id: block.id || ownerId,
     ...(block.label ? { label: block.label } : {}),
-    events: [phase === 'use' ? 'use' : EVENT_OF_TRIGGER[block.trigger ?? 'always'] ?? 'always'],
-    source,
+    events: [event],
+    source: lines.join('\n'),
     enabled: true,
     priority: 0,
   };

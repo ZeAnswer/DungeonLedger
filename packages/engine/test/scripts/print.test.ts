@@ -1,5 +1,6 @@
-import { printBlock, printExpr } from '../../src/scripts/print';
+import { printBlock, printExpr, printWarnings, clearPrintWarnings, EVENT_ONLY_WARNING } from '../../src/scripts/print';
 import { compile } from '../../src/scripts/compile';
+import { convertPack } from '../../src/migrate';
 
 /**
  * The block printer is the v3 → v4 converter: one effect block in, one script out.
@@ -8,6 +9,7 @@ import { compile } from '../../src/scripts/compile';
  */
 type Any = Record<string, any>;
 const src = (block: Any, phase: 'always' | 'use' = 'always', owner = 'owner') => printBlock(block as never, phase, owner).source;
+beforeEach(() => clearPrintWarnings());
 
 const cases: { name: string; block: Any; phase?: 'always' | 'use'; owner?: string; events?: string[]; want: string }[] = [
   {
@@ -141,25 +143,25 @@ test('untraced condition trees print as JS with the v3 sentence as the need() re
 });
 
 test('the remaining verbs print to their helpers', () => {
-  const one = (e: Any, want: string) => expect(src({ id: 'x', when: { all: [] }, do: [e] })).toBe(want);
+  const one = (e: Any, want: string, phase: 'always' | 'use' = 'always') => expect(src({ id: 'x', when: { all: [] }, do: [e] }, phase)).toBe(want);
   one({ verb: 'dice', dice: '1d6', damageType: 'fire' }, "dice('1d6', 'fire');");
   one({ verb: 'dice', dice: '1d6' }, "dice('1d6');");
   one({ verb: 'dice', dice: '1d6', label: 'Flaming' }, "dice('1d6', undefined, { as: 'Flaming' });");
   one({ verb: 'note', text: 'Save or die.', dc: 15 }, "note('Save or die. (DC 15)');");
   one({ verb: 'flag', flag: 'ignoreConcealment', value: true }, "flag('ignoreConcealment');");
   one({ verb: 'flag', flag: 'x', value: false }, "flag('x', false);");
-  one({ verb: 'tag', to: 'self', tag: 'raging', duration: { rounds: 3 } }, "condition('self', 'raging', 3 * ROUND);");
-  one({ verb: 'tag', to: 'allEnemies', tag: 'shaken', duration: { minutes: 1 } }, "condition('allEnemies', 'shaken', MINUTE);");
-  one({ verb: 'tag', to: 'target', tag: 'marked', duration: 'untilRemoved' }, "target.mark('marked');");
-  one({ verb: 'grant', ability: 'haste', duration: 'encounter' }, "grant('haste', ENCOUNTER);");
-  one({ verb: 'grant', ability: 'haste' }, "grant('haste');");
-  one({ verb: 'suppress', ability: 'rage' }, "suppress('rage');");
-  one({ verb: 'resource', id: 'monster-blow', op: 'consume', amount: 1 }, "charges('monster-blow').use();");
-  one({ verb: 'resource', id: 'p', op: 'restore', amount: 2 }, "charges('p').restore(2);");
-  one({ verb: 'resource', id: 'p', op: 'set', amount: 0 }, "charges('p').set(0);");
-  one({ verb: 'hp', op: 'damage', amount: '2 * level' }, 'hurt(2 * player.level);');
-  one({ verb: 'hp', op: 'temp', amount: 5 }, 'temp(5);');
-  one({ verb: 'reveal' }, 'target.reveal();');
+  one({ verb: 'tag', to: 'self', tag: 'raging', duration: { rounds: 3 } }, "condition('self', 'raging', 3 * ROUND);", 'use');
+  one({ verb: 'tag', to: 'allEnemies', tag: 'shaken', duration: { minutes: 1 } }, "condition('allEnemies', 'shaken', MINUTE);", 'use');
+  one({ verb: 'tag', to: 'target', tag: 'marked', duration: 'untilRemoved' }, "target.mark('marked');", 'use');
+  one({ verb: 'grant', ability: 'haste', duration: 'encounter' }, "grant('haste', ENCOUNTER);", 'use');
+  one({ verb: 'grant', ability: 'haste' }, "grant('haste');", 'use');
+  one({ verb: 'suppress', ability: 'rage' }, "suppress('rage');", 'use');
+  one({ verb: 'resource', id: 'monster-blow', op: 'consume', amount: 1 }, "charges('monster-blow').use();", 'use');
+  one({ verb: 'resource', id: 'p', op: 'restore', amount: 2 }, "charges('p').restore(2);", 'use');
+  one({ verb: 'resource', id: 'p', op: 'set', amount: 0 }, "charges('p').set(0);", 'use');
+  one({ verb: 'hp', op: 'damage', amount: '2 * level' }, 'hurt(2 * player.level);', 'use');
+  one({ verb: 'hp', op: 'temp', amount: 5 }, 'temp(5);', 'use');
+  one({ verb: 'reveal' }, 'target.reveal();', 'use');
   one({ verb: 'prompt', id: 'knowledge', per: 'creatureType' }, "ask('knowledge', { per: 'creatureType' });");
   one({ verb: 'note', text: 'Save DC {10 + level} to resist.', dc: '15 + wisMod' }, 'note(`Save DC ${10 + player.level} to resist. (DC ${15 + player.mod.wis})`);');
   one({ verb: 'note', text: "ignore this foe's concealment" }, "note(`ignore this foe's concealment`);");
@@ -181,4 +183,59 @@ test('printExpr maps the v3 expression vocabulary to script paths', () => {
   expect(printExpr('sel(self.skill.swim.ranks)')).toBe('player.skills.swim.ranks');
   expect(printExpr('sel(self.resource.boots-rounds.left)')).toBe("player.left('boots-rounds')");
   expect(printExpr('sel(self.made.up.path)')).toBe("sel('self.made.up.path')");
+});
+
+test('a dotted bare name is a selector, not a var', () => {
+  expect(printExpr('self.class.ranger.level')).toBe('player.classes.ranger');
+  expect(printExpr('self.level + 1')).toBe('player.level + 1');
+  expect(printExpr('2 * self.skill.swim.total')).toBe('2 * player.skills.swim.total');
+  expect(printExpr('floor(self.class.monster-hunter.level / 2) + wisMod')).toBe("floor(player.classes['monster-hunter'] / 2) + player.mod.wis");
+  expect(printExpr('battle.round + trophyMultiplier')).toBe('battle.round + vars.trophyMultiplier');
+});
+
+test('need() reasons use the pack\'s tag and skill names', () => {
+  const pack = convertPack({
+    id: 'p', name: 'P', version: 1,
+    tags: [{ id: 'raging', label: 'Raging', category: 'condition' }],
+    skills: [{ id: 'swim', name: 'Swim', ability: 'str' }],
+    abilities: [{
+      id: 'a', name: 'A', kind: 'feature', acquired: { kind: 'feat' }, enabledByDefault: true, activations: [], pools: [],
+      effects: [{ id: 'b', trigger: 'always', when: { all: [{ none: [{ is: 'self.tag.raging' }] }, { compare: 'self.skill.swim.total', op: '>=', value: 5 }] }, do: [{ verb: 'flag', flag: 'f' }] }],
+    }],
+  }) as { abilities: Any[] };
+  expect(pack.abilities[0]!.scripts[0]!.source).toBe(
+    "need(!(player.is('raging')), 'none of: you are Raging');\n"
+    + "need(player.skills.swim.total >= 5, 'Swim total at least 5');\n"
+    + "flag('f');",
+  );
+});
+
+test('attackKind guards only the verbs that carry it', () => {
+  expect(src({
+    id: 'x', when: { all: [{ is: 'target.tag.aquatic' }] },
+    do: [{ verb: 'modify', to: 'attack', value: 1, mode: 'add', attackKind: 'ranged' }, { verb: 'modify', to: 'damage', value: 1, mode: 'add' }],
+  })).toBe("if (target.is('aquatic')) {\n  if (attack.isRanged) {\n    bonus('attack', 1);\n  }\n  bonus('damage', 1);\n}");
+  // a kind the block already tests for is not repeated
+  expect(src({
+    id: 'x', when: { all: [{ compare: 'attack.kind', op: '=', value: 'ranged' }] },
+    do: [{ verb: 'modify', to: 'attack', value: 1, mode: 'add', attackKind: 'ranged' }],
+  })).toBe("if (attack.isRanged) {\n  bonus('attack', 1);\n}");
+});
+
+test('an event-only helper in an always block is printed, flagged in the source and reported', () => {
+  const script = printBlock({ id: 'b', when: { all: [] }, do: [{ verb: 'resource', id: 'p', op: 'consume', amount: 1 }, { verb: 'flag', flag: 'f' }] } as never, 'always', 'owner');
+  expect(script.source).toBe(`${EVENT_ONLY_WARNING}\ncharges('p').use();\nflag('f');`);
+  expect(printWarnings).toEqual(['owner/b: event-only helper (resource) in an always script']);
+  // the same verbs in a use or hit script are fine
+  clearPrintWarnings();
+  printBlock({ id: 'b', trigger: 'onHit', when: { all: [] }, do: [{ verb: 'reveal' }] } as never, 'always', 'owner');
+  printBlock({ id: 'b', when: { all: [] }, do: [{ verb: 'reveal' }] } as never, 'use', 'owner');
+  expect(printWarnings).toEqual([]);
+});
+
+test('a note placeholder that is not an expression is refused', () => {
+  expect(() => src({ id: 'x', when: { all: [] }, do: [{ verb: 'note', text: 'roll {2d6 fire} now' }] })).toThrow(/note text: bad \{expr\}/);
+  // a stray "${" is plain text in a quoted string, and escaped when the text needs a template literal
+  expect(src({ id: 'x', when: { all: [] }, do: [{ verb: 'note', text: 'costs ${gold' }] })).toBe("note('costs ${gold');");
+  expect(src({ id: 'x', when: { all: [] }, do: [{ verb: 'note', text: "it's ${gold" }] })).toBe('note(`it\'s \\${gold`);');
 });
