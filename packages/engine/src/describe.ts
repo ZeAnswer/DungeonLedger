@@ -71,7 +71,7 @@ function describeHistory(ctx: EvalContext, f: HistoryFilter): string {
   const what = { hit: 'hit', miss: 'missed', crit: 'critted', attack: 'attacked', used: `used ${f.abilityId ? nameOf(ctx, f.abilityId) : 'ability'}`, activated: 'activated', damaged: 'damaged', moved: 'moved' }[f.event];
   const who = f.by === 'me' ? 'you' : f.by === 'target' ? 'the target' : 'anyone';
   const vs = f.vs === 'current' ? (f.by === 'target' ? ' you' : ' this target') : f.vs === 'sameCategory' ? ` a ${f.category ?? 'similar'} target` : '';
-  const when = { thisRound: 'this round', thisAttackSequence: 'this round', lastRound: 'last round', encounter: 'this battle', day: 'today' }[f.scope];
+  const when = { attack: 'this round', round: 'this round', lastRound: 'last round', encounter: 'this battle', day: 'today' }[f.scope];
   return `${who} ${what}${vs} ${when}`;
 }
 

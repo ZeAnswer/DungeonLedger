@@ -3,7 +3,7 @@ import { evalExpr } from './expr';
 import { derivedFromLevels } from './levels';
 import { resolveFlags, resolveStat } from './resolve';
 import { countHistory } from './history';
-import { resolveStatVia } from './scripts/registry';
+import { hasStatResolver, resolveStatVia } from './scripts/registry';
 import { ROUND } from './scripts/units';
 import type { Ability } from './schema';
 
@@ -81,7 +81,7 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
         case 'mod': {
           // effective score (items, buffs and scripts included); base score while no resolver is registered
           const key = rest as 'str';
-          try { return abilityMod(resolveStatVia(ctx, `ability.${key}`).total); } catch { return abilityMod(c.abilityScores[key] ?? 10); }
+          return abilityMod(hasStatResolver() ? resolveStatVia(ctx, `ability.${key}`).total : c.abilityScores[key] ?? 10);
         }
         default: return undefined;
       }
@@ -117,7 +117,7 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
           const w = a.weaponAbilityId ? ctx.library.abilities[a.weaponAbilityId] : undefined;
           if (rest === 'id') return a.weaponAbilityId;
           if (rest === 'category') return itemMeta(w)?.category;
-          if (rest === 'tags') return itemMeta(w)?.tags ?? [];
+          if (rest === 'tags') return [...(itemMeta(w)?.tags ?? [])];
           if (p[2] === 'tag') return !!itemMeta(w)?.tags.includes(p.slice(3).join('.'));
           return undefined;
         }
@@ -130,7 +130,7 @@ export function readSelector(ctx: EvalContext, sel: string): SelValue {
         case 'round': return b?.round ?? 1;
         case 'toggle': return !!b?.toggles[rest];
         case 'tag': return !!b?.tags?.includes(rest);
-        case 'tags': return b?.tags ?? [];
+        case 'tags': return [...(b?.tags ?? [])];
         case 'elapsed': return ((b?.round ?? 1) - 1) * ROUND;
         case 'prompt': {
           if (!b) return undefined;

@@ -1,7 +1,7 @@
 import { HURT_ORDER, SIZE_ORDER, abilityMod, targetTags, targetTagsInCategory, type AbilityInstance, type EvalContext } from '../context';
 import { evalExpr } from '../expr';
 import { countHistory } from '../history';
-import { BonusTypeSchema, SlotIdSchema, StatIdSchema, type Ability, type Activation, type AttackKind, type BonusType, type Duration, type HistoryFilter, type Script, type ScriptEvent, type SlotId, type StatId } from '../schema';
+import { BonusTypeSchema, SlotIdSchema, StatIdSchema, type Ability, type Activation, type AttackKind, type BonusType, type Duration, type HistoryFilter, type Script, type ScriptEvent, type SlotId, type StatId, type VarValue } from '../schema';
 import { readSelector } from '../selectors';
 import { exprVars } from '../vars';
 import { resolveStatVia } from './registry';
@@ -34,11 +34,16 @@ export class ScriptSkip {
 }
 
 const ABILITY_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
-const freeze = <T extends object>(o: T): T => Object.freeze(o);
-const proxy = <T>(get: (k: string) => T): Record<string, T> =>
+const readOnly = (k: string | symbol) => new Error(`${String(k)} is read-only: use a helper (bonus, setVar, heal…) to change values`);
+/**
+ * Frozen *and* set-trapped: freezing alone only throws in strict mode and only says "has only a getter",
+ * so every façade object refuses writes with a message that names the helpers instead.
+ */
+const freeze = <T extends object>(o: T): T => new Proxy(Object.freeze(o), { set: (_t, k) => { throw readOnly(k); } }) as T;
+const proxy = <T>(get: (k: string) => T, set?: (k: string, v: T) => void): Record<string, T> =>
   new Proxy(Object.freeze({}), {
     get: (_, k) => (typeof k === 'string' ? get(k) : undefined),
-    set: () => { throw new Error('read-only: use a helper (bonus, setVar, heal…) to change values'); },
+    set: (_t, k, v) => { if (!set || typeof k !== 'string') throw readOnly(k); set(k, v as T); return true; },
   }) as Record<string, T>;
 
 export function makeApi(ctx: EvalContext, run: RunContext, sink: Sink, patches: Patch[], trace: Trace) {
@@ -83,7 +88,7 @@ export function makeApi(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
       category: proxy((k) => (sel(`self.equipped.category.${k}`) as number) ?? 0),
       tag: proxy((k) => (sel(`self.equipped.count.tag.${k}`) as number) ?? 0),
     }),
-    params: proxy((k) => src.instance?.paramValues[k] ?? []),
+    params: proxy((k) => [...(src.instance?.paramValues[k] ?? [])]),
     get lastDamage() { return run.event?.damage ?? ctx.lastDamage ?? 0; },
   });
 
@@ -96,7 +101,7 @@ export function makeApi(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
     get distance() { return t?.distanceFeet; },
     get revealed() { return !!t?.revealed; },
     get dead() { return !!t?.dead; },
-    get tags() { return ttags; },
+    get tags() { return [...ttags]; },
     is: (tag: string | string[]) => pred(`target is ${[tag].flat().map(tagLabel).join(' / ')}`, [tag].flat().some((x) => ttags.includes(x))),
     isOneOf: (tags: readonly string[]) => pred('target type is one of your chosen types', tags.some((x) => ttags.includes(x))),
     within: (ft: number) => pred(`target within ${ft} ft`, t?.distanceFeet !== undefined && t.distanceFeet <= ft),
@@ -117,7 +122,7 @@ export function makeApi(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
     weapon: freeze({
       get id() { return a?.weaponAbilityId; },
       get category() { return sel('attack.weapon.category') as string | undefined; },
-      get tags() { return (sel('attack.weapon.tags') as string[] | undefined) ?? []; },
+      get tags() { return [...((sel('attack.weapon.tags') as string[] | undefined) ?? [])]; },
       is: (tag: string) => pred(`weapon is ${tagLabel(tag)}`, !!sel(`attack.weapon.tag.${tag}`)),
     }),
   });
@@ -126,14 +131,21 @@ export function makeApi(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
     get exists() { return !!ctx.battle; },
     get round() { return ctx.battle?.round ?? 1; },
     get elapsed() { return ((ctx.battle?.round ?? 1) - 1) * ROUND; },
-    get tags() { return ctx.battle?.tags ?? []; },
+    get tags() { return [...(ctx.battle?.tags ?? [])]; },
     on: (id: string) => pred(`"${id}" switched on`, !!ctx.battle?.toggles[id]),
     is: (tag: string) => pred(`battle is ${tagLabel(tag)}`, !!ctx.battle?.tags.includes(tag)),
     toggles: proxy((k) => !!ctx.battle?.toggles[k]),
     prompts: proxy((k) => sel(`battle.prompt.${k}`)),
   });
 
-  const vars = proxy((k) => ctx.character.vars[k] ?? ctx.library.globals?.[k]);
+  const vars = proxy<VarValue | undefined>(
+    (k) => ctx.character.vars[k] ?? ctx.library.globals?.[k],
+    (name, value) => {
+      if (always) throw new Error('vars are read-only in always scripts: assign them with setVar(name, value) in an event script');
+      if (value === undefined || (typeof value !== 'number' && typeof value !== 'string' && typeof value !== 'boolean')) throw new Error(`vars hold a number, text or true/false; "${name}" got ${typeof value}`);
+      patches.push({ k: 'setVar', name, value });
+    },
+  );
   const flags = proxy((k) => !!sink.flags[k]);
   const params = player.params;
   const activeOwn = src.activation ? activeInfo(ctx, src.activation.id) : null;

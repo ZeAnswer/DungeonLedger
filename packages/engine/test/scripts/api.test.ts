@@ -1,6 +1,7 @@
 import type { EvalContext } from '../../src/context';
 import { AbilitySchema } from '../../src/schema';
 import { API_NAMES, makeApi, ScriptSkip, type Patch, type Trace } from '../../src/scripts/api';
+import { compile } from '../../src/scripts/compile';
 import { setStatResolver } from '../../src/scripts/registry';
 import { newSink } from '../../src/scripts/sink';
 import { HURT, ROUND, SIZE } from '../../src/scripts/units';
@@ -17,7 +18,7 @@ setStatResolver((ctx: EvalContext, stat: string) => {
 const feat = AbilitySchema.parse({ id: 'f', name: 'Feat', kind: 'feature', params: { types: { kind: 'tags', category: 'creatureType' } } });
 
 function setup(phase: 'always' | 'event' = 'always') {
-  const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1', tags: ['aberration', 'aquatic'], size: 'large', hurt: 'bloodied', distanceFeet: 20 })], toggles: { sniping: true }, prompts: { 'knowledge:aberration': 24 } });
+  const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1', tags: ['aberration', 'aquatic'], size: 'large', hurt: 'bloodied', distanceFeet: 20 })], toggles: { sniping: true }, tags: ['underwater'], prompts: { 'knowledge:aberration': 24 } });
   const ctx = makeCtx({
     character: makeCharacter({ abilities: [{ abilityId: 'f', enabled: true, paramValues: { types: ['aberration'] } }], vars: { trophyMultiplier: 2 } }),
     battle,
@@ -70,7 +71,7 @@ test('compute helpers fill the sink with source attribution; event helpers throw
   expect(() => api.bonus('attac', 1)).toThrow(/unknown stat/);
   expect(() => api.bonus('attack', 1, 'moral')).toThrow(/unknown bonus type/);
   expect(() => api.heal(5)).toThrow(/only in event scripts/);
-  expect(() => { (api.player as unknown as { level: number }).level = 3; }).toThrow();
+  expect(() => { (api.player as unknown as { level: number }).level = 3; }).toThrow(/read-only/);
 });
 
 test('the remaining compute and event helpers reach the sink and the patch list', () => {
@@ -123,6 +124,41 @@ test('need() throws a skip carrying the last false predicate', () => {
   expect(skipReason(() => api.need(trace.last?.result))).toBe('target within 10 ft');
   expect(skipReason(() => api.need(false, 'you must be raging'))).toBe('you must be raging');
   expect(skipReason(() => api.need(true))).toBeUndefined();
+});
+
+test('lists are handed out as copies, so a script cannot mutate stored state', () => {
+  const { api, ctx } = setup();
+  api.battle.tags.push('on-fire');
+  api.target.tags.push('on-fire');
+  api.params.types!.push('dragon');
+  expect(ctx.battle!.tags).toEqual(['underwater']);
+  expect(ctx.target!.tags).toEqual(['aberration', 'aquatic']);
+  expect(ctx.character.abilities[0]!.paramValues.types).toEqual(['aberration']);
+  expect(api.target.is('on-fire')).toBe(false);
+  expect(api.battle.tags).toEqual(['underwater']);
+});
+
+test('assigning a var is setVar in event scripts and an error in always scripts', () => {
+  const ev = setup('event');
+  ev.api.vars.kills = 2;
+  expect(ev.patches).toEqual([{ k: 'setVar', name: 'kills', value: 2 }]);
+  expect(() => { (ev.api.vars as Record<string, unknown>).loot = { gp: 5 }; }).toThrow(/number, text or true\/false/);
+
+  const always = setup();
+  expect(() => { always.api.vars.kills = 2; }).toThrow(/read-only/);
+  expect(always.patches).toEqual([]);
+});
+
+test('a compiled script cannot write through the façade, strict mode or not', () => {
+  const { api } = setup();
+  const c = compile('player.level = 3');
+  expect(c.ok).toBe(true);
+  if (c.ok) expect(() => c.run(api, () => {})).toThrow(/read-only/);
+  const m = compile('player.mod.cha += 1');
+  if (m.ok) expect(() => m.run(api, () => {})).toThrow(/read-only/);
+  // even without the compiler's "use strict", the set trap still refuses
+  const sloppy = new Function('api', 'api.player.level = 3;') as (a: unknown) => void;
+  expect(() => sloppy(api)).toThrow(/read-only/);
 });
 
 test('history helper counts with friendly defaults', () => {

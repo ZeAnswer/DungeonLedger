@@ -8,7 +8,12 @@ import type { EvalContext } from '../context';
  */
 export type StatResolver = (ctx: EvalContext, stat: string) => { total: number };
 
-let resolver: StatResolver = () => { throw new Error('stat resolver not registered'); };
+let resolver: StatResolver | undefined;
 
 export function setStatResolver(fn: StatResolver): void { resolver = fn; }
-export function resolveStatVia(ctx: EvalContext, stat: string): { total: number } { return resolver(ctx, stat); }
+/** Callers that can fall back should branch on this rather than catching, so real resolver errors surface. */
+export function hasStatResolver(): boolean { return !!resolver; }
+export function resolveStatVia(ctx: EvalContext, stat: string): { total: number } {
+  if (!resolver) throw new Error('stat resolver not registered');
+  return resolver(ctx, stat);
+}
