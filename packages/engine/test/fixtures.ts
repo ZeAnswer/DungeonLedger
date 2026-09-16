@@ -70,6 +70,8 @@ export function makeLibrary(abilities: Ability[] = []): Library {
     tags: Object.fromEntries(tags.map((t) => [t.id, t])),
     skills: Object.fromEntries(skills.map((s) => [s.id, s])),
     classTables: { ranger, 'monster-hunter': monsterHunter },
+    functions: {},
+    globals: {},
     xpTable: [{ level: 1, xp: 0 }, { level: 2, xp: 1000 }, { level: 3, xp: 3000 }, { level: 4, xp: 6000 }, { level: 5, xp: 10000 }, { level: 6, xp: 15000 }, { level: 7, xp: 21000 }, { level: 8, xp: 28000 }],
   };
 }
