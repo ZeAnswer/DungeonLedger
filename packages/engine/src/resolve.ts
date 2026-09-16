@@ -235,11 +235,11 @@ export function resolveStat(ctx: EvalContext, stat: StatId): StatResult {
       stat, total,
       entries: stacked.entries.map((e) => ({ ...e, sourceName: names[e.source] ?? e.source })),
       dice: stat === 'damage' ? [...dice, ...sink.dice] : dice,
-      flags: stat === 'attack' ? sink.flags : {},
+      flags: stat === 'attack' ? { ...sink.flags } : {},
       notes: attackLike ? [...new Set(sink.notes.map((n) => n.text))] : [],
       warnings: [...warnings, ...sink.warnings, ...sink.prompts.map((p) => promptWarning(ctx, p)), ...sink.errors.map((e) => `${e.label}: ${e.message}`)],
-      nearMiss: attackLike ? sink.skipped : [],
-      promptsNeeded: sink.prompts,
+      nearMiss: attackLike ? [...sink.skipped] : [],
+      promptsNeeded: [...sink.prompts],
     };
     if (stat === 'critRange') result.total = 21 - Math.max(1, Math.min(20, total));
     return result;
@@ -261,9 +261,10 @@ export function listAttackModes(ctx: EvalContext, profileId: string): AttackMode
     { modeId: 'full', label: 'Full attack', base: 'full', extraAttacksAtTop: 0, penalty: 0, source: 'base' },
   ];
   const actx: EvalContext = { ...ctx, attack: { profile, kind: profile.kind, index: 1, modeId: 'single', ...(profile.weaponAbilityId ? { weaponAbilityId: profile.weaponAbilityId } : {}) } };
+  // Copied out of the cached sink: callers (and the app) must not be able to edit a pass in place.
   for (const m of computePass(actx).modes) {
     if (m.kind && m.kind !== profile.kind) continue;
-    modes.push(m);
+    modes.push({ ...m });
   }
   return modes;
 }
