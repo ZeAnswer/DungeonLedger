@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { durationRounds, exprVars, newId, type EvalContext, type Status } from '@hl/engine';
+import { durationRounds, newId, type EvalContext, type Status } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { RecordEditor } from '../library/RecordEditor';
 import { Button, Chip, Field, Sheet, Stepper, humanize, inputCls } from '../ui';
@@ -20,7 +20,7 @@ export function BuffsDrawer({ ctx, open, onClose }: { ctx: EvalContext; open: bo
     const a = lib.abilities[abilityId];
     if (!a) return;
     const duration = a.kind === 'status' || a.kind === 'spell' ? a.duration : undefined;
-    const rounds = durationRounds(duration, exprVars(ctx));
+    const rounds = durationRounds(duration);
     setBattle({ ...battle, activeBuffs: [...battle.activeBuffs, { instanceId: newId('buff'), abilityId, owner: 'self', suppressed: false, ...(duration ? { expires: duration } : {}), ...(rounds !== undefined ? { remainingRounds: rounds } : {}) }] });
   };
   const patch = (instanceId: string, p: Partial<(typeof battle.activeBuffs)[number]>) => setBattle({ ...battle, activeBuffs: battle.activeBuffs.map((b) => (b.instanceId === instanceId ? { ...b, ...p } : b)) });

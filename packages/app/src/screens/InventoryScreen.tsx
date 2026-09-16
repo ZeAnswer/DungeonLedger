@@ -14,6 +14,7 @@ function entryCategory(ctx: EvalContext, e: InventoryEntry) { const a = itemAbil
 export function InventoryScreen() {
   const ctx = useCtx();
   const setCharacter = useStore((s) => s.setCharacter);
+  const setBattle = useStore((s) => s.setBattle);
   const library = useStore((s) => s.library);
   const setLibrary = useStore((s) => s.setLibrary);
   const showToast = useStore((s) => s.showToast);
@@ -30,12 +31,12 @@ export function InventoryScreen() {
   const doEquip = (e: InventoryEntry) => {
     const r = equipItem(ctx, e.id);
     if (!r.ok) {
-      if (confirm(`${r.reason}. Replace what is there?`)) { const r2 = equipItem(ctx, e.id, { replace: true }); setCharacter(r2.character); showToast(`${entryName(ctx, e)} equipped`); }
+      if (confirm(`${r.reason}. Replace what is there?`)) { const r2 = equipItem(ctx, e.id, { replace: true }); setCharacter(r2.character); if (r2.battle) setBattle(r2.battle); showToast(`${entryName(ctx, e)} equipped`); }
       return;
     }
-    setCharacter(r.character); showToast(`${entryName(ctx, e)} equipped`);
+    setCharacter(r.character); if (r.battle) setBattle(r.battle); showToast(`${entryName(ctx, e)} equipped`);
   };
-  const doUnequip = (e: InventoryEntry) => { setCharacter(unequipItem(ctx, e.id).character); showToast(`${entryName(ctx, e)} unequipped`); };
+  const doUnequip = (e: InventoryEntry) => { const r = unequipItem(ctx, e.id); setCharacter(r.character); if (r.battle) setBattle(r.battle); showToast(`${entryName(ctx, e)} unequipped`); };
   const saveNew = (a: Ability) => {
     setLibrary({ ...library, abilities: { ...library.abilities, [a.id]: a } });
     setCharacter(addItemInstance(c, a.id));
@@ -80,7 +81,7 @@ export function InventoryScreen() {
                 <div key={`${s.id}-${idx}`} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2">
                   <div className="w-24 shrink-0 text-xs uppercase tracking-wide text-zinc-500">{s.label}{n > 1 ? ` ${idx + 1}` : ''}</div>
                   {e ? (
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setOpen(e)}><span className="truncate">{entryName(ctx, e)}</span>{itemAbility(ctx, e)?.effects.length ? <span className="ml-1 text-amber-400">✦</span> : null}</button>
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setOpen(e)}><span className="truncate">{entryName(ctx, e)}</span>{itemAbility(ctx, e)?.scripts.length ? <span className="ml-1 text-amber-400">✦</span> : null}</button>
                   ) : (
                     <button type="button" className="min-w-0 flex-1 text-left text-zinc-600" onClick={() => setPickFor(s.id)}>— empty —</button>
                   )}
@@ -109,7 +110,7 @@ export function InventoryScreen() {
               <div className="space-y-1">
                 {g.items.map((e) => { const a = itemAbility(ctx, e); const slot = slotOf(a); return (
                   <button key={e.id} type="button" onClick={() => setOpen(e)} className="flex w-full items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2 text-left">
-                    <span className="min-w-0 flex-1 truncate"><span className={cx('mr-2', e.equipped ? 'text-emerald-400' : 'text-zinc-700')}>{e.equipped ? '✓' : '○'}</span>{entryName(ctx, e)}{e.quantity !== 1 ? <span className="ml-1 text-zinc-400">×{e.quantity}</span> : null}{a?.effects.length ? <span className="ml-1 text-amber-400">✦</span> : null}</span>
+                    <span className="min-w-0 flex-1 truncate"><span className={cx('mr-2', e.equipped ? 'text-emerald-400' : 'text-zinc-700')}>{e.equipped ? '✓' : '○'}</span>{entryName(ctx, e)}{e.quantity !== 1 ? <span className="ml-1 text-zinc-400">×{e.quantity}</span> : null}{a?.scripts.length ? <span className="ml-1 text-amber-400">✦</span> : null}</span>
                     <span className="shrink-0 text-xs text-zinc-500">{slot && slot !== 'none' ? SLOTS.find((s) => s.id === slot)?.label : slot === 'none' ? 'no slot' : ''}</span>
                   </button>
                 ); })}
@@ -128,12 +129,12 @@ export function InventoryScreen() {
           {a?.todo && <p className="mb-3 rounded-xl border border-amber-900 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">⚑ {a.todo}</p>}
           <div className="mb-3 flex flex-wrap gap-2">
             {slot && (e.equipped ? <Button variant="ghost" onClick={() => doUnequip(e)}>{slot === 'none' ? 'Deactivate' : 'Unequip'}</Button> : <Button variant="primary" onClick={() => doEquip(e)}>{slot === 'none' ? 'Activate' : 'Equip'}</Button>)}
-            {a && (a.effects.length > 0 || activationsOf(a).length > 0) && <Button onClick={() => setViewRules(a)}>Rules & charges</Button>}
+            {a && (a.scripts.length > 0 || activationsOf(a).length > 0) && <Button onClick={() => setViewRules(a)}>Rules & charges</Button>}
             {a && <Button onClick={() => setEditingRules(a)}>Edit item</Button>}
           </div>
           <Field label="Quantity"><input className={inputCls + ' w-24'} inputMode="numeric" value={e.quantity} onChange={(ev) => setCharacter({ ...c, inventory: c.inventory.map((i) => (i.id === e.id ? { ...i, quantity: Number(ev.target.value) || 0 } : i)) })} /></Field>
           <Field label="Notes (this copy)"><textarea className={inputCls} value={e.notes ?? ''} onChange={(ev) => setCharacter({ ...c, inventory: c.inventory.map((i) => (i.id === e.id ? { ...i, notes: ev.target.value || undefined } : i)) })} /></Field>
-          <Button variant="danger" onClick={() => { if (confirm(`Remove ${entryName(ctx, e)} from ${c.name}? (stays in the library)`)) { setCharacter(removeItemInstance(ctx, e.id)); setOpen(undefined); } }}>Remove from character</Button>
+          <Button variant="danger" onClick={() => { if (confirm(`Remove ${entryName(ctx, e)} from ${c.name}? (stays in the library)`)) { const r = removeItemInstance(ctx, e.id); setCharacter(r.character); if (r.battle) setBattle(r.battle); setOpen(undefined); } }}>Remove from character</Button>
         </Sheet>
       ); })()}
 

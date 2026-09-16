@@ -43,7 +43,7 @@ function subtitle(a: Ability, classes: Record<string, { name: string }>): string
   if (a.kind === 'item') parts.push(a.item.category);
   if (a.kind === 'spell') parts.push(a.level !== undefined ? `level ${a.level}` : 'spell');
   if (a.kind === 'status') parts.push(a.harmful ? 'condition' : 'buff');
-  if (a.effects.length) parts.push(`${a.effects.length} effect${a.effects.length === 1 ? '' : 's'}`);
+  if (a.scripts.length) parts.push(`${a.scripts.length} script${a.scripts.length === 1 ? '' : 's'}`);
   if (acts.length) parts.push(`${acts.length} activation${acts.length === 1 ? '' : 's'}`);
   if (a.todo) parts.push('⚑ ' + a.todo);
   return parts.join(' · ');

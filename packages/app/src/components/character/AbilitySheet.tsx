@@ -48,7 +48,7 @@ export function AbilitySheet({ ctx, ability, onClose }: { ctx: EvalContext; abil
           </Field>
         ) : null;
       })}
-      <div className="mb-3 text-xs text-zinc-500">{ability.effects.length} passive block{ability.effects.length === 1 ? '' : 's'}, {activationsOf(ability).length} activation{activationsOf(ability).length === 1 ? '' : 's'}. Edit the logic in Library.</div>
+      <div className="mb-3 text-xs text-zinc-500">{ability.scripts.length} script{ability.scripts.length === 1 ? '' : 's'}, {activationsOf(ability).length} activation{activationsOf(ability).length === 1 ? '' : 's'}. Edit the logic in Library.</div>
       {ability.kind !== 'item' && <Button variant="danger" onClick={() => { if (confirm(`Remove ${ability.name} from ${c.name}?`)) { setCharacter({ ...c, abilities: c.abilities.filter((x) => x.abilityId !== ability.id) }); onClose(); } }}>Remove from character</Button>}
     </Sheet>
   );

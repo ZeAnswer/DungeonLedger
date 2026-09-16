@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addStatus, type BonusType, type Duration, type EvalContext, type StatId } from '@hl/engine';
+import { ROUND, addStatus, type BonusType, type Duration, type EvalContext, type StatId } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { Button, Chip, Field, Sheet, humanize, inputCls } from '../ui';
 import { StatSelect, TagSelect } from '../library/StatSelect';
@@ -23,7 +23,7 @@ export function SituationalSheet({ ctx, open, onClose }: { ctx: EvalContext; ope
   const abilities = ctx.character.abilities.map((i) => lib.abilities[i.abilityId]).filter(Boolean);
 
   const save = () => {
-    const duration: Duration = dur === 'rounds' ? { rounds: Math.max(1, Number(rounds) || 1) } : dur === 'untilMyNextTurn' ? 'untilMyNextTurn' : 'encounter';
+    const duration: Duration = dur === 'rounds' ? Math.max(1, Number(rounds) || 1) * ROUND : dur === 'untilMyNextTurn' ? 'untilMyNextTurn' : 'encounter';
     const b = addStatus(ctx, {
       label: label || (kind === 'bonus' ? `${value} ${stat}` : kind === 'tag' ? humanize(tag) : kind === 'suppress' ? `Suppress ${suppress}` : 'Note'),
       target,
