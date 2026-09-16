@@ -1,7 +1,8 @@
 import type { EvalContext } from './context';
 import { newId } from './ids';
-import { activeSources } from './resolve';
-import { SLOT_IDS, type Ability, type Character, type SlotId } from './schema';
+import { computePass } from './scripts/compute';
+import { applyPatches, runEventScripts } from './scripts/events';
+import { SLOT_IDS, type Ability, type Battle, type Character, type SlotId, type VarValue } from './schema';
 
 export const SLOTS: { id: SlotId; label: string; base: number }[] = [
   { id: 'mainHand', label: 'Main hand', base: 1 }, { id: 'offHand', label: 'Off hand', base: 1 }, { id: 'buckler', label: 'Buckler', base: 1 }, { id: 'quiver', label: 'Quiver', base: 1 },
@@ -20,10 +21,10 @@ export function itemAbility(ctx: EvalContext, entry: InventoryEntry): Ability | 
   return entry.abilityId ? ctx.library.abilities[entry.abilityId] : undefined;
 }
 
-/** Slot capacities: base counts plus extraSlot effects from everything currently active. */
+/** Slot capacities: base counts plus `slot()` calls from every active script. */
 export function slotCapacity(ctx: EvalContext): Record<SlotId, number> {
   const cap = Object.fromEntries(SLOTS.map((s) => [s.id, s.base])) as Record<SlotId, number>;
-  for (const src of activeSources(ctx)) for (const b of src.blocks) if (b.trigger === 'always') for (const e of b.do) if (e.verb === 'slot') cap[e.slot] += e.count;
+  for (const [id, n] of Object.entries(computePass(ctx).slots)) cap[id as SlotId] += n ?? 0;
   return cap;
 }
 
@@ -43,14 +44,31 @@ export function twoHandedInMainHand(ctx: EvalContext): InventoryEntry | undefine
   return ctx.character.inventory.find((i) => { const a = itemAbility(ctx, i); return i.equipped && a?.kind === 'item' && a.item.slot === 'mainHand' && !!a.item.weapon?.twoHanded; });
 }
 
-export type EquipResult = { ok: boolean; reason?: string; character: Character };
+export type EquipResult = { ok: boolean; reason?: string; character: Character; battle?: Battle; globals?: Record<string, VarValue> };
+
+/**
+ * Run the item's `equip` / `unequip` scripts. They queue patches, and patches land on a battle, so
+ * without one in the context the scripts are skipped entirely (documented limitation: gear changes
+ * outside combat do not fire them).
+ */
+function runItemEvent(ctx: EvalContext, character: Character, battle: Battle | undefined, kind: 'equip' | 'unequip', abilityId: string | undefined): { character: Character; battle?: Battle; globals?: Record<string, VarValue> } {
+  const ability = abilityId ? ctx.library.abilities[abilityId] : undefined;
+  if (!ability || !battle) return { character };
+  const ectx: EvalContext = { ...ctx, character, battle };
+  const r = runEventScripts(ectx, { kind, abilityId: ability.id }, { only: { abilityId: ability.id } });
+  if (!r.patches.length) return { character, battle };
+  const st = applyPatches(ectx, { battle, character, globals: ctx.library.globals }, r.patches, ability);
+  return { character: st.character, battle: st.battle, globals: st.globals };
+}
 
 export function unequipItem(ctx: EvalContext, itemId: string): EquipResult {
   const entry = ctx.character.inventory.find((i) => i.id === itemId);
   if (!entry) return { ok: false, reason: 'No such item', character: ctx.character };
-  let c: Character = { ...ctx.character, inventory: ctx.character.inventory.map((i) => (i.id === itemId ? { ...i, equipped: false, slotIndex: undefined } : i)) };
+  // While the item is still equipped, so its scripts are still an active source.
+  const ev = runItemEvent(ctx, ctx.character, ctx.battle, 'unequip', entry.abilityId);
+  let c: Character = { ...ev.character, inventory: ev.character.inventory.map((i) => (i.id === itemId ? { ...i, equipped: false, slotIndex: undefined } : i)) };
   c = setAbilityEnabled(c, entry.abilityId, false);
-  return { ok: true, character: c };
+  return { ok: true, character: c, ...(ev.battle ? { battle: ev.battle } : {}), ...(ev.globals ? { globals: ev.globals } : {}) };
 }
 
 /** Equip into the item's slot. Fails when the slot is full unless replace (then the highest-index occupant is unequipped). */
@@ -60,20 +78,29 @@ export function equipItem(ctx: EvalContext, itemId: string, opts: { replace?: bo
   const ability = itemAbility(ctx, entry);
   const slot = slotOf(ability);
   let c = ctx.character;
+  let battle = ctx.battle;
+  let globals: Record<string, VarValue> | undefined;
+  /** Take an item off, carrying its `unequip` scripts' effects along. */
+  const takeOff = (id: string) => {
+    const r = unequipItem({ ...ctx, character: c, ...(battle ? { battle } : {}) }, id);
+    c = r.character;
+    if (r.battle) battle = r.battle;
+    if (r.globals) globals = r.globals;
+  };
   let slotIndex: number | undefined;
   const twoHanded = ability?.kind === 'item' && !!ability.item.weapon?.twoHanded;
   if (slot === 'mainHand' && twoHanded) {
     const off = slotOccupants(ctx, 'offHand').filter((o) => o.id !== itemId);
     if (off.length) {
       if (!opts.replace) return { ok: false, reason: `Off hand holds ${off.map((o) => itemAbility(ctx, o)?.name ?? o.name ?? 'an item').join(', ')}; a two-handed weapon needs both hands`, character: c };
-      for (const o of off) c = unequipItem({ ...ctx, character: c }, o.id).character;
+      for (const o of off) takeOff(o.id);
     }
   }
   if (slot === 'offHand') {
     const held = twoHandedInMainHand(ctx);
     if (held && held.id !== itemId) {
       if (!opts.replace) return { ok: false, reason: `Both hands hold ${itemAbility(ctx, held)?.name ?? 'a two-handed weapon'}`, character: c };
-      c = unequipItem({ ...ctx, character: c }, held.id).character;
+      takeOff(held.id);
     }
   }
   if (slot && slot !== 'none') {
@@ -81,8 +108,7 @@ export function equipItem(ctx: EvalContext, itemId: string, opts: { replace?: bo
     const occupants = slotOccupants({ ...ctx, character: c }, slot).filter((o) => o.id !== itemId);
     if (occupants.length >= cap) {
       if (!opts.replace) return { ok: false, reason: `${SLOTS.find((s) => s.id === slot)?.label ?? slot} slot is full`, character: c };
-      const out = occupants[occupants.length - 1]!;
-      c = unequipItem({ ...ctx, character: c }, out.id).character;
+      takeOff(occupants[occupants.length - 1]!.id);
     }
     const used = new Set(c.inventory.filter((i) => i.equipped && i.id !== itemId && slotOf(itemAbility(ctx, i)) === slot).map((i) => i.slotIndex ?? 0));
     slotIndex = 0;
@@ -90,7 +116,12 @@ export function equipItem(ctx: EvalContext, itemId: string, opts: { replace?: bo
   }
   c = { ...c, inventory: c.inventory.map((i) => (i.id === itemId ? { ...i, equipped: true, ...(slotIndex !== undefined ? { slotIndex } : { slotIndex: undefined }) } : i)) };
   c = setAbilityEnabled(c, entry.abilityId, true);
-  return { ok: true, character: c };
+  // After enabling, so the item's own scripts are an active source when its `equip` scripts run.
+  const ev = runItemEvent({ ...ctx, ...(battle ? { battle } : {}) }, c, battle, 'equip', entry.abilityId);
+  c = ev.character;
+  if (ev.battle) battle = ev.battle;
+  if (ev.globals) globals = ev.globals;
+  return { ok: true, character: c, ...(battle && battle !== ctx.battle ? { battle } : {}), ...(globals ? { globals } : {}) };
 }
 
 /** Add an instance of a library item to the character. */

@@ -26,7 +26,16 @@ export type Patch =
 /** Last predicate a script evaluated, and whether the script emitted anything: together they give the "needs …" reason. */
 export type Trace = { last?: { text: string; result: boolean }; emitted: boolean };
 export type RunSource = { ability: Ability; instance: AbilityInstance | undefined; activation?: Activation; label: string };
-export type RunContext = { phase: 'always' | 'event'; source: RunSource; script: Script; event?: EventInfo; args?: Record<string, unknown>; fns?: Record<string, (args: Record<string, unknown>) => void> };
+export type RunContext = {
+  phase: 'always' | 'event';
+  source: RunSource;
+  script: Script;
+  event?: EventInfo;
+  args?: Record<string, unknown>;
+  fns?: Record<string, (args: Record<string, unknown>) => void>;
+  /** Eligibility probe (`availableActions`): pretend the source's activation is running, so `active` is non-null. */
+  probeActive?: boolean;
+};
 
 /** Thrown by `need()`: not an error, the script simply does not apply and says why. */
 export class ScriptSkip {
@@ -148,7 +157,7 @@ export function makeApi(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
   );
   const flags = proxy((k) => !!sink.flags[k]);
   const params = player.params;
-  const activeOwn = src.activation ? activeInfo(ctx, src.activation.id) : null;
+  const activeOwn = run.probeActive ? { round: 1, elapsed: 0, remaining: null } : src.activation ? activeInfo(ctx, src.activation.id) : null;
 
   const emitted = () => { trace.emitted = true; };
   const asStat = (s: string): StatId => { const r = StatIdSchema.safeParse(s); if (!r.success) throw new Error(`unknown stat "${s}"`); return r.data; };

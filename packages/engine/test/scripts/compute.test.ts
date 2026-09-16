@@ -63,7 +63,30 @@ test('library functions are callable with named args and share the budget', () =
   expect(computePass(c).bonuses.map((b) => [b.stat, b.value, b.source])).toEqual([['init', 8, 'gloves'], ['ac', 8, 'amulet']]);
 });
 
-test('the pass is cached per character/battle/target/attack and a nested stat read sees earlier scripts', () => {
+test('per-source params: a script reads its own record\'s choices', () => {
+  const rec = (id: string, tag: string) => AbilitySchema.parse({ id, name: id, kind: 'feature', params: { types: { kind: 'tags' } }, scripts: [{ id: 's', source: `if (sel('self.param.types').includes('${tag}')) bonus('init', 1, 'untyped', { as: '${id}' })` }] });
+  const a = rec('a', 'aberration');
+  const b = rec('b', 'dragon');
+  const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1' })] });
+  const c = makeCtx({
+    character: makeCharacter({ abilities: [{ abilityId: 'a', enabled: true, paramValues: { types: ['aberration'] } }, { abilityId: 'b', enabled: true, paramValues: { types: ['dragon'] } }] }),
+    battle, target: battle.combatants[0],
+  });
+  c.library.abilities['a'] = a;
+  c.library.abilities['b'] = b;
+  expect(computePass(c).bonuses.map((x) => x.source)).toEqual(['a', 'b']);
+});
+
+test('a library edit (a new library object) is a new pass', () => {
+  const rec = AbilitySchema.parse({ id: 'r', name: 'R', kind: 'feature', scripts: [{ id: 's', source: "bonus('init', 1)" }] });
+  const edited = AbilitySchema.parse({ id: 'r', name: 'R', kind: 'feature', scripts: [{ id: 's', source: "bonus('init', 5)" }] });
+  const c = ctxWith([rec]);
+  expect(computePass(c).bonuses[0]!.value).toBe(1);
+  const after = { ...c, library: { ...c.library, abilities: { ...c.library.abilities, r: edited } } };
+  expect(computePass(after).bonuses[0]!.value).toBe(5);
+});
+
+test('the pass is cached per character/battle/library/target/attack and a nested stat read sees earlier scripts', () => {
   const a = AbilitySchema.parse({ id: 'a', name: 'A', kind: 'feature', scripts: [{ id: 's', source: "bonus('ac', 2, 'armor')" }] });
   const b = AbilitySchema.parse({ id: 'b', name: 'B', kind: 'feature', scripts: [{ id: 's', source: "if (player.stats.ac >= 15) bonus('attack', 1)" }] });
   const c = ctxWith([a, b]);

@@ -9,28 +9,37 @@ import { toRounds } from './units';
 
 export type State = { battle: Battle; character: Character; globals?: Record<string, VarValue> };
 export type Only = { abilityId: string; activationId?: string };
+/** A patch plus the record that queued it, so `applyPatches` can stamp the right source on conditions. */
+export type SourcedPatch = Patch & { src: string };
 
 /** How deep an `emit` chain may go before the runner stops following it. */
 const MAX_EMIT_DEPTH = 8;
+/** Total script runs one event transition may cost, however the emits are shaped. */
+const MAX_EMIT_RUNS = 500;
 
 /**
  * Run every event script whose `events` include this event (`custom:<name>` for emits).
- * Emits cascade within the same call, up to `MAX_EMIT_DEPTH` levels deep.
+ * Emits cascade within the same call, up to `MAX_EMIT_DEPTH` levels deep and `MAX_EMIT_RUNS` runs.
  *
- * `opts.only` restricts the *initial* event to one record (and, with `activationId`, to that
- * activation's scripts) — "this ability was used". Cascaded custom events always reach every active
- * source, so one record's emit can wake another's listener.
+ * `opts.only` restricts the *initial* event to one record — "this ability was used". With
+ * `activationId` the record's own scripts **and** that activation's (plus the spell it casts) run,
+ * each exactly once, whether or not the activation is already running as a buff. Cascaded custom
+ * events always reach every active source, so one record's emit can wake another's listener.
+ *
+ * A script that skips (`need`) or throws contributes nothing: its patches are dropped.
  */
-export function runEventScripts(ctx: EvalContext, event: EventInfo, opts: { only?: Only } = {}): { patches: Patch[]; errors: ScriptError[] } {
-  const all: Patch[] = [];
+export function runEventScripts(ctx: EvalContext, event: EventInfo, opts: { only?: Only } = {}): { patches: SourcedPatch[]; errors: ScriptError[] } {
+  const all: SourcedPatch[] = [];
   const sink = newSink();
   const queue: { ev: EventInfo; depth: number }[] = [{ ev: event, depth: 0 }];
-  const sources = activeSources(ctx);
+  const sources = activeSources(ctx, sink.warnings);
   const only = opts.only;
-  // When the named activation is already running it is its own source; otherwise its scripts are
-  // reached through the record source (using an activation that is not yet active is the `use` case).
+  // When the named activation is already running it is its own source and brings its own (and its
+  // spell's) scripts; otherwise the record source carries them, so each script runs exactly once.
   const activationIsSource = !!only?.activationId && sources.some((s) => s.ability.id === only.abilityId && s.activation?.id === only.activationId);
-  while (queue.length) {
+  let runs = 0;
+  let capped = false;
+  while (queue.length && !capped) {
     const { ev, depth } = queue.shift()!;
     const initial = ev === event;
     for (const src of sources) {
@@ -38,19 +47,27 @@ export function runEventScripts(ctx: EvalContext, event: EventInfo, opts: { only
         if (src.ability.id !== only.abilityId) continue;
         if (only.activationId && src.activation && src.activation.id !== only.activationId) continue;
       }
-      const viaActivation = initial && only?.activationId && !src.activation && !activationIsSource;
-      const scripts = viaActivation ? (activationsOf(src.ability).find((a) => a.id === only!.activationId)?.scripts ?? []) : src.scripts;
+      const viaActivation = initial && !!only?.activationId && !src.activation && !activationIsSource;
+      const act = viaActivation ? activationsOf(src.ability).find((a) => a.id === only!.activationId) : undefined;
+      const spell = act?.spell ? ctx.library.abilities[act.spell] : undefined;
+      const scripts = viaActivation ? [...src.scripts, ...(act?.scripts ?? []), ...(spell?.kind === 'spell' ? spell.scripts : [])] : src.scripts;
       for (const script of scripts) {
         if (!script.enabled || !script.events.includes(ev.kind)) continue;
+        if (++runs > MAX_EMIT_RUNS) {
+          sink.errors.push({ recordId: src.ability.id, scriptId: script.id, label: script.label ?? src.label, phase: 'run', message: `emit cascade exceeded ${MAX_EMIT_RUNS} script runs` });
+          capped = true;
+          break;
+        }
         const patches: Patch[] = [];
-        runOne(ctx, { phase: 'event', source: src, script, event: ev }, sink, patches);
+        if (runOne(ctx, { phase: 'event', source: src, script, event: ev }, sink, patches) !== 'ok') continue;
         for (const p of patches) {
-          all.push(p);
+          all.push({ ...p, src: src.ability.id } as SourcedPatch);
           if (p.k === 'emit' && depth < MAX_EMIT_DEPTH) {
             queue.push({ ev: { kind: `custom:${p.name}`, payload: p.payload, ...(ev.targetId ? { targetId: ev.targetId } : {}) }, depth: depth + 1 });
           }
         }
       }
+      if (capped) break;
     }
   }
   return { patches: all, errors: sink.errors };
@@ -64,7 +81,7 @@ const addCondition = (list: readonly Conditioned[], c: Conditioned): Conditioned
  * `setVar` writes a character var when the character already has that name and a library global
  * otherwise, so the caller gets both halves back.
  */
-export function applyPatches(ctx: EvalContext, state: State, patches: readonly Patch[], ability: Ability, targetId?: string): State & { globals: Record<string, VarValue> } {
+export function applyPatches(ctx: EvalContext, state: State, patches: readonly Patch[], ability?: Ability, targetId?: string): State & { globals: Record<string, VarValue> } {
   let battle = state.battle;
   let character = state.character;
   let globals = state.globals ?? ctx.library.globals ?? {};
@@ -74,7 +91,7 @@ export function applyPatches(ctx: EvalContext, state: State, patches: readonly P
   for (const p of patches) {
     switch (p.k) {
       case 'tag': {
-        const cond: Conditioned = { tag: p.tag, expires: p.duration, appliedRound: battle.round, source: ability.id };
+        const cond: Conditioned = { tag: p.tag, expires: p.duration, appliedRound: battle.round, source: (p as SourcedPatch).src ?? ability?.id };
         if (p.to === 'self') battle = { ...battle, selfConditions: addCondition(battle.selfConditions, cond) };
         else if (p.to === 'allEnemies') battle = { ...battle, combatants: battle.combatants.map((c) => ({ ...c, conditions: addCondition(c.conditions, cond) })) };
         else if (targetId) withCombatant(targetId, (c) => ({ ...c, conditions: addCondition(c.conditions, cond) }));
@@ -118,7 +135,7 @@ export function applyPatches(ctx: EvalContext, state: State, patches: readonly P
         break;
       }
       case 'setVar':
-        if (p.name in character.vars) character = { ...character, vars: { ...character.vars, [p.name]: p.value } };
+        if (Object.hasOwn(character.vars, p.name)) character = { ...character, vars: { ...character.vars, [p.name]: p.value } };
         else globals = { ...globals, [p.name]: p.value };
         break;
       case 'log': {

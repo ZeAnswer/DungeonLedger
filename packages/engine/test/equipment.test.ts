@@ -1,15 +1,22 @@
 import { equipItem, unequipItem, slotCapacity, slotOf, SLOTS } from '../src/equipment';
-import { makeCtx, makeCharacter, makeAbility } from './fixtures';
+import { makeBattle, makeCtx, makeCharacter, makeAbility } from './fixtures';
 import type { Ability } from '../src/schema';
 
-const ring1 = makeAbility({ id: 'ring-a', source: 'item', item: { category: 'wondrous', slot: 'ring' }, effects: [{ id: 'e', do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'deflection' }] }] });
-const ring2 = makeAbility({ id: 'ring-b', source: 'item', item: { category: 'wondrous', slot: 'ring' } });
-const ring3 = makeAbility({ id: 'ring-c', source: 'item', item: { category: 'wondrous', slot: 'ring' } });
-const handOfGlory = makeAbility({ id: 'hog', source: 'item', item: { category: 'wondrous', slot: 'neck' }, effects: [{ id: 's', do: [{ kind: 'extraSlot', slot: 'ring', count: 1 }] }] });
-const bracersA = makeAbility({ id: 'bracers-a', source: 'item', item: { category: 'wondrous', slot: 'arms' } });
-const bracersB = makeAbility({ id: 'bracers-b', source: 'item', item: { category: 'wondrous', slot: 'arms' } });
-const potion = makeAbility({ id: 'potion', source: 'item', item: { category: 'potion' } });
-const manual = makeAbility({ id: 'manual', source: 'item', item: { category: 'wondrous', slot: 'none' } });
+const ring1 = makeAbility({ id: 'ring-a', kind: 'item', item: { category: 'wondrous', slot: 'ring' }, scripts: [{ id: 'e', source: "bonus('ac', 1, 'deflection')" }] });
+const ring2 = makeAbility({ id: 'ring-b', kind: 'item', item: { category: 'wondrous', slot: 'ring' } });
+const ring3 = makeAbility({ id: 'ring-c', kind: 'item', item: { category: 'wondrous', slot: 'ring' } });
+const handOfGlory = makeAbility({ id: 'hog', kind: 'item', item: { category: 'wondrous', slot: 'neck' }, scripts: [{ id: 's', source: "slot('ring', 1)" }] });
+const bracersA = makeAbility({ id: 'bracers-a', kind: 'item', item: { category: 'wondrous', slot: 'arms' } });
+const bracersB = makeAbility({ id: 'bracers-b', kind: 'item', item: { category: 'wondrous', slot: 'arms' } });
+const potion = makeAbility({ id: 'potion', kind: 'item', item: { category: 'potion' } });
+const manual = makeAbility({ id: 'manual', kind: 'item', item: { category: 'wondrous', slot: 'none' } });
+const cursed = makeAbility({
+  id: 'cursed-band', name: 'Cursed Band', kind: 'item', item: { category: 'wondrous', slot: 'ring' },
+  scripts: [
+    { id: 'on', events: ['equip'], source: "condition('self', 'cursed', UNTIL_REMOVED); setVar('bandWearings', (vars.bandWearings ?? 0) + 1)" },
+    { id: 'off', events: ['unequip'], source: "target.unmark('nothing'); condition('self', 'shaken', ENCOUNTER)" },
+  ],
+});
 
 function ctxWith(items: Ability[], inventory: { id: string; abilityId: string; equipped?: boolean }[]) {
   const c = makeCtx({ character: makeCharacter({ inventory: inventory.map((i) => ({ ...i, quantity: 1, equipped: i.equipped ?? false })) }) });
@@ -44,7 +51,7 @@ test('replace: equipping into a full single slot swaps the old item out', () => 
   expect(ctx.character.inventory.map((i) => i.equipped)).toEqual([false, true]);
 });
 
-test('an extraSlot effect from an equipped item raises capacity', () => {
+test('a slot() call from an equipped item raises capacity', () => {
   let ctx = ctxWith([ring1, ring2, ring3, handOfGlory], [{ id: 'i1', abilityId: 'ring-a', equipped: true }, { id: 'i2', abilityId: 'ring-b', equipped: true }, { id: 'i3', abilityId: 'ring-c' }, { id: 'h', abilityId: 'hog' }]);
   ctx.character.abilities = [{ abilityId: 'ring-a', enabled: true, paramValues: {} }, { abilityId: 'ring-b', enabled: true, paramValues: {} }];
   expect(slotCapacity(ctx).ring).toBe(2);
@@ -93,4 +100,22 @@ test('a two-handed weapon needs a free off hand and blocks the off hand while he
   c = { ...c, character: unequip2(c, 'i-shield').character };
   c = { ...c, character: equip2(c, 'i-sword').character };
   expect(equip2(c, 'i-shield').ok).toBe(true);
+});
+
+test('equip / unequip scripts run when a battle is in the context, and are skipped without one', () => {
+  const inv = [{ id: 'i1', abilityId: 'cursed-band', quantity: 1, equipped: false }];
+  const noBattle = ctxWith([cursed], inv);
+  const off = equipItem(noBattle, 'i1');
+  expect(off.ok).toBe(true);
+  expect(off.battle).toBeUndefined(); // no battle to hold the patches: the equip script does not run
+
+  const c = { ...ctxWith([cursed], inv), battle: makeBattle() };
+  const on = equipItem(c, 'i1');
+  expect(on.battle!.selfConditions.map((x) => x.tag)).toEqual(['cursed']);
+  expect(on.globals).toEqual({ bandWearings: 1 });
+
+  const worn = { ...c, character: on.character, battle: on.battle! };
+  const removed = unequipItem(worn, 'i1');
+  expect(removed.battle!.selfConditions.map((x) => x.tag)).toEqual(['cursed', 'shaken']);
+  expect(removed.character.abilities.find((a) => a.abilityId === 'cursed-band')?.enabled).toBe(false);
 });

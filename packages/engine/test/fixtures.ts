@@ -3,7 +3,6 @@ import {
   type Ability, type Battle, type Character, type CharacterInput, type ClassTable, type Combatant, type LogEvent, type Skill, type Tag,
 } from '../src/schema';
 import type { EvalContext, Library } from '../src/context';
-import { convertToV3 } from '../src/migrate';
 
 export const ranger: ClassTable = ClassTableSchema.parse({
   id: 'ranger', name: 'Ranger', hitDie: 8, skillPointsPerLevel: 6,
@@ -34,10 +33,9 @@ export const skills: Skill[] = [
   { id: 'knowledge-monsters', name: 'Knowledge (Monsters)', ability: 'int' },
 ].map((s) => SkillSchema.parse(s));
 
-/** Accepts v1 (`source`), v2 (`origin`) or v3 (`kind`) input. */
-export function makeAbility(a: Record<string, unknown> & { id: string }): Ability {
-  const raw = 'kind' in a || 'origin' in a ? a : { name: a.id, source: 'feat', ...a };
-  return AbilitySchema.parse(convertToV3({ name: a.id, ...raw }));
+/** Rules format v4 only: `kind` is required, effects are `scripts`. `name` defaults to the id. */
+export function makeAbility(a: Record<string, unknown> & { id: string; kind: string }): Ability {
+  return AbilitySchema.parse({ name: a.id, ...a });
 }
 
 export function makeCharacter(over: Partial<CharacterInput> = {}): Character {

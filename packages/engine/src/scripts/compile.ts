@@ -5,7 +5,9 @@ export type Compiled =
   | { ok: true; run: (api: ScriptApi, guard: () => void) => void; toggles: string[]; emits: string[]; noguard: boolean }
   | { ok: false; error: string; line?: number };
 
-const PREAMBLE = `const { ${API_NAMES.join(', ')} } = api;\n`;
+/** Built on first use: `api.ts` reaches this module through an import cycle, so it may still be initialising. */
+let preamble: string | undefined;
+const PREAMBLE = () => (preamble ??= `const { ${API_NAMES.join(', ')} } = api;\n`);
 const cache = new Map<string, Compiled>();
 const MAX = 2000;
 
@@ -22,7 +24,7 @@ export function compile(source: string, paramNames: string[] = []): Compiled {
   try {
     const ins = instrument(source);
     const argLine = paramNames.length ? `const { ${paramNames.join(', ')} } = args;\n` : '';
-    const f = new Function('api', '__g', `"use strict";\n${PREAMBLE}${argLine}${ins.code}\n`) as (api: ScriptApi, g: () => void) => void;
+    const f = new Function('api', '__g', `"use strict";\n${PREAMBLE()}${argLine}${ins.code}\n`) as (api: ScriptApi, g: () => void) => void;
     out = { ok: true, run: f, toggles: ins.toggles, emits: ins.emits, noguard: ins.noguard };
   } catch (e) {
     const err = e as Error & { loc?: { line: number } };

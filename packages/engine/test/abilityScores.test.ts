@@ -3,9 +3,9 @@ import { exprVars } from '../src/vars';
 import { makeCtx, makeCharacter, makeAbility, makeBattle } from './fixtures';
 import type { Ability } from '../src/schema';
 
-const belt = makeAbility({ id: 'belt-str-2', name: 'Belt of Strength +2', source: 'item', effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'ability.str', value: 2, bonusType: 'enhancement' }] }] });
-const belt4 = makeAbility({ id: 'belt-str-4', name: 'Belt of Strength +4', source: 'item', effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'ability.str', value: 4, bonusType: 'enhancement' }] }] });
-const catsGrace = makeAbility({ id: 'cats-grace', source: 'buff', duration: { rounds: 10 }, effects: [{ id: 'c', do: [{ kind: 'bonus', to: 'ability.dex', value: 4, bonusType: 'enhancement' }] }] });
+const belt = makeAbility({ id: 'belt-str-2', name: 'Belt of Strength +2', kind: 'item', item: { category: 'wondrous', slot: 'waist' }, scripts: [{ id: 'b', source: "bonus('ability.str', 2, 'enhancement')" }] });
+const belt4 = makeAbility({ id: 'belt-str-4', name: 'Belt of Strength +4', kind: 'item', item: { category: 'wondrous', slot: 'waist' }, scripts: [{ id: 'b', source: "bonus('ability.str', 4, 'enhancement')" }] });
+const catsGrace = makeAbility({ id: 'cats-grace', kind: 'status', duration: 60, scripts: [{ id: 'c', source: "bonus('ability.dex', 4, 'enhancement')" }] });
 
 function ctxWith(abilities: Ability[]) {
   const c = makeCtx({ character: makeCharacter({ abilities: abilities.map((a) => ({ abilityId: a.id, enabled: true, paramValues: {} })), skills: { swim: { ranks: 2 } } }) });
@@ -42,12 +42,12 @@ test('a dex buff raises AC, reflex, initiative and ranged attack', () => {
 });
 
 test('a bonus expressed with an ability modifier does not recurse forever', () => {
-  const weird = makeAbility({ id: 'weird', effects: [{ id: 'w', do: [{ kind: 'bonus', to: 'ability.str', value: 'wisMod' }] }] });
+  const weird = makeAbility({ id: 'weird', kind: 'feature', scripts: [{ id: 'w', source: "bonus('ability.str', player.mod.wis)" }] });
   expect(resolveStat(ctxWith([weird]), 'ability.str').total).toBe(15);
 });
 
 test('a Con bonus raises max HP retroactively for every level in the ledger', () => {
-  const amulet = makeAbility({ id: 'amulet-con', source: 'item', effects: [{ id: 'a', do: [{ kind: 'bonus', to: 'ability.con', value: 2, bonusType: 'enhancement' }] }] });
+  const amulet = makeAbility({ id: 'amulet-con', kind: 'item', item: { category: 'wondrous', slot: 'neck' }, scripts: [{ id: 'a', source: "bonus('ability.con', 2, 'enhancement')" }] });
   const history = [1, 2, 3].map((level) => ({ level, classId: 'ranger', hpRolled: 8, skillPointsSpent: {}, featsTaken: [] }));
   const c = makeCtx({ character: makeCharacter({ levelHistory: history, abilities: [{ abilityId: 'amulet-con', enabled: true, paramValues: {} }] }) });
   c.library.abilities['amulet-con'] = amulet;

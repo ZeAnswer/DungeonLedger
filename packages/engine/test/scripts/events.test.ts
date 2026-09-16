@@ -43,5 +43,32 @@ test('only restricts the initial event to one record (its activation, for use) w
   c.library.abilities['wand'] = wand;
   c.library.abilities['witness'] = witness;
   const r = runEventScripts(c, { kind: 'use', abilityId: 'wand', activationId: 'zap' }, { only: { abilityId: 'wand', activationId: 'zap' } });
-  expect(r.patches.map((p) => (p.k === 'log' ? p.text : p.k))).toEqual(['zap', 'emit', 'saw a zap']);
+  expect(r.patches.map((p) => (p.k === 'log' ? p.text : p.k))).toEqual(['record', 'zap', 'emit', 'saw a zap']);
+
+  // Same two scripts, once each, when the activation is already running as a buff (a second source).
+  const running = { ...c, battle: { ...c.battle!, activeBuffs: [{ instanceId: 'b', abilityId: 'wand', activationId: 'zap', owner: 'self', suppressed: false }] } };
+  const r2 = runEventScripts(running, { kind: 'use', abilityId: 'wand', activationId: 'zap' }, { only: { abilityId: 'wand', activationId: 'zap' } });
+  expect(r2.patches.map((p) => (p.k === 'log' ? p.text : p.k))).toEqual(['record', 'zap', 'emit', 'saw a zap']);
+});
+
+test('a script that skips or throws contributes no patches', () => {
+  const half = AbilitySchema.parse({ id: 'half', name: 'Half', kind: 'feature', scripts: [{ id: 's', events: ['hit'], source: "target.mark('x'); need(false, 'never');" }] });
+  const boom = AbilitySchema.parse({ id: 'boom', name: 'Boom', kind: 'feature', scripts: [{ id: 's', events: ['hit'], source: "target.mark('y'); throw new Error('nope');" }] });
+  const good = AbilitySchema.parse({ id: 'good', name: 'Good', kind: 'feature', scripts: [{ id: 's', events: ['hit'], source: "target.mark('z')" }] });
+  const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1' })] });
+  const c = makeCtx({ character: makeCharacter({ abilities: [half, boom, good].map((a) => ({ abilityId: a.id, enabled: true, paramValues: {} })) }), battle, target: battle.combatants[0] });
+  for (const a of [half, boom, good]) c.library.abilities[a.id] = a;
+  const r = runEventScripts(c, { kind: 'hit', result: 'hit', targetId: 'c1' });
+  expect(r.patches.flatMap((p) => (p.k === 'tag' ? [p.tag] : []))).toEqual(['z']);
+  expect(r.errors.map((e) => e.recordId)).toEqual(['boom']);
+});
+
+test('a broad emit cascade is stopped by the run cap instead of running away', () => {
+  const ids = Array.from({ length: 40 }, (_, i) => `r${i}`);
+  const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1' })] });
+  const c = makeCtx({ character: makeCharacter({ abilities: ids.map((id) => ({ abilityId: id, enabled: true, paramValues: {} })) }), battle, target: battle.combatants[0] });
+  for (const id of ids) c.library.abilities[id] = AbilitySchema.parse({ id, name: id, kind: 'feature', scripts: [{ id: 's', events: ['hit', 'custom:go'], source: "emit('go')" }] });
+  const r = runEventScripts(c, { kind: 'hit', result: 'hit', targetId: 'c1' });
+  expect(r.errors.at(-1)?.message).toMatch(/emit cascade exceeded 500 script runs/);
+  expect(r.patches.length).toBeLessThanOrEqual(500);
 });

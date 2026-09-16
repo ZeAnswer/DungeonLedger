@@ -51,54 +51,68 @@ function ordered(sources: ScriptSource[]): { src: ScriptSource; script: Script }
   return rows.sort((a, b) => a.script.priority - b.script.priority || KIND_ORDER[a.src.ability.kind] - KIND_ORDER[b.src.ability.kind]);
 }
 
-const budget = new Budget();
-type Cache = WeakMap<object, WeakMap<object, Map<string, Sink>>>;
+/** character → battle → library → pass key. A library edit (new object) is a new pass, like a new character. */
+type Cache = WeakMap<object, WeakMap<object, WeakMap<object, Map<string, Sink>>>>;
 let cache: Cache = new WeakMap();
 const NO_BATTLE = {};
 const passKey = (ctx: EvalContext) => {
   const a = ctx.attack;
-  return `${ctx.target?.id ?? '-'}|${a ? `${a.profile.id}:${a.modeId}:${a.index}:${a.kind}` : '-'}|${ctx.lastDamage ?? ''}`;
+  return `${getScriptMode()}|${ctx.target?.id ?? '-'}|${a ? `${a.profile.id}:${a.modeId}:${a.index}:${a.kind}` : '-'}|${ctx.lastDamage ?? ''}`;
 };
 
 /**
  * Run every `always` script once for this context and collect what they contribute.
- * Cached by identity of character and battle plus the target/attack key: a new (immutable) character
- * or battle object is a new pass. The sink is put in the cache *before* the scripts run, so a script
- * that reads a stat — which resolves through the pass again — sees what earlier scripts contributed
- * instead of recursing forever.
+ * Cached by identity of character, battle and library plus the target/attack key: a new (immutable)
+ * character, battle or library object is a new pass. The sink is put in the cache *before* the scripts
+ * run, so a script that reads a stat — which resolves through the pass again — sees what earlier
+ * scripts contributed instead of recursing forever.
+ *
+ * `ctx.abilityInstance` is deliberately *not* part of the key and not used by the pass: `runOne` sets
+ * the instance of each source itself, so the sink does not depend on which record the caller was
+ * looking at — and a stat read from inside a script (whose context carries that record's instance)
+ * lands on the same cached pass instead of starting a second one.
  */
 export function computePass(ctx: EvalContext): Sink {
   let byBattle = cache.get(ctx.character);
   if (!byBattle) { byBattle = new WeakMap(); cache.set(ctx.character, byBattle); }
   const bkey: object = ctx.battle ?? NO_BATTLE;
-  let byKey = byBattle.get(bkey);
-  if (!byKey) { byKey = new Map(); byBattle.set(bkey, byKey); }
+  let byLibrary = byBattle.get(bkey);
+  if (!byLibrary) { byLibrary = new WeakMap(); byBattle.set(bkey, byLibrary); }
+  let byKey = byLibrary.get(ctx.library);
+  if (!byKey) { byKey = new Map(); byLibrary.set(ctx.library, byKey); }
   const key = passKey(ctx);
   const hit = byKey.get(key);
   if (hit) return hit;
   const sink = newSink();
   byKey.set(key, sink); // partial sink is visible to nested stat reads (re-entrancy)
   if (getScriptMode() === 'off') return sink;
-  const warnings: string[] = [];
-  for (const { src, script } of ordered(activeSources(ctx, warnings))) {
+  const base = ctx.abilityInstance === undefined ? ctx : { ...ctx, abilityInstance: undefined };
+  const sources = activeSources(base, sink.warnings);
+  for (const { src, script } of ordered(sources)) {
     if (!script.enabled || !script.events.includes('always')) continue;
-    runOne(ctx, { phase: 'always', source: src, script }, sink, []);
+    runOne(base, { phase: 'always', source: src, script }, sink, []);
   }
   return sink;
 }
 
 /**
- * Drop every cached pass. The cache keys on character/battle identity, which a *library* edit does
- * not change, so anything that edits scripts or globals must call this.
+ * Drop every cached pass. The cache keys on character/battle/library identity, so editing a record in
+ * place (or changing globals without replacing the library object) still needs this hammer.
  */
 export function clearComputeCache(): void {
   cache = new WeakMap();
 }
 
-/** Compile (or synthesize from `call`) and run one script; errors go to the sink and diagnostics, skips to sink.skipped. */
-export function runOne(ctx: EvalContext, run: RunContext, sink: Sink, patches: Patch[]): void {
-  const key = `${run.source.ability.id}/${run.script.id}`;
-  if (diagnostics.quarantined(key)) return;
+export type RunOutcome = 'ok' | 'skipped' | 'error';
+
+/**
+ * Compile (or synthesize from `call`) and run one script; errors go to the sink and diagnostics, skips
+ * to `sink.skipped`. The outcome tells the caller whether the script finished: a skipped or failed
+ * script must not leave half its patches behind.
+ */
+export function runOne(ctx: EvalContext, run: RunContext, sink: Sink, patches: Patch[]): RunOutcome {
+  const key = [run.source.ability.id, run.source.activation?.id, run.script.id].filter(Boolean).join('/');
+  if (diagnostics.quarantined(key)) return 'error';
   const near = (failed: string) => sink.skipped.push({ source: run.source.ability.id, sourceName: run.source.label, label: run.script.label ?? run.source.label, summary: '', failed });
   const fail = (phase: 'compile' | 'run', message: string, line?: number) => {
     const e = { recordId: run.source.ability.id, scriptId: run.script.id, label: run.script.label ?? run.source.label, phase, message, ...(line !== undefined ? { line } : {}) };
@@ -107,26 +121,33 @@ export function runOne(ctx: EvalContext, run: RunContext, sink: Sink, patches: P
     diagnostics.noteFailure(key);
   };
   const source = run.script.call ? callSource(ctx, run.script.call) : run.script.source;
-  if (source === undefined) { fail('compile', `unknown function "${run.script.call?.fn}"`); return; }
+  if (source === undefined) { fail('compile', `unknown function "${run.script.call?.fn}"`); return 'error'; }
   const compiled = compile(source);
-  if (!compiled.ok) { fail('compile', compiled.error, compiled.line); return; }
+  if (!compiled.ok) { fail('compile', compiled.error, compiled.line); return 'error'; }
   const trace: Trace = { emitted: false };
-  const fns = fnTable(ctx, run, sink, patches, trace, 0);
-  const api = makeApi(ctx, { ...run, fns }, sink, patches, trace);
+  // A fresh budget per script run: a nested pass (a script reading a stat) must not reset the outer one.
+  const budget = new Budget();
+  // This record's own instance, so `sel('self.param.x')` and the api read this record's choices.
+  const rctx: EvalContext = { ...ctx, abilityInstance: run.source.instance };
+  const fns = fnTable(rctx, run, sink, patches, trace, 0, budget);
+  const api = makeApi(rctx, { ...run, fns }, sink, patches, trace);
   budget.start(run.phase === 'always' ? 4 : 16);
   try {
     compiled.run(api, compiled.noguard ? () => {} : budget.tick);
   } catch (e) {
-    if (e instanceof ScriptSkip) { near(e.because); return; }
-    fail('run', e instanceof ScriptTimeout ? e.message : (e as Error).message);
-    return;
+    if (e instanceof ScriptSkip) { near(e.because); return 'skipped'; }
+    fail('run', e instanceof ScriptTimeout || e instanceof Error ? (e as Error).message : String(e));
+    return 'error';
   }
   // Nothing contributed and the last predicate was false: that predicate is the "needs …" reason.
   if (run.phase === 'always' && !trace.emitted && trace.last && !trace.last.result) near(trace.last.text);
+  return 'ok';
 }
 
+const startedBudget = () => { const b = new Budget(); b.start(16); return b; };
+
 /** `fn.name({ args })`: compiled library functions sharing this run's sink, patches and budget. Depth-capped at 8. */
-export function fnTable(ctx: EvalContext, run: RunContext, sink: Sink, patches: Patch[], trace: Trace, depth: number): Record<string, (args: Record<string, unknown>) => void> {
+export function fnTable(ctx: EvalContext, run: RunContext, sink: Sink, patches: Patch[], trace: Trace, depth: number, budget: Budget = startedBudget()): Record<string, (args: Record<string, unknown>) => void> {
   const table: Record<string, (args: Record<string, unknown>) => void> = {};
   for (const def of Object.values(ctx.library.functions ?? {})) {
     table[def.id] = (args = {}) => {
@@ -139,7 +160,7 @@ export function fnTable(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
         if (v === undefined && p.required) throw new Error(`function ${def.id}: missing argument "${p.name}"`);
         filled[p.name] = v;
       }
-      const api = makeApi(ctx, { ...run, args: filled, fns: fnTable(ctx, run, sink, patches, trace, depth + 1) }, sink, patches, trace);
+      const api = makeApi(ctx, { ...run, args: filled, fns: fnTable(ctx, run, sink, patches, trace, depth + 1, budget) }, sink, patches, trace);
       compiled.run(api, compiled.noguard ? () => {} : budget.tick);
     };
   }

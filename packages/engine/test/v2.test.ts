@@ -1,32 +1,47 @@
 import { resolveAttack, attackProfiles, availableActions, resolveStat, resolveFlags } from '../src/resolve';
-import { evalCondition } from '../src/conditions';
 import { nextRound, useAbility, logEnemyAction, setDistance } from '../src/battle';
+import { countHistory } from '../src/history';
+import { ROUND } from '../src/scripts/units';
 import { makeCtx, makeCharacter, makeAbility, makeBattle, makeCombatant } from './fixtures';
 import type { Ability } from '../src/schema';
 
-const bow = makeAbility({ id: 'bow', name: 'Strong-Arm Longbow +1', origin: 'item', item: { category: 'weapon', slot: 'mainHand', tags: ['bow', 'longbow'], weapon: { kind: 'ranged', dice: '1d8', critMult: 3, rangeIncrement: 110, attackAbility: 'dex', damageAbility: 'str', maxDamageAbilityBonus: 4, enhancement: 1 } } });
-const weaponFocus = makeAbility({ id: 'wf-longbow', name: 'Weapon Focus (longbow)', origin: 'feat', effects: [{ id: 'e', when: { is: 'attack.weapon.tag.longbow' }, do: [{ verb: 'modify', to: 'attack', value: 1 }] }] });
-const flaming = makeAbility({ id: 'flaming-bow', name: 'Flaming', origin: 'item', binding: 'thisWeapon', item: { category: 'weapon', slot: 'mainHand', weapon: { kind: 'ranged', dice: '1d8', attackAbility: 'dex' } }, effects: [{ id: 'f', do: [{ verb: 'dice', dice: '1d6', damageType: 'fire' }] }] });
-const pbs = makeAbility({ id: 'pbs', name: 'Point Blank Shot', origin: 'feat', effects: [{ id: 'e', when: { all: [{ compare: 'attack.kind', op: '=', value: 'ranged' }, { compare: 'target.distance', op: '<=', value: 30 }] }, do: [{ verb: 'modify', to: 'attack', value: 1 }, { verb: 'modify', to: 'damage', value: 1 }] }] });
+const bow = makeAbility({ id: 'bow', name: 'Strong-Arm Longbow +1', kind: 'item', item: { category: 'weapon', slot: 'mainHand', tags: ['bow', 'longbow'], weapon: { kind: 'ranged', dice: '1d8', critMult: 3, rangeIncrement: 110, attackAbility: 'dex', damageAbility: 'str', maxDamageAbilityBonus: 4, enhancement: 1 } } });
+const weaponFocus = makeAbility({ id: 'wf-longbow', name: 'Weapon Focus (longbow)', kind: 'feature', scripts: [{ id: 'e', source: "if (attack.weapon.is('longbow')) bonus('attack', 1)" }] });
+// `binding: thisWeapon` in v3 became an explicit weapon-id check in the script.
+const flaming = makeAbility({ id: 'flaming-bow', name: 'Flaming', kind: 'item', item: { category: 'weapon', slot: 'mainHand', weapon: { kind: 'ranged', dice: '1d8', attackAbility: 'dex' } }, scripts: [{ id: 'f', source: "if (attack.weapon.id === 'flaming-bow') dice('1d6', 'fire')" }] });
+const pbs = makeAbility({ id: 'pbs', name: 'Point Blank Shot', kind: 'feature', scripts: [{ id: 'e', source: "if (attack.isRanged && target.within(30)) { bonus('attack', 1); bonus('damage', 1); }" }] });
 const boots = makeAbility({
-  id: 'boots', name: 'Boots of Speed', origin: 'item', activation: { action: 'free' }, duration: 'endOfRound', item: { category: 'wondrous', slot: 'feet' },
-  resources: [{ id: 'boots-rounds', label: 'Haste rounds', max: 10, resetOn: 'day' }], cost: [{ kind: 'charge', resourceId: 'boots-rounds' }],
-  effects: [{ id: 'haste', do: [{ verb: 'attack', extraAttacks: 1, appliesToBase: 'full' }, { verb: 'modify', to: 'attack', value: 1, type: 'dodge' }] }],
+  id: 'boots', name: 'Boots of Speed', kind: 'item', item: { category: 'wondrous', slot: 'feet' },
+  pools: [{ id: 'boots-rounds', label: 'Haste rounds', max: 10, resetOn: 'day' }],
+  activations: [{
+    id: 'boots', action: 'free', duration: 'untilMyNextTurn', cost: [{ kind: 'charge', resourceId: 'boots-rounds' }],
+    scripts: [{ id: 'haste', source: "extraAttack(1, { base: 'full' }); bonus('attack', 1, 'dodge');" }],
+  }],
 });
-// v3 directly: makeAbility has no sibling lookup, so the granted spells become explicit activations here.
 const hog = makeAbility({
   id: 'hog', name: 'Hand of Glory', kind: 'item', item: { category: 'wondrous', slot: 'neck' },
-  effects: [{ id: 's', do: [{ verb: 'slot', slot: 'ring' }] }],
+  scripts: [{ id: 's', source: "slot('ring', 1)" }],
   activations: [{ id: 'hog-daylight', spell: 'hog-daylight', charges: { max: 1 } }, { id: 'hog-see-invis', spell: 'hog-see-invis', charges: { max: 1 } }],
 });
 const daylight = makeAbility({ id: 'hog-daylight', name: 'Daylight', kind: 'spell' });
 const seeInvis = makeAbility({ id: 'hog-see-invis', name: 'See Invisibility', kind: 'spell' });
-const horror = makeAbility({ id: 'horror', name: 'Monster Horror', origin: 'classFeature', effects: [{ id: 'h', when: { in: 'target.tags', param: 'types' }, do: [{ verb: 'modify', to: 'attack', value: 'max(2, 2 * sel(self.equipped.count.tag.trophy-aberration))' }] }] });
-const gloves = makeAbility({ id: 'gloves', name: 'Chuul gloves', origin: 'item', item: { category: 'trophy', slot: 'hands', tags: ['trophy-aberration'] } });
-const rage = makeAbility({ id: 'rage', name: 'Rage', origin: 'buff', duration: { rounds: 5 }, effects: [{ id: 'r', do: [{ verb: 'modify', to: 'ability.str', value: 4, type: 'morale' }] }] });
-const helm = makeAbility({ id: 'helm', name: 'Minotaur helm', origin: 'item', activation: { action: 'free' }, item: { category: 'trophy', slot: 'head' }, resources: [{ id: 'helm-rage', max: 1, resetOn: 'day' }], effects: [{ id: 'nf', do: [{ verb: 'flag', flag: 'neverFlatFooted' }] }, { id: 'use', trigger: 'onUse', do: [{ verb: 'grant', ability: 'rage' }] }] });
-const potion = makeAbility({ id: 'potion-cmw', name: 'Potion of CMW', origin: 'item', activation: { action: 'standard' }, item: { category: 'potion' }, cost: [{ kind: 'item', abilityId: 'potion-cmw' }], effects: [{ id: 'h', trigger: 'onUse', do: [{ verb: 'hp', op: 'heal', amount: 10 }] }] });
-const revenge = makeAbility({ id: 'revenge', name: 'Revenge', origin: 'feat', effects: [{ id: 'r', when: { history: { event: 'hit', by: 'target', vs: 'current', scope: 'lastRound' } }, do: [{ verb: 'modify', to: 'attack', value: 2 }] }] });
+const horror = makeAbility({
+  id: 'horror', name: 'Monster Horror', kind: 'feature', params: { types: { kind: 'tags' } },
+  scripts: [{ id: 'h', source: "if (target.isOneOf(params.types)) bonus('attack', max(2, 2 * player.equipped.tag['trophy-aberration']))" }],
+});
+const gloves = makeAbility({ id: 'gloves', name: 'Chuul gloves', kind: 'item', item: { category: 'trophy', slot: 'hands', tags: ['trophy-aberration'] } });
+const rage = makeAbility({ id: 'rage', name: 'Rage', kind: 'status', duration: 5 * ROUND, scripts: [{ id: 'r', source: "bonus('ability.str', 4, 'morale')" }] });
+const helm = makeAbility({
+  id: 'helm', name: 'Minotaur helm', kind: 'item', item: { category: 'trophy', slot: 'head' },
+  scripts: [{ id: 'nf', source: "flag('neverFlatFooted')" }],
+  pools: [{ id: 'helm-rage', max: 1, resetOn: 'day' }],
+  activations: [{ id: 'helm', action: 'free', cost: [{ kind: 'charge', resourceId: 'helm-rage' }], scripts: [{ id: 'use', events: ['use'], source: "grant('rage')" }] }],
+});
+const potion = makeAbility({
+  id: 'potion-cmw', name: 'Potion of CMW', kind: 'item', item: { category: 'potion' },
+  activations: [{ id: 'potion-cmw', cost: [{ kind: 'item', abilityId: 'potion-cmw' }], scripts: [{ id: 'h', events: ['use'], source: 'heal(10)' }] }],
+});
+const revenge = makeAbility({ id: 'revenge', name: 'Revenge', kind: 'feature', scripts: [{ id: 'r', source: "if (history('hit', { by: 'target', since: 'lastRound' }) >= 1) bonus('attack', 2)" }] });
 
 function ctxWith(abilities: Ability[], opts: { equipped?: string[]; params?: Record<string, Record<string, string[]>> } = {}) {
   const equipped = new Set(opts.equipped ?? []);
@@ -45,7 +60,7 @@ function ctxWith(abilities: Ability[], opts: { equipped?: string[]; params?: Rec
   return c;
 }
 
-test('equipped weapon items provide attack profiles; weapon tags drive Weapon Focus; thisWeapon binding scopes dice', () => {
+test('equipped weapon items provide attack profiles; weapon tags drive Weapon Focus; a weapon-id check scopes dice', () => {
   const c = ctxWith([bow, weaponFocus, flaming], { equipped: ['bow'] });
   const profiles = attackProfiles(c);
   expect(profiles.map((p) => p.id)).toEqual(['weapon:bow']);
@@ -64,7 +79,7 @@ test('distance per combatant drives range conditions', () => {
   far.target = far.battle!.combatants[0];
   const r = resolveAttack(far, { profileId: 'weapon:bow', modeId: 'single' });
   expect(r.attacks[0]!.attackBonus).toBe(10);
-  expect(r.attacks[0]!.nearMiss[0]!.failed).toMatch(/distance.*at most 30/);
+  expect(r.attacks[0]!.nearMiss[0]!.failed).toMatch(/within 30 ft/);
 });
 
 test('per-round charged ability: Use spends a charge and the effect lasts this round only', () => {
@@ -91,12 +106,12 @@ test('a record with several activations lists one action per activation, each wi
   expect(after.character.resourceState).toEqual({ 'hog-daylight': { used: 1 } });
 });
 
-test('expressions can read selectors (count of equipped trophies by tag)', () => {
+test('scripts can read equipped-trophy counts by tag', () => {
   const c = ctxWith([bow, horror, gloves], { equipped: ['bow', 'gloves'], params: { horror: { types: ['aberration'] } } });
   expect(resolveAttack(c, { profileId: 'weapon:bow', modeId: 'single' }).attacks[0]!.attackBonus).toBe(10 + 2);
 });
 
-test('flags and grant verb: never flat-footed flag; using the helm grants Rage as a buff', () => {
+test('flags and grant(): never flat-footed flag; using the helm grants Rage as a buff', () => {
   const c = ctxWith([helm], { equipped: ['helm'] });
   c.library.abilities['rage'] = rage;
   expect(resolveFlags(c)).toEqual({ neverFlatFooted: true });
@@ -114,22 +129,22 @@ test('item cost: drinking a potion heals and consumes one', () => {
   expect(after.character.inventory[0]!.quantity).toBe(0);
 });
 
-test('enemy events: "it hit me" is logged, damages HP, and feeds history conditions', () => {
+test('enemy events: "it hit me" is logged, damages HP, and feeds history predicates', () => {
   let c = ctxWith([bow, revenge], { equipped: ['bow'] });
   const st = logEnemyAction(c, { actorId: 'c1', result: 'hit', damage: 5 });
   c = { ...c, ...st };
   expect(c.character.hp.current).toBe(15);
   c = { ...c, ...nextRound(c) };
   c.target = c.battle!.combatants[0];
-  expect(evalCondition({ history: { event: 'hit', by: 'target', vs: 'current', scope: 'lastRound' } }, c)).toBe(true);
+  expect(countHistory(c, { event: 'hit', by: 'target', vs: 'current', scope: 'lastRound' })).toBe(1);
   expect(resolveAttack(c, { profileId: 'weapon:bow', modeId: 'single' }).attacks[0]!.attackBonus).toBe(12);
 });
 
-test('set and multiply modes', () => {
-  const setSpeed = makeAbility({ id: 'slow', origin: 'condition', effects: [{ id: 's', do: [{ verb: 'modify', to: 'speed', value: 20, mode: 'set' }] }] });
-  const doubleSpeed = makeAbility({ id: 'dbl', origin: 'buff', effects: [{ id: 's', do: [{ verb: 'modify', to: 'speed', value: 2, mode: 'multiply' }] }] });
-  const c = ctxWith([]);
-  c.library.abilities['slow'] = setSpeed; c.library.abilities['dbl'] = doubleSpeed;
-  c.battle!.activeBuffs.push({ instanceId: 'a', abilityId: 'slow', owner: 'self', suppressed: false }, { instanceId: 'b', abilityId: 'dbl', owner: 'self', suppressed: false });
+test('setStat and scale', () => {
+  const setSpeed = makeAbility({ id: 'slow', kind: 'status', scripts: [{ id: 's', source: "setStat('speed', 20)" }] });
+  const doubleSpeed = makeAbility({ id: 'dbl', kind: 'status', scripts: [{ id: 's', source: "scale('speed', 2)" }] });
+  const c0 = ctxWith([]);
+  c0.library.abilities['slow'] = setSpeed; c0.library.abilities['dbl'] = doubleSpeed;
+  const c = { ...c0, battle: { ...c0.battle!, activeBuffs: [{ instanceId: 'a', abilityId: 'slow', owner: 'self', suppressed: false }, { instanceId: 'b', abilityId: 'dbl', owner: 'self', suppressed: false }] } };
   expect(resolveStat(c, 'speed').total).toBe(40);
 });

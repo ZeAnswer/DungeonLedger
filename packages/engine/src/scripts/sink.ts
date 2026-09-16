@@ -3,6 +3,8 @@ import type { BonusEntry } from '../stacking';
 
 /** One attack mode a script offers (Rapid Shot, Power Attack…). `kind` limits it to ranged or melee profiles. */
 export type AttackModeEntry = { modeId: string; label: string; base: 'single' | 'full'; extraAttacksAtTop: number; penalty: number; note?: string; source: string; kind?: AttackKind };
+/** The name the resolvers and the app use for the same shape. */
+export type AttackMode = AttackModeEntry;
 export type DiceEntry = { dice: string; label: string; damageType?: string };
 /** A script that did not apply, with the predicate that failed, so the UI can say "needs …". */
 export type NearMiss = { source: string; sourceName: string; label: string; summary: string; failed: string };
@@ -24,6 +26,8 @@ export type Sink = {
   prompts: PromptRequest[];
   skipped: NearMiss[];
   errors: ScriptError[];
+  /** Non-fatal problems found while collecting sources (unknown ability on the sheet, missing activation). */
+  warnings: string[];
 };
 
-export const newSink = (): Sink => ({ bonuses: [], sets: [], multipliers: [], dice: [], flags: {}, notes: [], modes: [], extraAttacks: [], naturals: [], slots: {}, prompts: [], skipped: [], errors: [] });
+export const newSink = (): Sink => ({ bonuses: [], sets: [], multipliers: [], dice: [], flags: {}, notes: [], modes: [], extraAttacks: [], naturals: [], slots: {}, prompts: [], skipped: [], errors: [], warnings: [] });

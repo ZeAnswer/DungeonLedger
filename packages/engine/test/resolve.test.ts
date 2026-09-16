@@ -1,64 +1,61 @@
-import { resolveStat, resolveAttack, attackProfiles, availableActions, listAttackModes, listPools, activeSources } from '../src/resolve';
+import { resolveStat, resolveAttack, attackProfiles, availableActions, listAttackModes, listPools } from '../src/resolve';
+import { activeSources } from '../src/scripts/compute';
 import { makeCtx, makeBattle, makeCombatant, makeAbility, makeCharacter, ev } from './fixtures';
 import { AbilitySchema, type Ability } from '../src/schema';
 
-// ---- content used across tests ----
+// ---- content used across tests (rules format v4: scripts, not blocks) ----
 const aqua = makeAbility({
-  id: 'memento-aqua', name: 'Memento Aqua', source: 'memory',
-  effects: [
-    { id: 'atk', when: { kind: 'target.hasTag', tag: 'aquatic' }, do: [{ kind: 'bonus', to: 'attack', value: 2 }, { kind: 'bonus', to: 'damage', value: 2 }] },
-    { id: 'swim', do: [{ kind: 'bonus', to: 'skill.swim', value: 2 }] },
+  id: 'memento-aqua', name: 'Memento Aqua', kind: 'feature',
+  scripts: [
+    { id: 'atk', source: "if (target.is('aquatic')) { bonus('attack', 2); bonus('damage', 2); }" },
+    { id: 'swim', source: "bonus('skill.swim', 2)" },
   ],
 });
 const woodland = makeAbility({
-  id: 'woodland-archer', name: 'Woodland Archer',
-  effects: [
-    {
-      id: 'adjust', label: 'Adjust for Range',
-      when: { kind: 'all', of: [{ kind: 'attack.kind', attackKind: 'ranged' }, { kind: 'log', event: 'miss', target: 'current', scope: 'thisRound' }] },
-      do: [{ kind: 'bonus', to: 'attack', value: 4 }],
-    },
-    { id: 'sniper', label: 'Moving Sniper', do: [{ kind: 'note', text: 'After a successful sniping attack you may move once before re-hiding.' }] },
+  id: 'woodland-archer', name: 'Woodland Archer', kind: 'feature',
+  scripts: [
+    { id: 'adjust', label: 'Adjust for Range', source: "if (attack.isRanged) { need(history('miss') >= 1, 'you missed this target this round'); bonus('attack', 4 * history('miss'), 'untyped', { as: 'Adjust for Range' }); }" },
+    { id: 'sniper', label: 'Moving Sniper', source: "note('After a successful sniping attack you may move once before re-hiding.')" },
   ],
 });
 const favored = makeAbility({
-  id: 'favored-enemy', name: 'Favored Enemy',
+  id: 'favored-enemy', name: 'Favored Enemy', kind: 'feature',
   params: { types: { kind: 'tags', category: 'creatureType' } },
-  effects: [{ id: 'dmg', when: { kind: 'param', name: 'types', includesTargetTag: true }, do: [{ kind: 'bonus', to: 'damage', value: 2 }] }],
+  scripts: [{ id: 'dmg', source: "if (target.isOneOf(params.types)) bonus('damage', 2)" }],
 });
+const KD_TIERS = 'tier(knowledge, [15, 1], [25, 2], [30, 3], [35, 4], [Infinity, 5])';
 const knowledgeDevotion = makeAbility({
-  id: 'knowledge-devotion', name: 'Knowledge Devotion',
-  effects: [{
-    id: 'kd', do: [
-      { kind: 'bonusFromTable', promptId: 'knowledge', perTagCategory: 'creatureType', to: 'attack', bonusType: 'insight', table: [{ upTo: 15, value: 1 }, { upTo: 25, value: 2 }, { upTo: 30, value: 3 }, { upTo: 35, value: 4 }, { value: 5 }] },
-      { kind: 'bonusFromTable', promptId: 'knowledge', perTagCategory: 'creatureType', to: 'damage', bonusType: 'insight', table: [{ upTo: 15, value: 1 }, { upTo: 25, value: 2 }, { upTo: 30, value: 3 }, { upTo: 35, value: 4 }, { value: 5 }] },
-    ],
-  }],
+  id: 'knowledge-devotion', name: 'Knowledge Devotion', kind: 'feature',
+  scripts: [{ id: 'kd', source: `const knowledge = ask('knowledge', { per: 'creatureType' });\nif (knowledge) { bonus('attack', ${KD_TIERS}, 'insight'); bonus('damage', ${KD_TIERS}, 'insight'); }` }],
 });
-const bracers = makeAbility({ id: 'bracers-archery', name: 'Bracers of Archery', source: 'item', effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'attack', value: 1, bonusType: 'competence', attackKind: 'ranged' }] }] });
-const bracers2 = makeAbility({ id: 'bracers-archery-greater', name: 'Greater Bracers', source: 'item', effects: [{ id: 'b', do: [{ kind: 'bonus', to: 'attack', value: 2, bonusType: 'competence', attackKind: 'ranged' }] }] });
-const ringProt = makeAbility({ id: 'ring-protection', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'deflection' }] }] });
-const bracersArmor = makeAbility({ id: 'bracers-armor', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'ac', value: 1, bonusType: 'armor' }] }] });
-const ringSwim = makeAbility({ id: 'ring-swimming', source: 'item', effects: [{ id: 'r', do: [{ kind: 'bonus', to: 'skill.swim', value: 5, bonusType: 'competence' }] }] });
+const wondrous = (id: string, scripts: unknown[], name?: string) =>
+  makeAbility({ id, ...(name ? { name } : {}), kind: 'item', item: { category: 'wondrous' }, scripts });
+const bracers = wondrous('bracers-archery', [{ id: 'b', source: "if (attack.isRanged) bonus('attack', 1, 'competence')" }], 'Bracers of Archery');
+const bracers2 = wondrous('bracers-archery-greater', [{ id: 'b', source: "if (attack.isRanged) bonus('attack', 2, 'competence')" }], 'Greater Bracers');
+const ringProt = wondrous('ring-protection', [{ id: 'r', source: "bonus('ac', 1, 'deflection')" }]);
+const bracersArmor = wondrous('bracers-armor', [{ id: 'r', source: "bonus('ac', 1, 'armor')" }]);
+const ringSwim = wondrous('ring-swimming', [{ id: 'r', source: "bonus('skill.swim', 5, 'competence')" }]);
+const flaming = wondrous('flaming', [{ id: 'f', source: "dice('1d6', 'fire', { as: 'Flaming' })" }]);
 const formido = makeAbility({
-  id: 'memento-formido', source: 'memory', params: { types: { kind: 'tags' } },
-  effects: [{ id: 'w', when: { kind: 'param', name: 'types', includesTargetTag: true }, do: [{ kind: 'bonus', to: 'save.will', value: 2 }] }],
+  id: 'memento-formido', kind: 'feature', params: { types: { kind: 'tags' } },
+  scripts: [{ id: 'w', source: "if (target.isOneOf(params.types)) bonus('save.will', 2)" }],
 });
-const rapidShot = makeAbility({ id: 'rapid-shot', effects: [{ id: 'm', do: [{ kind: 'attackMode', modeId: 'rapid-shot', label: 'Rapid Shot', base: 'full', extraAttacksAtTop: 1, penalty: -2, attackKind: 'ranged' }] }] });
+const rapidShot = makeAbility({
+  id: 'rapid-shot', kind: 'feature',
+  scripts: [{ id: 'm', source: "attackMode({ id: 'rapid-shot', label: 'Rapid Shot', base: 'full', extra: 1, penalty: -2, kind: 'ranged' })" }],
+});
 const haste = makeAbility({
-  id: 'haste', source: 'buff', duration: { rounds: 10 },
-  effects: [{ id: 'h', do: [{ kind: 'extraAttack', appliesToBase: 'full' }, { kind: 'bonus', to: 'attack', value: 1, bonusType: 'dodge' }, { kind: 'bonus', to: 'ac', value: 1, bonusType: 'dodge' }] }],
+  id: 'haste', kind: 'status', duration: 60,
+  scripts: [{ id: 'h', source: "extraAttack(1, { base: 'full' }); bonus('attack', 1, 'dodge'); bonus('ac', 1, 'dodge');" }],
 });
 const monsterBlow = makeAbility({
-  id: 'monster-blow', name: 'Monster Blow', source: 'class', activation: 'declare',
+  id: 'monster-blow', name: 'Monster Blow', kind: 'feature', acquired: { kind: 'class', classId: 'monster-hunter' },
   params: { types: { kind: 'tags', category: 'creatureType' } },
-  resources: [{ id: 'monster-blow', max: 1, per: 'day' }],
-  effects: [{
-    id: 'mb', when: { kind: 'all', of: [{ kind: 'toggle', id: 'monster-blow' }, { kind: 'param', name: 'types', includesTargetTag: true }, { kind: 'target.hurtAtMost', hurt: 'bloodied' }] },
-    do: [{ kind: 'note', text: 'On hit: Fort save DC = damage + MH level + Wis mod or die.' }],
+  activations: [{
+    id: 'monster-blow', action: 'free', duration: 'thisAttack', charges: { max: 1, resetOn: 'day' },
+    scripts: [{ id: 'mb', source: "if (target.isOneOf(params.types) && target.hurt >= HURT.BLOODIED) note('On hit: Fort save DC = damage + MH level + Wis mod or die.')" }],
   }],
 });
-const flaming = makeAbility({ id: 'flaming', source: 'item', effects: [{ id: 'f', do: [{ kind: 'extraDice', dice: '1d6', damageType: 'fire', label: 'Flaming' }] }] });
 
 const chuul = makeCombatant({ id: 'c1', name: 'Chuul', tags: ['aberration', 'aquatic'], size: 'large', hurt: 'bloodied' });
 const gargoyle = makeCombatant({ id: 'g1', name: 'Gargoyle', tags: ['monstrous-humanoid'] });
@@ -103,8 +100,8 @@ test('rapid shot mode: extra attack at top, -2 on all; only for ranged', () => {
 });
 
 test('haste buff adds attack in full-based modes plus dodge bonuses', () => {
-  const c = ctxWith([rapidShot, haste]);
-  c.battle!.activeBuffs.push({ instanceId: 'h', abilityId: 'haste', owner: 'self', remainingRounds: 9, suppressed: false });
+  const c0 = ctxWith([rapidShot, haste]);
+  const c = { ...c0, battle: { ...c0.battle!, activeBuffs: [{ instanceId: 'h', abilityId: 'haste', owner: 'self', remainingRounds: 9, suppressed: false }] } };
   expect(resolveAttack(c, { profileId: 'bow', modeId: 'full' }).attacks.map((a) => a.attackBonus)).toEqual([11, 11, 6]);
   expect(resolveAttack(c, { profileId: 'bow', modeId: 'rapid-shot' }).attacks.map((a) => a.attackBonus)).toEqual([9, 9, 9, 4]);
   expect(resolveAttack(c, { profileId: 'bow', modeId: 'single' }).attacks.map((a) => a.attackBonus)).toEqual([11]);
@@ -120,18 +117,19 @@ test('Memento Aqua applies vs aquatic target and shows as near-miss otherwise', 
 
   const miss = resolveAttack(ctxWith([aqua], { target: gargoyle }), { profileId: 'bow', modeId: 'single' }).attacks[0]!;
   expect(miss.attackBonus).toBe(10);
-  expect(miss.nearMiss).toEqual([expect.objectContaining({ source: 'memento-aqua', summary: '+2 attack, +2 damage', failed: expect.stringMatching(/aquatic/i) })]);
+  expect(miss.nearMiss).toEqual([expect.objectContaining({ source: 'memento-aqua', failed: expect.stringMatching(/aquatic/i) })]);
 });
 
-test('Woodland Archer: +4 ranged after a logged miss on the same target this round', () => {
+test('Woodland Archer: +4 ranged per logged miss on the same target this round', () => {
   const c = ctxWith([woodland]);
   const before = resolveAttack(c, { profileId: 'bow', modeId: 'full' });
   expect(before.attacks[0]!.attackBonus).toBe(10);
-  c.battle!.log.push(ev({ kind: 'attack', round: 1, targetId: 'c1', result: 'miss', profileId: 'bow', attackIndex: 1 }));
-  const after = resolveAttack(c, { profileId: 'bow', modeId: 'full' });
+  // The compute pass is cached by battle identity, so a new log entry means a new battle object (as in the app).
+  const logged = { ...c, battle: { ...c.battle!, log: [ev({ kind: 'attack', round: 1, targetId: 'c1', result: 'miss', profileId: 'bow', attackIndex: 1 })] } };
+  const after = resolveAttack(logged, { profileId: 'bow', modeId: 'full' });
   expect(after.attacks[1]!.attackBonus).toBe(9); // 5 + 4
   expect(after.attacks[1]!.attackBreakdown.find((e) => e.source === 'woodland-archer')).toMatchObject({ label: 'Adjust for Range', value: 4 });
-  expect(resolveAttack(c, { profileId: 'sword', modeId: 'single' }).attacks[0]!.attackBonus).toBe(7);
+  expect(resolveAttack(logged, { profileId: 'sword', modeId: 'single' }).attacks[0]!.attackBonus).toBe(7);
   expect(after.notes).toContain('After a successful sniping attack you may move once before re-hiding.');
 });
 
@@ -146,12 +144,12 @@ test('Knowledge Devotion reads per-creature-type prompt; missing prompt yields a
   const none = resolveAttack(c, { profileId: 'bow', modeId: 'single' });
   expect(none.attacks[0]!.attackBonus).toBe(10);
   expect(none.warnings.join(' ')).toMatch(/Knowledge Devotion.*Knowledge check/);
-  c.battle!.prompts['knowledge:aberration'] = 22;
-  const withCheck = resolveAttack(c, { profileId: 'bow', modeId: 'single' });
+  const at22 = { ...c, battle: { ...c.battle!, prompts: { 'knowledge:aberration': 22 } } };
+  const withCheck = resolveAttack(at22, { profileId: 'bow', modeId: 'single' });
   expect(withCheck.attacks[0]!.attackBonus).toBe(12);
   expect(withCheck.attacks[0]!.damage.flat).toBe(4);
-  c.battle!.prompts['knowledge:aberration'] = 40;
-  expect(resolveAttack(c, { profileId: 'bow', modeId: 'single' }).attacks[0]!.attackBonus).toBe(15);
+  const at40 = { ...c, battle: { ...c.battle!, prompts: { 'knowledge:aberration': 40 } } };
+  expect(resolveAttack(at40, { profileId: 'bow', modeId: 'single' }).attacks[0]!.attackBonus).toBe(15);
 });
 
 test('typed bonuses do not stack; breakdown says why', () => {
@@ -165,8 +163,8 @@ test('ranged-only item bonus does not apply to melee', () => {
 });
 
 test('suppressed or disabled abilities contribute nothing', () => {
-  const c = ctxWith([aqua]);
-  c.battle!.suppressedAbilities.push('memento-aqua');
+  const c0 = ctxWith([aqua]);
+  const c = { ...c0, battle: { ...c0.battle!, suppressedAbilities: ['memento-aqua'] } };
   expect(resolveAttack(c, { profileId: 'bow', modeId: 'single' }).attacks[0]!.attackBonus).toBe(10);
   const d = ctxWith([aqua]);
   d.character.abilities[0]!.enabled = false;
@@ -174,11 +172,10 @@ test('suppressed or disabled abilities contribute nothing', () => {
 });
 
 test('a status record stored on the battle applies like any ability', () => {
-  const c = ctxWith([]);
-  const sit = makeAbility({ id: 'sit-1', name: 'DM: darkness', source: 'situational', effects: [{ id: 'x', do: [{ kind: 'bonus', to: 'attack', value: -2 }] }] });
+  const c0 = ctxWith([]);
+  const sit = makeAbility({ id: 'sit-1', name: 'DM: darkness', kind: 'status', scripts: [{ id: 'x', source: "bonus('attack', -2)" }] });
   if (sit.kind !== 'status') throw new Error('expected a status record');
-  c.battle!.statuses.push(sit);
-  c.battle!.activeBuffs.push({ instanceId: 'b1', abilityId: 'sit-1', owner: 'self', suppressed: false });
+  const c = { ...c0, battle: { ...c0.battle!, statuses: [sit], activeBuffs: [{ instanceId: 'b1', abilityId: 'sit-1', owner: 'self', suppressed: false }] } };
   const r = resolveAttack(c, { profileId: 'bow', modeId: 'single' }).attacks[0]!;
   expect(r.attackBonus).toBe(8);
   expect(r.attackBreakdown.find((e) => e.source === 'sit-1')).toMatchObject({ sourceName: 'DM: darkness', value: -2 });
@@ -187,6 +184,12 @@ test('a status record stored on the battle applies like any ability', () => {
 test('extra damage dice listed with label and type', () => {
   const r = resolveAttack(ctxWith([flaming]), { profileId: 'bow', modeId: 'single' }).attacks[0]!;
   expect(r.damage.dice).toEqual([{ dice: '1d8', label: 'Composite Longbow +1' }, { dice: '1d6', label: 'Flaming', damageType: 'fire' }]);
+});
+
+test('naturalAttack() adds an attack profile named after the record', () => {
+  const claws = makeAbility({ id: 'claws', name: 'Beast Claws', kind: 'feature', scripts: [{ id: 'n', source: "naturalAttack({ name: 'Claw', dice: '1d4', count: 2, attackBonus: 1 })" }] });
+  const p = attackProfiles(ctxWith([claws])).find((x) => x.id.startsWith('natural:'));
+  expect(p).toMatchObject({ id: 'natural:claws:Claw', name: 'Claw (Beast Claws)', baseDice: '1d4', enhancement: 1, kind: 'melee' });
 });
 
 // ---- other stats ----
@@ -207,8 +210,7 @@ test('saves from class tables plus ability mods, conditional will bonus', () => 
 
 test('skills: ranks + ability + bonuses; unknown skill warns', () => {
   const c = ctxWith([aqua, ringSwim]);
-  const swim = resolveStat(c, 'skill.swim');
-  expect(swim.total).toBe(10);
+  expect(resolveStat(c, 'skill.swim').total).toBe(10);
   expect(resolveStat(c, 'skill.spot').total).toBe(12);
   expect(resolveStat(c, 'skill.bogus').warnings[0]).toMatch(/bogus/);
 });
@@ -224,6 +226,7 @@ test('availableActions reports charges and eligibility reasons', () => {
   const c = ctxWith([monsterBlow], {}, { 'monster-blow': { types: ['aberration'] } });
   const [mb] = availableActions(c);
   expect(mb).toMatchObject({ abilityId: 'monster-blow', activationId: 'monster-blow', usable: true, eligible: true, charges: { id: 'monster-blow', remaining: 1, max: 1, resetOn: 'day' } });
+  expect(mb!.notes).toEqual(['On hit: Fort save DC = damage + MH level + Wis mod or die.']);
 
   const spent = ctxWith([monsterBlow], {}, { 'monster-blow': { types: ['aberration'] } });
   spent.character.resourceState['monster-blow'] = { used: 1 };
@@ -244,7 +247,7 @@ test('missing prompt is reported structurally with the target tag label', () => 
 
 test('availableActions lists activations with charges, spell name and declare flag; pools are listed separately', () => {
   const hog = AbilitySchema.parse({ id: 'hog', name: 'Hand of Glory', kind: 'item', item: { category: 'wondrous', slot: 'neck' }, activations: [{ id: 'hog-daylight', spell: 'daylight', charges: { max: 1 } }, { id: 'hog-torch', name: 'Torch' }] });
-  const daylight = AbilitySchema.parse({ id: 'daylight', name: 'Daylight', kind: 'spell', duration: { minutes: 50 } });
+  const daylight = AbilitySchema.parse({ id: 'daylight', name: 'Daylight', kind: 'spell', duration: 3000, scripts: [{ id: 'l', source: "flag('sense.light')" }] });
   const blow = AbilitySchema.parse({ id: 'monster-blow', name: 'Monster Blow', kind: 'feature', acquired: { kind: 'class', classId: 'monster-hunter' }, pools: [{ id: 'trophies', max: 4, resetOn: 'never' }], activations: [{ id: 'monster-blow', action: 'free', duration: 'thisAttack', charges: { max: 1 } }] });
   const c = makeCtx({ character: makeCharacter({ abilities: [{ abilityId: 'hog', enabled: true, paramValues: {} }, { abilityId: 'monster-blow', enabled: true, paramValues: {} }], resourceState: { 'hog-daylight': { used: 1 } } }), battle: makeBattle() });
   for (const a of [hog, daylight, blow]) c.library.abilities[a.id] = a;
@@ -258,12 +261,12 @@ test('availableActions lists activations with charges, spell name and declare fl
   expect(actions[1]!.charges).toBeUndefined();
   expect(actions[2]!.acquired).toEqual({ kind: 'class', classId: 'monster-hunter' });
   expect(listPools(c)).toEqual([{ id: 'trophies', label: 'Monster Blow', remaining: 4, max: 4, resetOn: 'never', abilityId: 'monster-blow' }]);
-  c.battle!.activeBuffs.push({ instanceId: 'b', abilityId: 'hog', activationId: 'hog-daylight', owner: 'self', suppressed: false });
-  const src = activeSources(c).find((s) => s.kind === 'activation');
+  const running = { ...c, battle: { ...c.battle!, activeBuffs: [{ instanceId: 'b', abilityId: 'hog', activationId: 'hog-daylight', owner: 'self', suppressed: false }] } };
+  const src = activeSources(running).find((s) => s.kind === 'activation');
   expect(src).toMatchObject({ label: 'Daylight', activation: { id: 'hog-daylight' } });
-  expect(src!.blocks).toEqual(daylight.effects);
-  c.battle!.suppressedAbilities.push('monster-blow');
-  expect(listPools(c)).toEqual([]);
+  expect(src!.scripts).toEqual(daylight.scripts); // the cast spell's scripts run while the activation is up
+  const suppressed = { ...c, battle: { ...c.battle!, suppressedAbilities: ['monster-blow'] } };
+  expect(listPools(suppressed)).toEqual([]);
 });
 
 test('a manual attack profile that duplicates an equipped weapon by name is hidden', () => {
