@@ -26,9 +26,26 @@ test('Functions tab: bundled functions list their callers, and a new function pe
   await expect(trophy).toContainText('Gargoyle Bracers (trophy)');
   await expect(trophy).toContainText('Shield Amulet (shield guardian trophy)');
 
+  // A shipped function's id is fixed once created: opening it shows the Id input disabled
+  const sheet = page.locator('.fixed.inset-0');
+  await haste.click();
+  await expect(sheet.getByLabel(/^Id/)).toBeDisabled();
+  await sheet.getByRole('button', { name: 'Close', exact: true }).first().click();
+
+  // Creating a new function with an id that already exists is rejected, not overwritten
+  await page.getByRole('button', { name: '+ New function' }).click();
+  await sheet.getByLabel('Name').fill('Not Haste');
+  await sheet.getByLabel(/^Id/).fill('haste');
+  await sheet.getByRole('button', { name: 'Save' }).click();
+  await expect(sheet.getByText(/already exists/)).toBeVisible();
+  // still open (save was rejected) and the original haste function is untouched
+  await expect(sheet.getByLabel('Name')).toHaveValue('Not Haste');
+  await sheet.getByRole('button', { name: 'Close', exact: true }).first().click();
+  await expect(haste).toContainText('Boots of Speed');
+  await expect(haste).not.toContainText('Not Haste');
+
   // Create a new function: one number param `n`, body returns its double
   await page.getByRole('button', { name: '+ New function' }).click();
-  const sheet = page.locator('.fixed.inset-0');
   await sheet.getByLabel('Name').fill('Double');
   await sheet.getByLabel(/^Id/).fill('double');
   await sheet.getByRole('button', { name: '+ add parameter' }).click();

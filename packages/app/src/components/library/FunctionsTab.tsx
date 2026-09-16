@@ -21,16 +21,24 @@ export function FunctionsTab() {
   const setLibrary = useStore((s) => s.setLibrary);
   const showToast = useStore((s) => s.showToast);
   const [editing, setEditing] = useState<FunctionDef | undefined>();
+  const [editingExisting, setEditingExisting] = useState(false);
   const [err, setErr] = useState<string | undefined>();
   const list = Object.values(library.functions).sort((a, b) => a.name.localeCompare(b.name));
+  // Opening or closing the editor always clears the previous record's error, so a failed save on one
+  // function never bleeds into the next one opened.
+  const openEditor = (f: FunctionDef, existing: boolean) => { setEditing(f); setEditingExisting(existing); setErr(undefined); };
+  const closeEditor = () => { setEditing(undefined); setEditingExisting(false); setErr(undefined); };
   const save = () => {
     if (!editing) return;
     try {
       const f = FunctionDefSchema.parse(editing);
+      // Renaming the id would orphan every caller of the old one, so it's fixed once created; a brand new
+      // function may still collide with an existing id and must be rejected rather than silently overwrite it.
+      if (!editingExisting && library.functions[f.id]) { setErr(`A function with id "${f.id}" already exists — pick another id.`); return; }
       const c = compile(f.source, f.params.map((p) => p.name));
       if (!c.ok) { setErr(`Does not compile${c.line !== undefined ? ` (line ${c.line})` : ''}: ${c.error}`); return; }
       setLibrary({ ...library, functions: { ...library.functions, [f.id]: f } });
-      setEditing(undefined); setErr(undefined); showToast('Saved');
+      closeEditor(); showToast('Saved');
     } catch (e) { setErr((e as Error).message); }
   };
   const remove = () => {
@@ -43,18 +51,18 @@ export function FunctionsTab() {
     const rest = { ...library.functions };
     delete rest[editing.id];
     setLibrary({ ...library, functions: rest });
-    setEditing(undefined);
+    closeEditor();
   };
   const patch = (p: Partial<FunctionDef>) => setEditing({ ...editing!, ...p });
   return (
     <div>
       <p className="mb-2 text-sm text-zinc-400">A function is a shared script body with typed parameters. Records call it with <code>fn.name({'{ … }'})</code> or through the call form.</p>
-      <div className="mb-3"><Button onClick={() => setEditing({ id: `fn-${Date.now().toString(36)}`, name: '', params: [], source: '' })}>+ New function</Button></div>
+      <div className="mb-3"><Button onClick={() => openEditor({ id: `fn-${Date.now().toString(36)}`, name: '', params: [], source: '' }, false)}>+ New function</Button></div>
       <div className="space-y-1">
         {list.map((f) => {
           const users = usedBy(library.abilities, f.id);
           return (
-            <button key={f.id} type="button" data-function={f.id} onClick={() => setEditing(f)} className="flex w-full items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2 text-left">
+            <button key={f.id} type="button" data-function={f.id} onClick={() => openEditor(f, true)} className="flex w-full items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2 text-left">
               <span className="min-w-0"><span className="truncate">{f.name}</span><span className="block truncate text-xs text-zinc-500">{f.id}({f.params.map((p) => p.name).join(', ')}) · {users.length ? `used by ${users.join(', ')}` : 'not used yet'}</span></span>
               <span className="text-zinc-600">›</span>
             </button>
@@ -62,12 +70,15 @@ export function FunctionsTab() {
         })}
         {list.length === 0 && <p className="text-sm text-zinc-500">No functions yet.</p>}
       </div>
-      <Sheet open={!!editing} onClose={() => setEditing(undefined)} title={editing?.name || 'Function'} tall>
+      <Sheet open={!!editing} onClose={closeEditor} title={editing?.name || 'Function'} tall>
         {editing && (
           <div>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Name" htmlFor="fn-name"><input id="fn-name" className={inputCls} value={editing.name} onChange={(e) => patch({ name: e.target.value })} /></Field>
-              <Field label="Id (used in fn.<id>)" htmlFor="fn-id"><input id="fn-id" className={inputCls} value={editing.id} onChange={(e) => patch({ id: e.target.value.trim() })} /></Field>
+              <Field label="Id (used in fn.<id>)" htmlFor="fn-id">
+                <input id="fn-id" className={inputCls + (editingExisting ? ' opacity-60' : '')} value={editing.id} disabled={editingExisting} onChange={(e) => patch({ id: e.target.value.trim() })} />
+                {editingExisting && <p className="mt-1 text-xs text-zinc-500">Ids are fixed once created — rename means creating a new function.</p>}
+              </Field>
             </div>
             <Field label="Description"><textarea className={inputCls} value={editing.description ?? ''} onChange={(e) => patch({ description: e.target.value || undefined })} /></Field>
             <Field label="Parameters">
