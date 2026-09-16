@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Script } from '@hl/engine';
+import type { Script, ScriptError } from '@hl/engine';
 import { Button, Chip, inputCls } from '../ui';
 
 /** Events a script may listen to. `always` is the compute phase and cannot be combined with the others. */
@@ -15,7 +15,7 @@ export function newScript(taken: string[]): Script {
   return { id: uniqueId('s1', taken), events: ['always'], source: '', enabled: true, priority: 0 };
 }
 
-export function ScriptsEditor({ value, onChange, addLabel = '+ add script' }: { value: Script[]; onChange: (s: Script[]) => void; addLabel?: string }) {
+export function ScriptsEditor({ value, onChange, addLabel = '+ add script', errors = [] }: { value: Script[]; onChange: (s: Script[]) => void; addLabel?: string; errors?: ScriptError[] }) {
   const set = (i: number, patch: Partial<Script>) => onChange(value.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   const toggleEvent = (i: number, ev: string) => {
     const s = value[i]!;
@@ -39,6 +39,7 @@ export function ScriptsEditor({ value, onChange, addLabel = '+ add script' }: { 
             <CustomEvent onAdd={(name) => set(i, { events: [...s.events.filter((x) => x !== 'always'), `custom:${name}`] })} />
           </div>
           <textarea data-role="script-source" className={inputCls + ' h-40 font-mono text-xs'} spellCheck={false} placeholder="bonus('attack', 1)" value={s.source} onChange={(e) => set(i, { source: e.target.value })} />
+          {errors.filter((e) => e.scriptId === s.id).map((e) => <div key={e.message} className="mt-1 rounded-lg border border-red-900 bg-red-950/40 px-2 py-1 text-xs text-red-200">{e.phase === 'compile' ? 'Does not compile' : 'Failed'}{e.line !== undefined ? ` (line ${e.line})` : ''}: {e.message}</div>)}
           <div className="mt-1 flex items-center gap-4 text-xs text-zinc-400">
             <label className="flex items-center gap-1"><input type="checkbox" checked={s.enabled} onChange={(e) => set(i, { enabled: e.target.checked })} /> enabled</label>
             <label className="flex items-center gap-1">priority <input className={inputCls + ' w-16 py-1'} inputMode="numeric" value={s.priority} onChange={(e) => set(i, { priority: Number(e.target.value) || 0 })} /></label>

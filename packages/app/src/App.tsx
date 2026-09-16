@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useStore } from './store/store';
 import { BattleScreen } from './screens/BattleScreen';
 import { CharacterScreen } from './screens/CharacterScreen';
@@ -20,6 +21,8 @@ export default function App() {
   const setScreen = useStore((s) => s.setScreen);
   const toast = useStore((s) => s.toast);
   const name = useStore((s) => s.character?.name);
+  const refreshDiagnostics = useStore((s) => s.refreshDiagnostics);
+  useEffect(() => { refreshDiagnostics(); });
 
   if (!hydrated) return <div className="flex h-full items-center justify-center text-zinc-500">Loading…</div>;
 

@@ -21,6 +21,8 @@ export function freshRecord(kind: Ability['kind'], over: Partial<Item['item']> =
 }
 
 export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial: Ability; onSave: (a: Ability) => void; onDelete?: () => void; onCancel: () => void }) {
+  const scriptErrors = useStore((s) => s.scriptErrors);
+  const clearScriptErrors = useStore((s) => s.clearScriptErrors);
   const [a, setA] = useState<Ability>(initial);
   const [tab, setTab] = useState<'builder' | 'json'>('builder');
   const [json, setJson] = useState(() => JSON.stringify(initial, null, 2));
@@ -43,6 +45,7 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
       if (!parsed.id.trim()) throw new Error('id required');
       if (!parsed.name.trim()) throw new Error('name required');
       if (parsed.kind === 'item' && SLOTTED[parsed.item.category] && !parsed.item.slot) throw new Error(`Choose a body slot for this ${parsed.item.category}`);
+      clearScriptErrors(parsed.id);
       onSave(parsed);
     } catch (e) { setErr((e as Error).message); }
   };
@@ -67,7 +70,7 @@ export function RecordEditor({ initial, onSave, onDelete, onCancel }: { initial:
           <Field label="Source reference"><input className={inputCls} value={a.sourceRef ?? ''} onChange={(e) => set({ sourceRef: e.target.value || undefined })} placeholder="PHB p.98, DM card…" /></Field>
 
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">{{ feature: 'Scripts (while enabled)', item: 'Scripts (while equipped)', spell: 'Scripts (while the spell lasts)', status: 'Scripts (while active)' }[a.kind]}</div>
-          <ScriptsEditor value={a.scripts} onChange={(scripts) => set({ scripts })} />
+          <ScriptsEditor value={a.scripts} onChange={(scripts) => set({ scripts })} errors={scriptErrors.filter((e) => e.recordId === a.id)} />
 
           {(a.kind === 'feature' || a.kind === 'item') && (() => {
             /** Activation ids double as pool ids, so a new id of either sort must dodge both lists. */

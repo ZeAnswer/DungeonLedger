@@ -3,6 +3,7 @@ import { useStore } from '../store/store';
 import { storage } from '../storage';
 import { Button, Section, inputCls } from '../components/ui';
 import { BUILD, checkForUpdate } from '../pwa';
+import { quarantinedScripts } from '../store/diagnostics';
 
 export function SettingsScreen() {
   const s = useStore();
@@ -50,6 +51,23 @@ export function SettingsScreen() {
         <Button variant="ghost" className="ml-2" onClick={async () => { if (confirm('Delete all data and reload the built-in packs?')) { await s.resetToDefaults(); s.showToast('Reset done'); } }}>Reset to built-in packs</Button>
         <p className="mt-3 text-xs text-zinc-500">Partial refresh, keeps skills/HP/ledger/history:</p>
         <Button variant="ghost" onClick={() => { if (confirm('Replace your inventory and item rules with the built-in Memento pack? Skills, HP and the level ledger are not touched.')) { const err = s.reimportInventoryFromDefaults(); s.showToast(err ?? 'Inventory replaced'); } }}>Replace inventory from built-in pack</Button>
+      </Section>
+
+      <Section title="Script errors" defaultOpen={s.scriptErrors.length > 0} count={s.scriptErrors.length}>
+        {s.scriptErrors.length === 0 ? <p className="text-sm text-zinc-500">No script has failed this session.</p> : (
+          <div className="space-y-1">
+            {s.scriptErrors.map((e) => (
+              <div key={`${e.recordId}/${e.scriptId}/${e.message}`} className="rounded-xl border border-red-900 bg-red-950/30 px-3 py-2 text-sm">
+                <div className="text-red-200">{e.label}<span className="ml-2 text-xs text-zinc-500">{e.recordId} · {e.phase}{e.line !== undefined ? ` · line ${e.line}` : ''}</span></div>
+                <div className="text-xs text-red-300">{e.message}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {quarantinedScripts(s.library.abilities).map((q) => (
+          <div key={q.key} className="mt-1 rounded-xl border border-amber-900 px-3 py-2 text-sm text-amber-200">{q.recordName}: script &ldquo;{q.scriptId}&rdquo; is paused for this session after three failures.</div>
+        ))}
+        {s.scriptErrors.length > 0 && <Button className="mt-2" onClick={() => { s.clearScriptErrors(); s.showToast('Script errors cleared'); }}>Clear and retry</Button>}
       </Section>
 
       <Section title="About" defaultOpen>

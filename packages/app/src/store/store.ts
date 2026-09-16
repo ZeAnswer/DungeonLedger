@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import {
-  AbilitySchema, BattleSchema, CharacterSchema, PackSchema, convertToV3, convertBattle, emptyLibrary, mergePack, libraryToPack, newBattle, activationsOf,
-  type Battle, type Character, type EvalContext, type LibraryWithMeta, type MergeReport, type Monster, type MonsterOverlay, type Pack, type VarValue,
+  AbilitySchema, BattleSchema, CharacterSchema, PackSchema, convertToV3, convertBattle, emptyLibrary, mergePack, libraryToPack, newBattle, activationsOf, clearComputeCache, diagnostics,
+  type Battle, type Character, type EvalContext, type LibraryWithMeta, type MergeReport, type Monster, type MonsterOverlay, type Pack, type VarValue, type ScriptError,
 } from '@hl/engine';
 import { storage } from '../storage';
 import { defaultPacks } from '../data/defaultPacks';
@@ -20,6 +20,7 @@ type State = {
   screen: Screen;
   targetId: string | undefined;
   toast: string | undefined;
+  scriptErrors: ScriptError[];
 };
 
 type Actions = {
@@ -45,6 +46,9 @@ type Actions = {
   /** Replace only inventory + item rules on the active character from the bundled pack (skills, HP, ledger untouched). */
   reimportInventoryFromDefaults(): string | undefined;
   showToast(msg: string): void;
+  /** Copy the engine's in-memory error registry into the store (identity changes only when it really changed). */
+  refreshDiagnostics(): void;
+  clearScriptErrors(recordId?: string): void;
 };
 
 export type Store = State & Actions;
@@ -86,6 +90,7 @@ export const useStore = create<Store>((set, get) => ({
   screen: 'battle',
   targetId: undefined,
   toast: undefined,
+  scriptErrors: [],
 
   async hydrate() {
     const s = storage();
@@ -207,6 +212,16 @@ export const useStore = create<Store>((set, get) => ({
   showToast(msg) {
     set({ toast: msg });
     setTimeout(() => set((s) => (s.toast === msg ? { toast: undefined } : {})), 2500);
+  },
+
+  refreshDiagnostics() {
+    const errors = diagnostics.errors();
+    if (errors !== get().scriptErrors) set({ scriptErrors: errors });
+  },
+  clearScriptErrors(recordId) {
+    diagnostics.clear(recordId);
+    clearComputeCache();
+    set({ scriptErrors: diagnostics.errors() });
   },
 }));
 

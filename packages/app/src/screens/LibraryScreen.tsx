@@ -58,6 +58,7 @@ function RecordsTab({ kind }: { kind: RecordKind }) {
   const character = useStore((s) => s.character);
   const setCharacter = useStore((s) => s.setCharacter);
   const showToast = useStore((s) => s.showToast);
+  const scriptErrors = useStore((s) => s.scriptErrors);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<string | undefined>();
   const [editing, setEditing] = useState<Ability | undefined>();
@@ -89,9 +90,9 @@ function RecordsTab({ kind }: { kind: RecordKind }) {
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1">{filters.map((f) => <Chip key={f.id} active={filter === f.id} onClick={() => setFilter(filter === f.id ? undefined : f.id)}>{f.label}</Chip>)}</div>
       <div className="space-y-1">
         {list.map((a) => (
-          <div key={a.id} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2">
+          <div key={a.id} data-record={a.id} className="flex items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2">
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setEditing(a)}>
-              <div className="truncate">{a.name}</div>
+              <div className="truncate">{a.name}{scriptErrors.some((e) => e.recordId === a.id) ? <span data-error={a.id} className="ml-1 text-red-400" title={scriptErrors.filter((e) => e.recordId === a.id).map((e) => e.message).join('\n')}>●</span> : null}</div>
               <div className="truncate text-xs text-zinc-500">{subtitle(a, library.classTables)}</div>
             </button>
             {character && kind === 'feature' && <button type="button" onClick={() => toggleOnChar(a.id)} className={cx('rounded-full border px-2 py-0.5 text-xs', onChar(a.id) ? 'border-amber-500 text-amber-300' : 'border-zinc-700 text-zinc-500')}>{onChar(a.id) ? 'on sheet' : 'add'}</button>}
