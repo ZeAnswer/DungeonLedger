@@ -208,7 +208,7 @@ Every name below is destructured into scope; there is no `api.` prefix. `Math`, 
 
 Enums are ordinals, so ordinary comparisons work: `if (target.size >= SIZE.LARGE && target.hurt >= HURT.BLOODIED) …`.
 
-`evalExpr` and the other places that still take a legacy expression (`charges.max`, …) require every bare identifier to resolve to a number: a character or global var holding text throws "Unknown variable" if referenced directly, while a dotted selector path that resolves to a boolean (a tag test, say) is silently coerced to `1` or `0`.
+`evalExpr` and the other places that still take a legacy expression (`charges.max`, …) require every bare identifier to resolve to a number: a character or global var holding text or a boolean throws "Unknown variable" if referenced directly, while a dotted selector path that resolves to a boolean (a tag test, say) is silently coerced to `1` or `0`.
 
 ## Functions
 
