@@ -4,6 +4,7 @@ import { storage } from '../storage';
 import { Button, Section, inputCls } from '../components/ui';
 import { BUILD, checkForUpdate } from '../pwa';
 import { quarantinedScripts } from '../store/diagnostics';
+import { setSafeMode } from '../boot';
 
 export function SettingsScreen() {
   const s = useStore();
@@ -51,6 +52,14 @@ export function SettingsScreen() {
         <Button variant="ghost" className="ml-2" onClick={async () => { if (confirm('Delete all data and reload the built-in packs?')) { await s.resetToDefaults(); s.showToast('Reset done'); } }}>Reset to built-in packs</Button>
         <p className="mt-3 text-xs text-zinc-500">Partial refresh, keeps skills/HP/ledger/history:</p>
         <Button variant="ghost" onClick={() => { if (confirm('Replace your inventory and item rules with the built-in Memento pack? Skills, HP and the level ledger are not touched.')) { const err = s.reimportInventoryFromDefaults(); s.showToast(err ?? 'Inventory replaced'); } }}>Replace inventory from built-in pack</Button>
+      </Section>
+
+      <Section title="Scripts" defaultOpen>
+        <p className="mb-2 text-sm text-zinc-400">Safe mode turns every record's scripts off. Base values still resolve, so a pack that breaks the screen can be fixed instead of reinstalled. It also survives a reload (<code>?safe=1</code> forces it).</p>
+        <div className="flex gap-2">
+          <Button variant={s.safeMode ? 'default' : 'primary'} onClick={() => { setSafeMode(false); s.setSafeModeState(false); }}>Run scripts</Button>
+          <Button variant={s.safeMode ? 'primary' : 'default'} onClick={() => { setSafeMode(true); s.setSafeModeState(true); }}>Safe mode (scripts off)</Button>
+        </div>
       </Section>
 
       <Section title="Script errors" defaultOpen={s.scriptErrors.length > 0} count={s.scriptErrors.length}>

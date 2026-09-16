@@ -21,6 +21,8 @@ type State = {
   targetId: string | undefined;
   toast: string | undefined;
   scriptErrors: ScriptError[];
+  safeMode: boolean;
+  safeModeAuto: boolean;
 };
 
 type Actions = {
@@ -49,6 +51,7 @@ type Actions = {
   /** Copy the engine's in-memory error registry into the store (identity changes only when it really changed). */
   refreshDiagnostics(): void;
   clearScriptErrors(recordId?: string): void;
+  setSafeModeState(on: boolean, auto?: boolean): void;
 };
 
 export type Store = State & Actions;
@@ -91,6 +94,8 @@ export const useStore = create<Store>((set, get) => ({
   targetId: undefined,
   toast: undefined,
   scriptErrors: [],
+  safeMode: false,
+  safeModeAuto: false,
 
   async hydrate() {
     const s = storage();
@@ -238,6 +243,7 @@ export const useStore = create<Store>((set, get) => ({
     clearComputeCache();
     set({ scriptErrors: diagnostics.errors() });
   },
+  setSafeModeState: (safeMode, safeModeAuto = false) => set({ safeMode, safeModeAuto }),
 }));
 
 // ---- persistence: save changed slices, debounced (300ms trailing, 1s max wait), flushed on page hide ----
