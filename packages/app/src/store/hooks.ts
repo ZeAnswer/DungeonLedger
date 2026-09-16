@@ -8,11 +8,16 @@ export function useCtx(): EvalContext | undefined {
   const globals = useStore((s) => s.globals);
   const battle = useStore((s) => s.battle);
   const targetId = useStore((s) => s.targetId);
+  // Not read below: flipping safe mode changes script mode and clears the engine's compute cache
+  // (see `setSafeMode`), but none of the fields above change identity when that happens. Including
+  // it here forces a fresh `ctx` object so every `useMemo` keyed on `ctx` re-runs and picks up the
+  // new script mode immediately, instead of only after something else remounts the screen.
+  const safeMode = useStore((s) => s.safeMode);
   return useMemo(() => {
     if (!character) return undefined;
     const target = battle?.combatants.find((c) => c.id === targetId);
     return { character, library: ctxLibrary({ library, globals }), ...(battle ? { battle } : {}), ...(target ? { target } : {}) };
-  }, [character, library, globals, battle, targetId]);
+  }, [character, library, globals, battle, targetId, safeMode]);
 }
 
 /**

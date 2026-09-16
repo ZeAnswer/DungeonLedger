@@ -16,11 +16,8 @@ test('?safe=1 turns scripts off, the banner turns them back on', async ({ page }
   await expect(banner).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem('hl.safeMode'))).toBeNull();
 
-  // The attack panel is memoized on the compute context, which does not itself change when script
-  // mode flips, so force a remount by leaving the Battle tab and coming back before re-checking.
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: 'Battle' }).click();
-  await expect(page.locator('[data-attack]').first()).toContainText('+12');
+  // The attack number updates in place, right there on the Battle screen, with no remount needed.
+  await expect(row).toContainText('+12');
 });
 
 test('safe mode survives a reload once it is stored, and Settings switches it', async ({ page }) => {
