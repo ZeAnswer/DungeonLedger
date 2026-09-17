@@ -6,10 +6,10 @@ test('gargoyle fight: knowledge check, woodland archer +4 after a miss, monster 
   await page.getByRole('button', { name: /New battle/ }).click();
   await expect(page.getByText(/Round 1/)).toBeVisible();
 
-  // add a gargoyle (monstrous humanoid = favored enemy #1)
+  // add a gargoyle (tagged aberration = favored enemy #1, and a Monster Killer type)
   await page.getByRole('button', { name: '+ Add' }).click();
   await page.getByPlaceholder('Gargoyle').fill('Gargoyle');
-  await page.getByRole('button', { name: 'Monstrous Humanoid', exact: true }).click();
+  await page.getByRole('button', { name: 'Aberration', exact: true }).click();
   await page.getByRole('button', { name: /^Add Gargoyle$/ }).click();
 
   // full attack rows: +12 / +7 with favored enemy damage +4 → 1d8+6
