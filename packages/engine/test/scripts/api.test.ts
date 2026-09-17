@@ -21,7 +21,7 @@ const feat = AbilitySchema.parse({ id: 'f', name: 'Feat', kind: 'feature', param
 function setup(phase: 'always' | 'event' = 'always') {
   const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1', tags: ['aberration', 'aquatic'], size: 'large', hurt: 'bloodied', distanceFeet: 20 })], toggles: { sniping: true }, tags: ['underwater'], prompts: { 'knowledge:aberration': 24 } });
   const ctx = makeCtx({
-    character: makeCharacter({ abilities: [{ abilityId: 'f', enabled: true, paramValues: { types: ['aberration'] } }], vars: { trophyMultiplier: 2 } }),
+    character: makeCharacter({ abilities: [{ abilityId: 'f', enabled: true, paramValues: { types: ['aberration'] } }, { abilityId: 'other', enabled: true, paramValues: { types: ['dragon'] } }], vars: { trophyMultiplier: 2 } }),
     battle,
     target: battle.combatants[0],
     attack: { profile: { id: 'bow', name: 'Bow', kind: 'ranged', baseDice: '1d8', enhancement: 1, critRange: 20, critMult: 3, attackAbility: 'dex', damageAbilityMultiplier: 1 }, kind: 'ranged', index: 2, modeId: 'full' },
@@ -149,6 +149,15 @@ test('lists are handed out as copies, so a script cannot mutate stored state', (
   expect(ctx.character.abilities[0]!.paramValues.types).toEqual(['aberration']);
   expect(api.target.is('on-fire')).toBe(false);
   expect(api.battle.tags).toEqual(['underwater']);
+});
+
+test('player.paramsOf(recordId) reads another record\'s chosen tags, as a copy, and [] when that record is not on the sheet', () => {
+  const { api, ctx } = setup();
+  expect(api.player.paramsOf('other').types).toEqual(['dragon']);
+  expect(api.player.paramsOf('f').types).toEqual(['aberration']); // same as this record's own params
+  expect(api.player.paramsOf('missing').types).toEqual([]);
+  api.player.paramsOf('other').types!.push('giant');
+  expect(ctx.character.abilities.find((a) => a.abilityId === 'other')!.paramValues.types).toEqual(['dragon']);
 });
 
 test("sel('self.param.x') hands out a copy, whether read off the record's own instance or found by scanning the character's abilities", () => {

@@ -141,6 +141,7 @@ Every name below is destructured into scope; there is no `api.` prefix. `Math`, 
 | `player.classes.<id>` | class level |
 | `player.tags` | my conditions |
 | `player.params.<name>` (or bare `params.<name>`) | this record's chosen tags, as a list |
+| `player.paramsOf(recordId).<name>` | another record's chosen tags, as a list (`[]` if that record isn't on the sheet) — for a record that must stay in sync with a choice made elsewhere, e.g. `player.paramsOf('monster-killer').types` |
 | `player.active(id)` | `null`, or `{ round, elapsed, remaining }` for a running status/activation (seconds) |
 | `active` | the same object for the activation the script belongs to; `null` when it is not running |
 | `player.left(poolId)` | charges left |
