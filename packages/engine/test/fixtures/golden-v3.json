@@ -89,7 +89,7 @@
         "ability.str": 14,
         "ability.con": 12,
         "skill.spot": 11,
-        "skill.survival": 14,
+        "skill.survival": 10,
         "skill.swim": 9,
         "skill.knowledge-monsters": 10
       },
@@ -229,7 +229,7 @@
         "ability.str": 14,
         "ability.con": 12,
         "skill.spot": 15,
-        "skill.survival": 18,
+        "skill.survival": 14,
         "skill.swim": 9,
         "skill.knowledge-monsters": 10
       },
@@ -370,7 +370,7 @@
         "ability.str": 14,
         "ability.con": 12,
         "skill.spot": 15,
-        "skill.survival": 18,
+        "skill.survival": 14,
         "skill.swim": 9,
         "skill.knowledge-monsters": 10
       },
@@ -511,7 +511,7 @@
         "ability.str": 14,
         "ability.con": 12,
         "skill.spot": 11,
-        "skill.survival": 14,
+        "skill.survival": 10,
         "skill.swim": 9,
         "skill.knowledge-monsters": 10
       },

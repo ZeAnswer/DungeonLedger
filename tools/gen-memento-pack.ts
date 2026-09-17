@@ -67,7 +67,7 @@ const declareFavoredAndMkTypes = "const types = [...player.paramsOf('favored-ene
 const pack: Pack = PackSchema.parse({
   id: 'memento',
   name: 'Memento (Ranger 5 / Monster Hunter 1)',
-  version: 14, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
+  version: 15, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
   description: 'Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor\'s Monsters\' Manual.',
   // Library functions: shared script bodies with typed parameters, called as `fn.<id>({ … })` from a
   // record's script (or from a stored `call`, which compiles to the same thing). `haste` and
@@ -135,7 +135,7 @@ const pack: Pack = PackSchema.parse({
     },
     {
       id: 'distracting-attack', name: 'Distracting Attack', source: 'class', sourceRef: 'PHB2 ranger variant (replaces animal companion)',
-      text: 'Whenever you hit an enemy with a weapon attack, that enemy is considered flanked by you until the end of your next turn.',
+      text: 'Whenever you hit an enemy with a weapon attack, that enemy is considered flanked by you until the end of your next turn. The app clears the mark on your next turn; if an ally attacks that target first, tap the flanked tag off yourself.',
       todo: 'Confirm exact duration and whether the flank counts for you or only allies.',
       effects: [{ id: 'flank', trigger: 'onHit', do: [{ kind: 'applyTag', to: 'target', tag: 'flanked', duration: 'endOfNextTurn' }] }],
     },
@@ -175,7 +175,11 @@ const pack: Pack = PackSchema.parse({
         },
       ],
     },
-    { id: 'the-shit-ive-seen', name: 'The Shit I\'ve Seen', source: 'feat', text: '+4 Survival.', effects: [{ id: 's', do: [{ kind: 'bonus', to: 'skill.survival', value: 4 }] }] },
+    {
+      id: 'the-shit-ive-seen', name: 'The Shit I\'ve Seen', kind: 'feature', acquired: { kind: 'feat' },
+      text: '+4 Survival while below full HP.',
+      scripts: [{ id: 'survival', events: ['always'], source: "if (player.hp.current < player.hp.max) bonus('skill.survival', 4);" }],
+    },
     // ---- Monster Hunter class ----
     {
       id: 'monster-killer', name: 'Monster Killer', source: 'class',

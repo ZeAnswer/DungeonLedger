@@ -1,7 +1,7 @@
 {
   "id": "memento",
   "name": "Memento (Ranger 5 / Monster Hunter 1)",
-  "version": 14,
+  "version": 15,
   "description": "Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor's Monsters' Manual.",
   "tags": [
     {
@@ -118,7 +118,7 @@
     {
       "id": "distracting-attack",
       "name": "Distracting Attack",
-      "text": "Whenever you hit an enemy with a weapon attack, that enemy is considered flanked by you until the end of your next turn.",
+      "text": "Whenever you hit an enemy with a weapon attack, that enemy is considered flanked by you until the end of your next turn. The app clears the mark on your next turn; if an ally attacks that target first, tap the flanked tag off yourself.",
       "sourceRef": "PHB2 ranger variant (replaces animal companion)",
       "todo": "Confirm exact duration and whether the flank counts for you or only allies.",
       "scripts": [
@@ -261,14 +261,14 @@
     {
       "id": "the-shit-ive-seen",
       "name": "The Shit I've Seen",
-      "text": "+4 Survival.",
+      "text": "+4 Survival while below full HP.",
       "scripts": [
         {
-          "id": "s",
+          "id": "survival",
           "events": [
             "always"
           ],
-          "source": "bonus('skill.survival', 4);",
+          "source": "if (player.hp.current < player.hp.max) bonus('skill.survival', 4);",
           "enabled": true,
           "priority": 0
         }
