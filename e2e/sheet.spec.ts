@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 test('sheets close via button and browser back', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /Memento/ }).click();
-  await page.getByRole('button', { name: /^▸ Feats/ }).click();
+  await page.getByRole('button', { name: /^▸ Features/ }).click();
   await page.getByRole('button', { name: /Woodland Archer/ }).click();
   await expect(page.getByRole('button', { name: 'Remove from character' })).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).first().click();

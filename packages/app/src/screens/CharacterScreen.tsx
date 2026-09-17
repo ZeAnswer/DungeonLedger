@@ -17,10 +17,10 @@ export function statPath(id: string): string {
   return id.includes('.') ? `player.stats['${id}']` : `player.stats.${id}`;
 }
 
+const ORIGIN_TAGS: Record<string, string> = { feat: 'feat', class: 'class', race: 'race', dm: 'DM' };
+
 const GROUPS: { id: string; title: string; test: (a: Ability) => boolean }[] = [
-  { id: 'feats', title: 'Feats', test: (a) => a.kind === 'feature' && a.acquired.kind === 'feat' },
-  { id: 'class', title: 'Class abilities', test: (a) => a.kind === 'feature' && (a.acquired.kind === 'class' || a.acquired.kind === 'race') },
-  { id: 'memories', title: 'DM grants', test: (a) => a.kind === 'feature' && a.acquired.kind === 'dm' },
+  { id: 'features', title: 'Features', test: (a) => a.kind === 'feature' },
   { id: 'spells', title: 'Spells', test: (a) => a.kind === 'spell' },
 ];
 
@@ -120,7 +120,7 @@ export function CharacterScreen() {
             {list.map(({ inst, a }) => (
               <button key={a.id} type="button" onClick={() => setAbilityId(a.id)} className="flex w-full items-center justify-between gap-2 rounded-xl bg-zinc-900 px-3 py-2 text-left">
                 <div className="min-w-0">
-                  <div className="truncate">{a.name}{a.todo ? <span className="ml-1 text-amber-400" title={a.todo}>⚑</span> : null}</div>
+                  <div className="truncate">{a.name}{a.kind === 'feature' ? <span className="ml-2 text-xs text-zinc-500">{ORIGIN_TAGS[a.acquired.kind] ?? a.acquired.kind}</span> : null}{a.todo ? <span className="ml-1 text-amber-400" title={a.todo}>⚑</span> : null}</div>
                   <div className="truncate text-xs text-zinc-500">{a.sourceRef ?? a.kind}{actions.filter((x) => x.abilityId === a.id && x.charges).map((x) => ` · ${x.charges!.label} ${x.charges!.remaining}/${x.charges!.max}`)}{pools.filter((p) => p.abilityId === a.id).map((p) => ` · ${p.label} ${p.remaining}/${p.max}`)}{Object.entries(inst.paramValues).map(([k, v]) => ` · ${k}: ${v.map((t) => ctx.library.tags[t]?.label ?? t).join(', ')}`)}{a.kind === 'feature' && a.params && Object.keys(a.params).some((k) => !inst.paramValues[k]?.length) ? ' · ⚠ choose types' : ''}</div>
                 </div>
                 <span className="text-zinc-600">›</span>
