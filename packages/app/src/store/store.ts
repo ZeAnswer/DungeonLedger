@@ -126,6 +126,11 @@ export const useStore = create<Store>((set, get) => ({
     // baseline, and the merge result must not be written back into the persisted library blob.
     let mergedGlobals = globals ?? lib.globals;
     const updated: string[] = [];
+    // A pack update may carry skills the seed character has that the stored one doesn't (e.g. the
+    // player's real skill list replacing a partial import): restored onto the stored character below,
+    // never touching a skill it already has, and only for the character id that pack actually seeds.
+    let patchedCharacter = character;
+    const restoredSkillNames: string[] = [];
     for (const p of defaultPacks) {
       const seen = Math.max(0, ...Object.values(lib.meta).filter((m) => m.packId === p.id).map((m) => m.version));
       if (p.version > seen) {
@@ -135,12 +140,23 @@ export const useStore = create<Store>((set, get) => ({
         lib = { ...lib, ...mLib };
         mergedGlobals = m.library.globals;
         updated.push(p.name);
+        const seed = p.characters.find((c) => c.id === patchedCharacter?.id);
+        if (seed && patchedCharacter) {
+          const missing = Object.entries(seed.skills).filter(([id]) => !patchedCharacter!.skills[id]);
+          if (missing.length) {
+            patchedCharacter = { ...patchedCharacter, skills: { ...patchedCharacter.skills, ...Object.fromEntries(missing) } };
+            restoredSkillNames.push(...missing.map(([id]) => lib.skills[id]?.name ?? id));
+          }
+        }
       }
+    }
+    if (restoredSkillNames.length && patchedCharacter) {
+      patchedCharacter = { ...patchedCharacter, journal: [...patchedCharacter.journal, { at: new Date().toISOString(), kind: 'edit', text: `Skills restored from built-in pack: ${restoredSkillNames.join(', ')}` }] };
     }
     set({
       library: lib,
       globals: mergedGlobals,
-      character: character ? CharacterSchema.parse(character) : Object.values(library.characters ?? {})[0],
+      character: patchedCharacter ? CharacterSchema.parse(patchedCharacter) : Object.values(library.characters ?? {})[0],
       battle: battle ? loadBattle(battle, lib) : undefined,
       pastBattles: loadPastBattles(past, lib),
       screen: screen ?? 'battle',
