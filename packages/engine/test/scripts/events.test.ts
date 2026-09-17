@@ -70,10 +70,29 @@ test('check() ("for the monster") attaches to the event currently being logged',
   c.library.abilities['gloves'] = gloves;
   const r = runEventScripts(c, { kind: 'hit', result: 'hit', targetId: 'c1' });
   expect(r.patches).toEqual([{ k: 'check', name: 'Chuul Gloves: paralysis', save: 'fort', dc: 15, effect: 'paralysed (Fort negates)', src: 'gloves' }]);
-  const st = applyPatches(c, { battle: c.battle!, character: c.character }, r.patches, gloves, 'c1');
+  const st = applyPatches(c, { battle: c.battle!, character: c.character }, r.patches, gloves, 'c1', 'ev1');
   expect(st.battle.log).toHaveLength(1); // attached, not a new entry
   expect(st.battle.log[0]!.checks).toEqual([{ name: 'Chuul Gloves: paralysis', save: 'fort', dc: 15, effect: 'paralysed (Fort negates)' }]);
   expect(c.battle!.log[0]!.checks).toBeUndefined(); // immutable
+});
+
+test('check() attaches to the event by id even when a log() patch in the same batch appends a later note', () => {
+  const gloves = AbilitySchema.parse({
+    id: 'gloves', name: 'Chuul Gloves', kind: 'feature',
+    scripts: [{ id: 's', events: ['hit'], source: "log('a note'); check('Chuul Gloves: paralysis', { save: 'fort', dc: 15, effect: 'paralysed (Fort negates)' })" }],
+  });
+  const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1' })], log: [{ id: 'ev1', round: 1, seq: 1, kind: 'attack', actor: 'self', result: 'hit' }] });
+  const c = makeCtx({ character: makeCharacter({ abilities: [{ abilityId: 'gloves', enabled: true, paramValues: {} }] }), battle, target: battle.combatants[0] });
+  c.library.abilities['gloves'] = gloves;
+  const r = runEventScripts(c, { kind: 'hit', result: 'hit', targetId: 'c1' });
+  expect(r.patches.map((p) => p.k)).toEqual(['log', 'check']); // log's patch precedes check's in the batch
+  const st = applyPatches(c, { battle: c.battle!, character: c.character }, r.patches, gloves, 'c1', 'ev1');
+  expect(st.battle.log).toHaveLength(2); // the attack event, plus the note log() appended
+  const attackEvent = st.battle.log.find((e) => e.id === 'ev1')!;
+  expect(attackEvent.checks).toEqual([{ name: 'Chuul Gloves: paralysis', save: 'fort', dc: 15, effect: 'paralysed (Fort negates)' }]);
+  const noteEvent = st.battle.log.find((e) => e.id !== 'ev1')!;
+  expect(noteEvent).toMatchObject({ kind: 'note', text: 'a note' });
+  expect(noteEvent.checks).toBeUndefined(); // the check landed on the attack, not the note
 });
 
 test('a broad emit cascade is stopped by the run cap instead of running away', () => {

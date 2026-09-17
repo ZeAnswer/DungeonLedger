@@ -16,9 +16,9 @@ function nextSeq(battle: Battle): number {
   return (battle.log.at(-1)?.seq ?? 0) + 1;
 }
 
-function appendEvent(battle: Battle, e: Omit<LogEvent, 'id' | 'round' | 'seq'>): Battle {
+function appendEvent(battle: Battle, e: Omit<LogEvent, 'id' | 'round' | 'seq'>): { battle: Battle; id: string } {
   const event: LogEvent = { id: newId('ev'), round: battle.round, seq: nextSeq(battle), ...e };
-  return { ...battle, log: [...battle.log, event] };
+  return { battle: { ...battle, log: [...battle.log, event] }, id: event.id };
 }
 
 function withCombatant(battle: Battle, id: string, fn: (c: Combatant) => Combatant): Battle {
@@ -34,9 +34,11 @@ const stateOf = (ctx: EvalContext): State => ({ battle: ctx.battle!, character: 
 /**
  * Run every event script listening for `kind` and fold their patches into the state.
  * The context is rebuilt from the state so a second event in the same transition (crit after hit)
- * sees what the first one changed.
+ * sees what the first one changed. `opts.eventId` (when this trigger belongs to a specific logged
+ * event, e.g. the attack `hit` scripts run for) is where a `check()` patch attaches — by id, not by
+ * "whatever is currently last", so an earlier `log()` in the same batch of patches can't steal it.
  */
-function runTriggers(ctx: EvalContext, state: State, kind: ScriptEvent, opts: { targetId?: string; damage?: number; result?: 'hit' | 'miss' | 'crit' } = {}): State {
+function runTriggers(ctx: EvalContext, state: State, kind: ScriptEvent, opts: { targetId?: string; damage?: number; result?: 'hit' | 'miss' | 'crit'; eventId?: string } = {}): State {
   const target = opts.targetId ? state.battle.combatants.find((c) => c.id === opts.targetId) : ctx.target;
   const ectx: EvalContext = {
     ...ctx, battle: state.battle, character: state.character, target,
@@ -50,7 +52,7 @@ function runTriggers(ctx: EvalContext, state: State, kind: ScriptEvent, opts: { 
     ...(opts.targetId ? { targetId: opts.targetId } : {}),
   });
   if (!r.patches.length) return state;
-  return applyPatches(ectx, state, r.patches, undefined, opts.targetId);
+  return applyPatches(ectx, state, r.patches, undefined, opts.targetId, opts.eventId);
 }
 
 export type AttackLogInput = { targetId: string; profileId: string; modeId: string; attackIndex: number; result: 'hit' | 'miss' | 'crit'; damage?: number };
@@ -99,12 +101,12 @@ function stampUndo(before: State, after: State): State {
 export function logAttack(ctx: EvalContext, input: AttackLogInput, snapshot?: { attackBonus: number; damageText: string }): State {
   if (!ctx.battle) throw new Error('No battle');
   const before = stateOf(ctx);
-  const battle = appendEvent(ctx.battle, { kind: 'attack', actor: 'self', ...input, ...(snapshot ? { snapshot } : {}) });
+  const { battle, id: eventId } = appendEvent(ctx.battle, { kind: 'attack', actor: 'self', ...input, ...(snapshot ? { snapshot } : {}) });
   let state: State = { ...before, battle };
   // A crit is also a hit: `hit` scripts run first, then `crit`.
   const kinds: ScriptEvent[] = input.result === 'miss' ? ['miss'] : input.result === 'crit' ? ['hit', 'crit'] : ['hit'];
   for (const kind of kinds) {
-    state = runTriggers(ctx, state, kind, { targetId: input.targetId, result: input.result, ...(input.damage !== undefined ? { damage: input.damage } : {}) });
+    state = runTriggers(ctx, state, kind, { targetId: input.targetId, result: input.result, eventId, ...(input.damage !== undefined ? { damage: input.damage } : {}) });
   }
   state = { ...state, battle: { ...state.battle, activeBuffs: state.battle.activeBuffs.filter((b) => b.expires !== 'thisAttack') } };
   return stampUndo(before, state);
@@ -142,13 +144,13 @@ export type EnemyLogInput = { actorId: string; result: 'hit' | 'miss' | 'crit'; 
 export function logEnemyAction(ctx: EvalContext, input: EnemyLogInput): State {
   if (!ctx.battle) throw new Error('No battle');
   const before = stateOf(ctx);
-  const battle = appendEvent(ctx.battle, { kind: 'enemy', actor: input.actorId, targetId: 'self', result: input.result, ...(input.damage !== undefined ? { damage: input.damage } : {}), ...(input.text ? { text: input.text } : {}) });
+  const { battle, id: eventId } = appendEvent(ctx.battle, { kind: 'enemy', actor: input.actorId, targetId: 'self', result: input.result, ...(input.damage !== undefined ? { damage: input.damage } : {}), ...(input.text ? { text: input.text } : {}) });
   let state: State = { ...before, battle };
   if (input.damage) {
     const hp = { ...state.character.hp };
     const t = Math.min(hp.temp, input.damage); hp.temp -= t; hp.current = Math.max(-10, hp.current - (input.damage - t));
     state = { ...state, character: { ...state.character, hp } };
-    state = runTriggers(ctx, state, 'damaged', { targetId: input.actorId, damage: input.damage, result: input.result });
+    state = runTriggers(ctx, state, 'damaged', { targetId: input.actorId, damage: input.damage, result: input.result, eventId });
   }
   return stampUndo(before, state);
 }
@@ -181,7 +183,8 @@ export function useAbility(ctx: EvalContext, input: UseAbilityInput): State {
   const spell = act.spell ? ctx.library.abilities[act.spell] : undefined;
   const spellRec = spell?.kind === 'spell' ? spell : undefined;
   const before = stateOf(ctx);
-  let state: State = { ...before, battle: appendEvent(ctx.battle, { kind: 'use', actor: 'self', abilityId: ability.id, activationId: act.id, ...(input.targetId ? { targetId: input.targetId } : {}) }) };
+  const { battle: usedBattle, id: eventId } = appendEvent(ctx.battle, { kind: 'use', actor: 'self', abilityId: ability.id, activationId: act.id, ...(input.targetId ? { targetId: input.targetId } : {}) });
+  let state: State = { ...before, battle: usedBattle };
   const duration = act.duration ?? spellRec?.duration;
   const rounds = durationRounds(duration);
   if (duration !== undefined && !state.battle.activeBuffs.some((b) => b.abilityId === ability.id && b.activationId === act.id && b.owner === 'self')) {
@@ -192,7 +195,7 @@ export function useAbility(ctx: EvalContext, input: UseAbilityInput): State {
   const r = runEventScripts(ectx, { kind: 'use', abilityId: ability.id, activationId: act.id, ...(input.targetId ? { targetId: input.targetId } : {}) }, { only: { abilityId: ability.id, activationId: act.id } });
   // A script that spends a pool itself replaces the automatic charge/cost payment for that pool.
   const explicit = new Set(r.patches.flatMap((p) => (p.k === 'resource' && p.op === 'consume' ? [p.id] : [])));
-  state = applyPatches(ectx, state, r.patches, ability, input.targetId);
+  state = applyPatches(ectx, state, r.patches, ability, input.targetId, eventId);
   state = payCosts(ctx, state, act, explicit);
   return stampUndo(before, state);
 }
@@ -226,8 +229,9 @@ export function nextRound(ctx: EvalContext): State {
     selfConditions: state.battle.selfConditions.filter((x) => !expired(x, round)),
     roundResources: {},
   };
-  state = { ...state, battle: appendEvent(battle, { kind: 'roundStart', actor: 'self' }) };
-  return runTriggers(ctx, state, 'roundStart', { ...(ctx.target ? { targetId: ctx.target.id } : {}) });
+  const { battle: startedBattle, id: eventId } = appendEvent(battle, { kind: 'roundStart', actor: 'self' });
+  state = { ...state, battle: startedBattle };
+  return runTriggers(ctx, state, 'roundStart', { eventId, ...(ctx.target ? { targetId: ctx.target.id } : {}) });
 }
 
 export type SituationalSpec = {

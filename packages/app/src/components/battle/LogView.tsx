@@ -2,8 +2,7 @@ import { editLogEvent, undoEvent, type Battle, type LogEvent } from '@hl/engine'
 import { useCtx } from '../../store/hooks';
 import { useStore } from '../../store/store';
 import { Button, Chip, cx } from '../ui';
-
-const SAVE_LABEL: Record<string, string> = { fort: 'Fort', ref: 'Ref', will: 'Will' };
+import { SAVE_LABEL } from './labels';
 
 export function LogView({ battle }: { battle: Battle }) {
   const setBattle = useStore((s) => s.setBattle);

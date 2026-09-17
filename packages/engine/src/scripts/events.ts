@@ -79,9 +79,11 @@ const addCondition = (list: readonly Conditioned[], c: Conditioned): Conditioned
 /**
  * Apply queued patches immutably (a port of the v3 `applyTriggered`, plus setVar/log/untag).
  * `setVar` writes a character var when the character already has that name and a library global
- * otherwise, so the caller gets both halves back.
+ * otherwise, so the caller gets both halves back. `eventId`, when given, is the event these patches'
+ * `check()` calls attach to — resolved once by the caller (the id of the event being logged), not by
+ * "whatever `battle.log` ends on", so an earlier `log()` patch in the same batch can't steal it.
  */
-export function applyPatches(ctx: EvalContext, state: State, patches: readonly Patch[], ability?: Ability, targetId?: string): State & { globals: Record<string, VarValue> } {
+export function applyPatches(ctx: EvalContext, state: State, patches: readonly Patch[], ability?: Ability, targetId?: string, eventId?: string): State & { globals: Record<string, VarValue> } {
   let battle = state.battle;
   let character = state.character;
   let globals = state.globals ?? ctx.library.globals ?? {};
@@ -145,11 +147,12 @@ export function applyPatches(ctx: EvalContext, state: State, patches: readonly P
         break;
       }
       case 'check': {
-        // "For the monster": attached to the event currently being logged (the attack/use just appended).
-        const last = battle.log.at(-1);
-        if (last) {
+        // "For the monster": attached to the event this batch of patches belongs to, by id — not
+        // `battle.log.at(-1)`, which an earlier `log()` patch in the same batch would have moved.
+        // No `eventId` (a caller with no event to attach to, e.g. equip/unequip) drops the check.
+        if (eventId) {
           const entry = { name: p.name, save: p.save, dc: p.dc, effect: p.effect };
-          battle = { ...battle, log: battle.log.map((e) => (e.id === last.id ? { ...e, checks: [...(e.checks ?? []), entry] } : e)) };
+          battle = { ...battle, log: battle.log.map((e) => (e.id === eventId ? { ...e, checks: [...(e.checks ?? []), entry] } : e)) };
         }
         break;
       }

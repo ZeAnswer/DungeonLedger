@@ -6,8 +6,7 @@ import { useStore } from '../../store/store';
 import { collectToggles } from '../../store/hooks';
 import { usePathLongPress } from '../../hooks/usePathLongPress';
 import { Button, Chip, Field, Sheet, cx, humanize, inputCls, signed } from '../ui';
-
-const SAVE_LABEL: Record<string, string> = { fort: 'Fort', ref: 'Ref', will: 'Will' };
+import { SAVE_LABEL } from './labels';
 
 /** "For the monster": the checks the DM rolls after a logged hit, `<name> — <Save> DC <n>: <effect>`. */
 export function ForTheMonster({ checks }: { checks: { name: string; save: string; dc: number; effect: string }[] }) {
@@ -121,8 +120,10 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
             const logged = battle.log.find((e) => e.kind === 'attack' && e.round === battle.round && e.targetId === target?.id && e.modeId === mode?.modeId && e.attackIndex === a.index && e.profileId === effectiveProfileId);
             if (logged) {
               // Executed: frozen at the numbers it was rolled with; only Undo can change it.
-              // "For the monster" checks stay on the row through the next attack — gone once a newer event is logged or this one is undone.
-              const checks = battle.log.at(-1)?.id === logged.id ? logged.checks : undefined;
+              // "For the monster" checks: found by this event's own id, not by position in the log —
+              // a log() note from the same hit's scripts (or anything else) can append after it without
+              // moving it off "last". Gone once the event itself is undone (it's just not in the log anymore).
+              const checks = battle.log.find((e) => e.id === logged.id)?.checks;
               return (
                 <div key={a.index} data-attack={a.index}>
                   <div className={cx('flex w-full items-center justify-between rounded-2xl border bg-zinc-950 px-3 py-2 opacity-80', logged.result === 'miss' ? 'border-red-900' : 'border-emerald-800')}>
@@ -149,7 +150,8 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
                   <span className="text-zinc-500">{expanded === a.index ? '▲' : '▼'}</span>
                 </button>
                 {a.damage.dice.length > 1 && <div className="mt-1 text-xs text-zinc-400">{a.damage.dice.map((d) => `${d.dice} ${d.label}${d.damageType ? ` (${d.damageType})` : ''}`).join(' · ')}</div>}
-                {concealReason && <ConcealmentLine reason={concealReason} pierced={a.ignoreConcealment} />}
+                {/* Keyed on target + round: a stale "rolled N" from a previous target or round must not carry over. */}
+                {concealReason && <ConcealmentLine key={`${target?.id}-${battle.round}`} reason={concealReason} pierced={a.ignoreConcealment} />}
                 {target && !target.dead && (
                   <div className="mt-2 grid grid-cols-3 gap-2">
                     <Button variant="success" onClick={() => record(a, 'hit')}>Hit</Button>
