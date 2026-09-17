@@ -72,6 +72,7 @@ test('compute helpers fill the sink with source attribution; event helpers throw
   expect(() => api.bonus('attac', 1)).toThrow(/unknown stat/);
   expect(() => api.bonus('attack', 1, 'moral')).toThrow(/unknown bonus type/);
   expect(() => api.heal(5)).toThrow(/only in event scripts/);
+  expect(() => api.check('Chuul Gloves', { save: 'fort', dc: 15, effect: 'paralysed' })).toThrow(/check\(\) works only in event scripts/);
   expect(() => { (api.player as unknown as { level: number }).level = 3; }).toThrow(/read-only/);
 });
 
@@ -107,11 +108,13 @@ test('ask registers a prompt when unanswered and returns the stored value otherw
 
 test('event helpers queue patches; compute helpers throw in event phase', () => {
   const { api, patches } = setup('event');
-  api.target.mark('flanked', ROUND); api.heal(5); api.charges('boots-rounds').use(2); api.setVar('kills', 1); api.emit('rage-ended', { by: 'f' }); api.grant('haste', 3 * ROUND); api.suppress('dodge'); api.reveal(); api.log('hi');
-  expect(patches.map((p) => p.k)).toEqual(['tag', 'hp', 'resource', 'setVar', 'emit', 'grant', 'suppress', 'reveal', 'log']);
+  api.target.mark('flanked', ROUND); api.heal(5); api.charges('boots-rounds').use(2); api.setVar('kills', 1); api.emit('rage-ended', { by: 'f' }); api.grant('haste', 3 * ROUND); api.suppress('dodge'); api.reveal(); api.log('hi'); api.check('Chuul Gloves: paralysis', { save: 'fort', dc: 15, effect: 'paralysed (Fort negates)' });
+  expect(patches.map((p) => p.k)).toEqual(['tag', 'hp', 'resource', 'setVar', 'emit', 'grant', 'suppress', 'reveal', 'log', 'check']);
   expect(patches[0]).toEqual({ k: 'tag', to: 'target', tag: 'flanked', duration: 6 });
+  expect(patches.at(-1)).toEqual({ k: 'check', name: 'Chuul Gloves: paralysis', save: 'fort', dc: 15, effect: 'paralysed (Fort negates)' });
   expect(api.event!.damage).toBe(9); expect(api.player.lastDamage).toBe(9);
   expect(() => api.bonus('attack', 1)).toThrow(/only in always scripts/);
+  expect(() => api.check('X', { save: 'nope' as 'fort', dc: 10, effect: 'y' })).toThrow(/unknown save/);
 });
 
 test('event is frozen: one script cannot change what the next script (or this one) reads back', () => {

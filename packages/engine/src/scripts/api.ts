@@ -1,7 +1,7 @@
 import { HURT_ORDER, SIZE_ORDER, abilityMod, targetTags, targetTagsInCategory, type AbilityInstance, type EvalContext } from '../context';
 import { evalExpr } from '../expr';
 import { countHistory } from '../history';
-import { BonusTypeSchema, SlotIdSchema, StatIdSchema, type Ability, type Activation, type AttackKind, type BonusType, type Duration, type HistoryFilter, type Script, type ScriptEvent, type SlotId, type StatId, type VarValue } from '../schema';
+import { BonusTypeSchema, SaveIdSchema, SlotIdSchema, StatIdSchema, type Ability, type Activation, type AttackKind, type BonusType, type Duration, type HistoryFilter, type SaveId, type Script, type ScriptEvent, type SlotId, type StatId, type VarValue } from '../schema';
 import { readSelector } from '../selectors';
 import { exprVars } from '../vars';
 import { resolveStatVia } from './registry';
@@ -19,6 +19,7 @@ export type Patch =
   | { k: 'suppress'; abilityId: string }
   | { k: 'hp'; op: 'damage' | 'heal' | 'temp'; amount: number }
   | { k: 'reveal' }
+  | { k: 'check'; name: string; save: SaveId; dc: number; effect: string }
   | { k: 'setVar'; name: string; value: number | string | boolean }
   | { k: 'log'; text: string }
   | { k: 'emit'; name: string; payload?: unknown };
@@ -32,7 +33,7 @@ export type RunContext = {
   script: Script;
   event?: EventInfo;
   args?: Record<string, unknown>;
-  fns?: Record<string, (args: Record<string, unknown>) => void>;
+  fns?: Record<string, (args: Record<string, unknown>) => unknown>;
   /** Eligibility probe (`availableActions`): pretend the source's activation is running, so `active` is non-null. */
   probeActive?: boolean;
   /** A throwaway run (preview, eligibility probe): errors stay in the sink, out of diagnostics and the quarantine count. */
@@ -257,6 +258,13 @@ export function makeApi(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
     setVar: (name: string, value: number | string | boolean) => { onlyEvent('setVar'); patches.push({ k: 'setVar', name, value }); },
     log: (text: string) => { onlyEvent('log'); patches.push({ k: 'log', text }); },
     emit: (name: string, payload?: unknown) => { onlyEvent('emit'); patches.push({ k: 'emit', name, payload }); },
+    /** "For the monster": a save the DM rolls after this event, shown on the logged attack/use row. */
+    check: (name: string, opts: { save: string; dc: number; effect: string }) => {
+      onlyEvent('check');
+      const r = SaveIdSchema.safeParse(opts.save);
+      if (!r.success) throw new Error(`unknown save "${opts.save}"`);
+      patches.push({ k: 'check', name, save: r.data, dc: opts.dc, effect: opts.effect });
+    },
 
     // ---------- control, units, math ----------
     need: (cond: unknown, because = trace.last && !trace.last.result ? trace.last.text : 'a condition') => { if (!cond) throw new ScriptSkip(because); },
@@ -276,7 +284,7 @@ export const API_NAMES = [
   'player', 'self', 'target', 'attack', 'battle', 'vars', 'flags', 'params', 'active', 'event', 'args', 'fn',
   'sel', 'has', 'nameOf',
   'bonus', 'penalty', 'setStat', 'scale', 'dice', 'flag', 'note', 'slot', 'attackMode', 'extraAttack', 'naturalAttack', 'ask', 'tier', 'history',
-  'condition', 'grant', 'suppress', 'charges', 'heal', 'hurt', 'temp', 'reveal', 'setVar', 'log', 'emit',
+  'condition', 'grant', 'suppress', 'charges', 'heal', 'hurt', 'temp', 'reveal', 'check', 'setVar', 'log', 'emit',
   'need', 'SECOND', 'ROUND', 'MINUTE', 'HOUR', 'DAY', 'THIS_ATTACK', 'UNTIL_MY_NEXT_TURN', 'ENCOUNTER', 'UNTIL_REMOVED', 'SIZE', 'HURT', 'BONUS', 'STAT',
   'mod', 'floor', 'ceil', 'round', 'abs', 'min', 'max', 'clamp', 'toRounds', 'evalExpr',
 ] as const;

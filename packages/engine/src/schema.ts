@@ -61,6 +61,8 @@ export type HistoryFilter = z.infer<typeof HistoryFilterSchema>;
 // ---------- scripts ----------
 export const ScriptEventSchema = z.string().regex(/^(always|hit|miss|crit|damaged|roundStart|roundEnd|use|equip|unequip|custom:[A-Za-z0-9_-]+)$/, 'unknown event');
 export type ScriptEvent = z.infer<typeof ScriptEventSchema>;
+export const SaveIdSchema = z.enum(['fort', 'ref', 'will']);
+export type SaveId = z.infer<typeof SaveIdSchema>;
 export const ArgValueSchema = z.discriminatedUnion('k', [
   z.object({ k: z.literal('lit'), v: z.union([z.number(), z.string(), z.boolean(), z.array(z.string())]) }),
   z.object({ k: z.literal('ref'), v: z.string().min(1) }),
@@ -427,6 +429,8 @@ export const LogEventSchema = z.object({
   editedAt: z.string().optional(),
   /** Numbers shown when the attack was executed (frozen in the UI). */
   snapshot: z.object({ attackBonus: z.number(), damageText: z.string() }).optional(),
+  /** "For the monster": saves the DM rolls after this event, recorded by `check()` in a triggered script. */
+  checks: z.array(z.object({ name: z.string(), save: SaveIdSchema, dc: z.number(), effect: z.string() })).optional(),
   /** What this event's triggers changed, so it can be undone. */
   undo: z.object({
     targetConditions: z.array(z.object({ combatantId: z.string(), tag: z.string() })).default([]),

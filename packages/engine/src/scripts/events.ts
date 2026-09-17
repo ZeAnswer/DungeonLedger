@@ -144,6 +144,15 @@ export function applyPatches(ctx: EvalContext, state: State, patches: readonly P
         battle = { ...battle, log: [...battle.log, entry] };
         break;
       }
+      case 'check': {
+        // "For the monster": attached to the event currently being logged (the attack/use just appended).
+        const last = battle.log.at(-1);
+        if (last) {
+          const entry = { name: p.name, save: p.save, dc: p.dc, effect: p.effect };
+          battle = { ...battle, log: battle.log.map((e) => (e.id === last.id ? { ...e, checks: [...(e.checks ?? []), entry] } : e)) };
+        }
+        break;
+      }
       case 'emit':
         break; // already cascaded by runEventScripts
     }

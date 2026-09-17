@@ -63,6 +63,19 @@ test('a script that skips or throws contributes no patches', () => {
   expect(r.errors.map((e) => e.recordId)).toEqual(['boom']);
 });
 
+test('check() ("for the monster") attaches to the event currently being logged', () => {
+  const gloves = AbilitySchema.parse({ id: 'gloves', name: 'Chuul Gloves', kind: 'feature', scripts: [{ id: 's', events: ['hit'], source: "check('Chuul Gloves: paralysis', { save: 'fort', dc: 15, effect: 'paralysed (Fort negates)' })" }] });
+  const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1' })], log: [{ id: 'ev1', round: 1, seq: 1, kind: 'attack', actor: 'self', result: 'hit' }] });
+  const c = makeCtx({ character: makeCharacter({ abilities: [{ abilityId: 'gloves', enabled: true, paramValues: {} }] }), battle, target: battle.combatants[0] });
+  c.library.abilities['gloves'] = gloves;
+  const r = runEventScripts(c, { kind: 'hit', result: 'hit', targetId: 'c1' });
+  expect(r.patches).toEqual([{ k: 'check', name: 'Chuul Gloves: paralysis', save: 'fort', dc: 15, effect: 'paralysed (Fort negates)', src: 'gloves' }]);
+  const st = applyPatches(c, { battle: c.battle!, character: c.character }, r.patches, gloves, 'c1');
+  expect(st.battle.log).toHaveLength(1); // attached, not a new entry
+  expect(st.battle.log[0]!.checks).toEqual([{ name: 'Chuul Gloves: paralysis', save: 'fort', dc: 15, effect: 'paralysed (Fort negates)' }]);
+  expect(c.battle!.log[0]!.checks).toBeUndefined(); // immutable
+});
+
 test('a broad emit cascade is stopped by the run cap instead of running away', () => {
   const ids = Array.from({ length: 40 }, (_, i) => `r${i}`);
   const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1' })] });

@@ -92,6 +92,13 @@ test('library functions are callable with named args and share the budget', () =
   expect(computePass(c).bonuses.map((b) => [b.stat, b.value, b.source])).toEqual([['init', 8, 'gloves'], ['ac', 8, 'amulet']]);
 });
 
+test('a library function can return a value for the caller to use inline (not just perform side effects)', () => {
+  const plusOne: FunctionDef = { id: 'plusOne', name: 'Plus one', params: [{ name: 'n', type: 'number', required: true }], source: 'return n + 1;' };
+  const rec = AbilitySchema.parse({ id: 'r', name: 'R', kind: 'feature', scripts: [{ id: 's', source: "bonus('attack', fn.plusOne({ n: 4 }))" }] });
+  const c = ctxWith([rec], { functions: { plusOne } });
+  expect(computePass(c).bonuses.map((b) => [b.stat, b.value, b.source])).toEqual([['attack', 5, 'r']]);
+});
+
 test('per-source params: a script reads its own record\'s choices', () => {
   const rec = (id: string, tag: string) => AbilitySchema.parse({ id, name: id, kind: 'feature', params: { types: { kind: 'tags' } }, scripts: [{ id: 's', source: `if (sel('self.param.types').includes('${tag}')) bonus('init', 1, 'untyped', { as: '${id}' })` }] });
   const a = rec('a', 'aberration');

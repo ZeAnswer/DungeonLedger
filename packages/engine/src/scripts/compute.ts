@@ -179,9 +179,14 @@ export function runOne(ctx: EvalContext, run: RunContext, sink: Sink, patches: P
 
 const startedBudget = () => { const b = new Budget(); b.start(16); return b; };
 
-/** `fn.name({ args })`: compiled library functions sharing this run's sink, patches and budget. Depth-capped at 8. */
-export function fnTable(ctx: EvalContext, run: RunContext, sink: Sink, patches: Patch[], trace: Trace, depth: number, budget: Budget = startedBudget()): Record<string, (args: Record<string, unknown>) => void> {
-  const table: Record<string, (args: Record<string, unknown>) => void> = {};
+/**
+ * `fn.name({ args })`: compiled library functions sharing this run's sink, patches and budget. Depth-capped at 8.
+ * A function's source may perform side effects (`bonus`, `note`…) like `trophy` does, or `return` a value
+ * for the caller to use inline (`dc: fn.trophyDc({ base: 11 })`), or both — whatever the last statement's
+ * `return` (if any) evaluates to is handed back.
+ */
+export function fnTable(ctx: EvalContext, run: RunContext, sink: Sink, patches: Patch[], trace: Trace, depth: number, budget: Budget = startedBudget()): Record<string, (args: Record<string, unknown>) => unknown> {
+  const table: Record<string, (args: Record<string, unknown>) => unknown> = {};
   for (const def of Object.values(ctx.library.functions ?? {})) {
     table[def.id] = (args = {}) => {
       if (depth >= 8) throw new Error(`function call depth exceeded at ${def.id} (recursive?)`);
@@ -194,7 +199,7 @@ export function fnTable(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
         filled[p.name] = v;
       }
       const api = makeApi(ctx, { ...run, args: filled, fns: fnTable(ctx, run, sink, patches, trace, depth + 1, budget) }, sink, patches, trace);
-      compiled.run(api, compiled.noguard ? () => {} : budget.tick);
+      return compiled.run(api, compiled.noguard ? () => {} : budget.tick);
     };
   }
   return table;

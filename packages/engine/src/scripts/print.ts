@@ -354,7 +354,7 @@ const EVENT_OF_TRIGGER: Record<string, ScriptEvent> = {
 };
 
 /** Helpers that change state: legal in an event script, a no-op (and a thrown error) in an always one. */
-const EVENT_ONLY = new Set(['tag', 'grant', 'suppress', 'resource', 'hp', 'reveal']);
+const EVENT_ONLY = new Set(['tag', 'grant', 'suppress', 'resource', 'hp', 'reveal', 'check']);
 export const EVENT_ONLY_WARNING = '// WARNING: event-only helper in an always script; move this to an event';
 
 /**
