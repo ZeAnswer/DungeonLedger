@@ -149,7 +149,7 @@
           "attacks": [
             {
               "attackBonus": 13,
-              "damageFlat": 6,
+              "damageFlat": 8,
               "damageDice": [
                 "1d8"
               ],
@@ -164,7 +164,7 @@
           "attacks": [
             {
               "attackBonus": 13,
-              "damageFlat": 6,
+              "damageFlat": 8,
               "damageDice": [
                 "1d8"
               ],
@@ -173,7 +173,7 @@
             },
             {
               "attackBonus": 8,
-              "damageFlat": 6,
+              "damageFlat": 8,
               "damageDice": [
                 "1d8"
               ],
@@ -188,7 +188,7 @@
           "attacks": [
             {
               "attackBonus": 11,
-              "damageFlat": 6,
+              "damageFlat": 8,
               "damageDice": [
                 "1d8"
               ],
@@ -197,7 +197,7 @@
             },
             {
               "attackBonus": 11,
-              "damageFlat": 6,
+              "damageFlat": 8,
               "damageDice": [
                 "1d8"
               ],
@@ -206,7 +206,7 @@
             },
             {
               "attackBonus": 6,
-              "damageFlat": 6,
+              "damageFlat": 8,
               "damageDice": [
                 "1d8"
               ],
@@ -228,8 +228,8 @@
         "hp.max": 50,
         "ability.str": 14,
         "ability.con": 12,
-        "skill.spot": 13,
-        "skill.survival": 16,
+        "skill.spot": 15,
+        "skill.survival": 18,
         "skill.swim": 9,
         "skill.knowledge-monsters": 12
       },
@@ -290,7 +290,7 @@
           "attacks": [
             {
               "attackBonus": 14,
-              "damageFlat": 7,
+              "damageFlat": 9,
               "damageDice": [
                 "1d8"
               ],
@@ -305,7 +305,7 @@
           "attacks": [
             {
               "attackBonus": 14,
-              "damageFlat": 7,
+              "damageFlat": 9,
               "damageDice": [
                 "1d8"
               ],
@@ -314,7 +314,7 @@
             },
             {
               "attackBonus": 9,
-              "damageFlat": 7,
+              "damageFlat": 9,
               "damageDice": [
                 "1d8"
               ],
@@ -329,7 +329,7 @@
           "attacks": [
             {
               "attackBonus": 12,
-              "damageFlat": 7,
+              "damageFlat": 9,
               "damageDice": [
                 "1d8"
               ],
@@ -338,7 +338,7 @@
             },
             {
               "attackBonus": 12,
-              "damageFlat": 7,
+              "damageFlat": 9,
               "damageDice": [
                 "1d8"
               ],
@@ -347,7 +347,7 @@
             },
             {
               "attackBonus": 7,
-              "damageFlat": 7,
+              "damageFlat": 9,
               "damageDice": [
                 "1d8"
               ],
@@ -369,8 +369,8 @@
         "hp.max": 50,
         "ability.str": 14,
         "ability.con": 12,
-        "skill.spot": 13,
-        "skill.survival": 16,
+        "skill.spot": 15,
+        "skill.survival": 18,
         "skill.swim": 9,
         "skill.knowledge-monsters": 12
       },
@@ -431,7 +431,7 @@
           "attacks": [
             {
               "attackBonus": 21,
-              "damageFlat": 8,
+              "damageFlat": 4,
               "damageDice": [
                 "1d8"
               ],
@@ -446,7 +446,7 @@
           "attacks": [
             {
               "attackBonus": 21,
-              "damageFlat": 8,
+              "damageFlat": 4,
               "damageDice": [
                 "1d8"
               ],
@@ -455,7 +455,7 @@
             },
             {
               "attackBonus": 16,
-              "damageFlat": 8,
+              "damageFlat": 4,
               "damageDice": [
                 "1d8"
               ],
@@ -470,7 +470,7 @@
           "attacks": [
             {
               "attackBonus": 19,
-              "damageFlat": 8,
+              "damageFlat": 4,
               "damageDice": [
                 "1d8"
               ],
@@ -479,7 +479,7 @@
             },
             {
               "attackBonus": 19,
-              "damageFlat": 8,
+              "damageFlat": 4,
               "damageDice": [
                 "1d8"
               ],
@@ -488,7 +488,7 @@
             },
             {
               "attackBonus": 14,
-              "damageFlat": 8,
+              "damageFlat": 4,
               "damageDice": [
                 "1d8"
               ],
@@ -504,14 +504,14 @@
         "ac.flatFooted": 14,
         "save.fort": 7,
         "save.ref": 9,
-        "save.will": 6,
+        "save.will": 4,
         "init": 7,
         "speed": 30,
         "hp.max": 50,
         "ability.str": 14,
         "ability.con": 12,
-        "skill.spot": 15,
-        "skill.survival": 18,
+        "skill.spot": 11,
+        "skill.survival": 14,
         "skill.swim": 9,
         "skill.knowledge-monsters": 12
       },

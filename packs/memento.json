@@ -1,7 +1,7 @@
 {
   "id": "memento",
   "name": "Memento (Ranger 5 / Monster Hunter 1)",
-  "version": 13,
+  "version": 14,
   "description": "Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor's Monsters' Manual.",
   "tags": [
     {
@@ -171,14 +171,14 @@
     {
       "id": "memento-formido",
       "name": "Memento Formido",
-      "text": "Memory fragment: +2 Will vs any monster of your favored enemy or Monster Killer types.",
+      "text": "+2 Will vs your favored enemy and Monster Killer types (taken from those records).",
       "scripts": [
         {
           "id": "will",
           "events": [
             "always"
           ],
-          "source": "if (target.isOneOf(params.types)) {\n  bonus('save.will', 2);\n}",
+          "source": "const types = [...player.paramsOf('favored-enemy-1').types, ...player.paramsOf('favored-enemy-2').types, ...player.paramsOf('monster-killer').types];\nif (target.isOneOf(types)) bonus('save.will', 2);",
           "enabled": true,
           "priority": 0
         }
@@ -186,13 +186,6 @@
       "kind": "feature",
       "acquired": {
         "kind": "dm"
-      },
-      "params": {
-        "types": {
-          "kind": "tags",
-          "label": "Favored + Monster Killer types",
-          "category": "creatureType"
-        }
       },
       "enabledByDefault": true,
       "activations": [],
@@ -251,13 +244,6 @@
       "acquired": {
         "kind": "class"
       },
-      "params": {
-        "types": {
-          "kind": "tags",
-          "label": "Monster Killer types",
-          "category": "creatureType"
-        }
-      },
       "enabledByDefault": true,
       "activations": [
         {
@@ -286,7 +272,7 @@
               "events": [
                 "always"
               ],
-              "source": "if (target.isOneOf(params.types)) {\n  need(target.hurt >= HURT.BLOODIED, 'target is bloodied or worse');\n  note(`MONSTER BLOW: on hit, Fort DC = damage + ${player.classes['monster-hunter'] + player.mod.wis} or die.`);\n}",
+              "source": "if (target.isOneOf(player.paramsOf('monster-killer').types)) {\n  need(target.hurt >= HURT.BLOODIED, 'target is bloodied or worse');\n  note(`MONSTER BLOW: on hit, Fort DC = damage + ${player.classes['monster-hunter'] + player.mod.wis} or die.`);\n}",
               "enabled": true,
               "priority": 0
             }
@@ -1175,7 +1161,7 @@
           "enabled": true,
           "paramValues": {
             "types": [
-              "monstrous-humanoid"
+              "aberration"
             ]
           }
         },
@@ -1184,7 +1170,7 @@
           "enabled": true,
           "paramValues": {
             "types": [
-              "aberration"
+              "outsider"
             ]
           }
         },
@@ -1246,13 +1232,7 @@
         {
           "abilityId": "memento-formido",
           "enabled": true,
-          "paramValues": {
-            "types": [
-              "monstrous-humanoid",
-              "aberration",
-              "magical-beast"
-            ]
-          }
+          "paramValues": {}
         },
         {
           "abilityId": "the-shit-ive-seen",
@@ -1264,22 +1244,17 @@
           "enabled": true,
           "paramValues": {
             "types": [
-              "monstrous-humanoid",
               "aberration",
-              "magical-beast"
+              "dragon",
+              "giant",
+              "construct"
             ]
           }
         },
         {
           "abilityId": "monster-blow",
           "enabled": true,
-          "paramValues": {
-            "types": [
-              "monstrous-humanoid",
-              "aberration",
-              "magical-beast"
-            ]
-          }
+          "paramValues": {}
         },
         {
           "abilityId": "trophy-crafting",

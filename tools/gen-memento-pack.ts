@@ -4,7 +4,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { PackSchema, type Pack } from '../packages/engine/src/schema';
-import { UNTIL_MY_NEXT_TURN } from '../packages/engine/src/scripts/units';
+import { THIS_ATTACK, UNTIL_MY_NEXT_TURN } from '../packages/engine/src/scripts/units';
 
 const rpgscribePath = new URL('./data/memento-rpgscribe.json', import.meta.url);
 const rpgscribe = existsSync(rpgscribePath) ? JSON.parse(readFileSync(rpgscribePath, 'utf8')) : undefined;
@@ -53,12 +53,13 @@ const equippedAbilities = new Set(inventory.filter((i) => i.equipped).map((i) =>
 const linkedAbilities = new Set(inventory.map((i) => i.abilityId));
 
 const KD_TABLE = [{ upTo: 15, value: 1 }, { upTo: 25, value: 2 }, { upTo: 30, value: 3 }, { upTo: 35, value: 4 }, { value: 5 }];
-const MK = { kind: 'param', name: 'types', includesTargetTag: true } as const;
+/** Monster Killer's chosen types, read from that record so callers never re-collect the same choice. */
+const monsterKillerTypes = "player.paramsOf('monster-killer').types";
 
 const pack: Pack = PackSchema.parse({
   id: 'memento',
   name: 'Memento (Ranger 5 / Monster Hunter 1)',
-  version: 13, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
+  version: 14, // bump when regenerating so installed apps merge the new abilities (the stored character is never overwritten)
   description: 'Memento the archer: homebrew Monster Hunter prestige class, DM-granted memories, items, trophies, Vaelor\'s Monsters\' Manual.',
   // Library functions: shared script bodies with typed parameters, called as `fn.<id>({ … })` from a
   // record's script (or from a stored `call`, which compiles to the same thing). `haste` and
@@ -138,10 +139,12 @@ const pack: Pack = PackSchema.parse({
       ],
     },
     {
-      id: 'memento-formido', name: 'Memento Formido', source: 'memory',
-      text: 'Memory fragment: +2 Will vs any monster of your favored enemy or Monster Killer types.',
-      params: { types: { kind: 'tags', label: 'Favored + Monster Killer types', category: 'creatureType' } },
-      effects: [{ id: 'will', when: MK, do: [{ kind: 'bonus', to: 'save.will', value: 2 }] }],
+      id: 'memento-formido', name: 'Memento Formido', kind: 'feature', acquired: { kind: 'dm' },
+      text: '+2 Will vs your favored enemy and Monster Killer types (taken from those records).',
+      scripts: [{
+        id: 'will', events: ['always'],
+        source: "const types = [...player.paramsOf('favored-enemy-1').types, ...player.paramsOf('favored-enemy-2').types, ...player.paramsOf('monster-killer').types];\nif (target.isOneOf(types)) bonus('save.will', 2);",
+      }],
     },
     { id: 'the-shit-ive-seen', name: 'The Shit I\'ve Seen', source: 'feat', text: '+4 Survival.', effects: [{ id: 's', do: [{ kind: 'bonus', to: 'skill.survival', value: 4 }] }] },
     // ---- Monster Hunter class ----
@@ -153,18 +156,19 @@ const pack: Pack = PackSchema.parse({
       effects: [],
     },
     {
-      id: 'monster-blow', name: 'Monster Blow', source: 'class', activation: 'declare',
+      id: 'monster-blow', name: 'Monster Blow', kind: 'feature', acquired: { kind: 'class' },
       text: 'Declare before the attack roll. Target must be a Monster Killer type and below 50% HP. On hit: Fortitude save DC = damage dealt + MH level + Wis mod or die.',
-      params: { types: { kind: 'tags', label: 'Monster Killer types', category: 'creatureType' } },
-      resources: [{ id: 'monster-blow', label: 'Monster Blow', max: '1 + floor(classLevel(monster-hunter) / 5) + floor(classLevel(monster-hunter) / 8)', per: 'day' }],
-      effects: [
-        {
-          id: 'declared', label: 'Monster Blow',
-          when: { kind: 'all', of: [{ kind: 'toggle', id: 'monster-blow' }, MK, { kind: 'target.hurtAtMost', hurt: 'bloodied' }] },
-          do: [{ kind: 'note', text: 'MONSTER BLOW: on hit, Fort DC = damage + {classLevel(monster-hunter) + wisMod} or die.' }],
-        },
-        { id: 'use', trigger: 'onUse', do: [{ kind: 'consume', resourceId: 'monster-blow' }] },
-      ],
+      activations: [{
+        id: 'monster-blow', action: 'free', duration: THIS_ATTACK,
+        charges: { max: '1 + floor(classLevel(monster-hunter) / 5) + floor(classLevel(monster-hunter) / 8)', resetOn: 'day', label: 'Monster Blow' },
+        scripts: [
+          { id: 'use', events: ['use'], source: "charges('monster-blow').use();" },
+          {
+            id: 'declared', label: 'Monster Blow', events: ['always'],
+            source: "if (target.isOneOf(" + monsterKillerTypes + ")) {\n  need(target.hurt >= HURT.BLOODIED, 'target is bloodied or worse');\n  note(`MONSTER BLOW: on hit, Fort DC = damage + ${player.classes['monster-hunter'] + player.mod.wis} or die.`);\n}",
+          },
+        ],
+      }],
     },
     {
       id: 'trophy-crafting', name: 'Trophy Crafting', source: 'class',
@@ -265,15 +269,15 @@ const pack: Pack = PackSchema.parse({
     },
     attackProfiles: [],
     abilities: [
-      { abilityId: 'favored-enemy-1', paramValues: { types: ['monstrous-humanoid'] } },
-      { abilityId: 'favored-enemy-2', paramValues: { types: ['aberration'] } },
+      { abilityId: 'favored-enemy-1', paramValues: { types: ['aberration'] } },
+      { abilityId: 'favored-enemy-2', paramValues: { types: ['outsider'] } },
       { abilityId: 'track' }, { abilityId: 'endurance' }, { abilityId: 'wild-empathy', enabled: false },
       { abilityId: 'point-blank-shot' }, { abilityId: 'rapid-shot' }, { abilityId: 'weapon-focus-longbow' }, { abilityId: 'ranger-spells' },
       { abilityId: 'woodland-archer' }, { abilityId: 'knowledge-devotion' }, { abilityId: 'distracting-attack' },
-      { abilityId: 'memento-aqua' }, { abilityId: 'memento-formido', paramValues: { types: ['monstrous-humanoid', 'aberration', 'magical-beast'] } },
+      { abilityId: 'memento-aqua' }, { abilityId: 'memento-formido' },
       { abilityId: 'the-shit-ive-seen' },
-      { abilityId: 'monster-killer', paramValues: { types: ['monstrous-humanoid', 'aberration', 'magical-beast'] } },
-      { abilityId: 'monster-blow', paramValues: { types: ['monstrous-humanoid', 'aberration', 'magical-beast'] } },
+      { abilityId: 'monster-killer', paramValues: { types: ['aberration', 'dragon', 'giant', 'construct'] } },
+      { abilityId: 'monster-blow' },
       { abilityId: 'trophy-crafting' }, { abilityId: 'monster-lore', enabled: false },
       ...[...linkedAbilities].map((abilityId) => ({ abilityId, enabled: equippedAbilities.has(abilityId) })),
       { abilityId: 'gargoyle-bracers', enabled: false }, { abilityId: 'rider-ring', enabled: false }, { abilityId: 'medusa-mask', enabled: false }, { abilityId: 'shield-amulet', enabled: false },
