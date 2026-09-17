@@ -151,7 +151,7 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
                 </button>
                 {a.damage.dice.length > 1 && <div className="mt-1 text-xs text-zinc-400">{a.damage.dice.map((d) => `${d.dice} ${d.label}${d.damageType ? ` (${d.damageType})` : ''}`).join(' · ')}</div>}
                 {/* Keyed on target + round: a stale "rolled N" from a previous target or round must not carry over. */}
-                {concealReason && <ConcealmentLine key={`${target?.id}-${battle.round}`} reason={concealReason} pierced={a.ignoreConcealment} />}
+                {concealReason && <ConcealmentLine key={`${target?.id}-${battle.round}-${concealReason}`} reason={concealReason} pierced={a.ignoreConcealment} />}
                 {target && !target.dead && (
                   <div className="mt-2 grid grid-cols-3 gap-2">
                     <Button variant="success" onClick={() => record(a, 'hit')}>Hit</Button>

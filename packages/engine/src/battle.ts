@@ -219,6 +219,7 @@ function expired(c: Conditioned, newRound: number): boolean {
 export function nextRound(ctx: EvalContext): State {
   if (!ctx.battle) throw new Error('No battle');
   let state = stateOf(ctx);
+  // roundEnd fires before the next round's event is appended, so it has no eventId: a check() there attaches nowhere (dropped, never mis-attached).
   state = runTriggers(ctx, state, 'roundEnd', { ...(ctx.target ? { targetId: ctx.target.id } : {}) });
   const round = state.battle.round + 1;
   const battle: Battle = {
