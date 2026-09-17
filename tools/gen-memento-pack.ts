@@ -9,13 +9,16 @@ import { THIS_ATTACK, UNTIL_MY_NEXT_TURN } from '../packages/engine/src/scripts/
 const rpgscribePath = new URL('./data/memento-rpgscribe.json', import.meta.url);
 const rpgscribe = existsSync(rpgscribePath) ? JSON.parse(readFileSync(rpgscribePath, 'utf8')) : undefined;
 const FEAT_ALIAS: Record<string, string> = { 'track?': 'track', 'weapon-focus?': 'weapon-focus-ranged', 'rapid-shot?': 'rapid-shot', 'point-blank-shot?': 'point-blank-shot', 'favored-enemy': 'favored-enemy-1', '2nd-favored-enemy': 'favored-enemy-2', 'knowledge-devotion': 'knowledge-devotion', 'woodland-archer': 'woodland-archer' };
+// tools/data/memento-rpgscribe.json is a frozen import (no source XML in the repo to rerun rpgscribe-import.ts
+// against), so the five skill uuids it couldn't resolve are fixed up here rather than in that table.
+const SKILL_ALIAS: Record<string, string> = { 'unknown-d11c1603': 'handle-animal', 'unknown-700ac2f3': 'knowledge-dungeoneering', 'unknown-d80de6a9': 'knowledge-nature', 'unknown-ecb3ca28': 'search', 'unknown-40ad06c4': 'knowledge-arcana' };
 // Class features vs general feats. RPG Scribe lists both under "feats"; general feat slots are level 1 (x2, human), 3, 6.
 const CLASS_FEATURES = new Set(['track', 'favored-enemy-1', 'favored-enemy-2', 'rapid-shot', 'endurance', 'wild-empathy', 'ranger-spells', 'distracting-attack', 'monster-killer', 'monster-blow', 'trophy-crafting']);
 const RANGER_FEATURES: Record<number, string[]> = { 1: ['favored-enemy-1', 'track', 'wild-empathy'], 2: ['rapid-shot'], 3: ['endurance'], 4: ['distracting-attack', 'ranger-spells'], 5: ['favored-enemy-2'] };
 const MH_FEATURES: Record<number, string[]> = { 1: ['monster-killer', 'monster-blow', 'trophy-crafting'] };
 const HP_ROLLS: Record<number, number> = { 5: 6, 6: 6 }; // export stores "1" for levels 5-6; player states rolled total 44 → 32 + 12
 const EXTRA_FEATS: Record<number, string[]> = { 1: ['point-blank-shot'], 3: ['knowledge-devotion'] }; // not in export history; guessed slots
-const levelHistory = (rpgscribe?.levelHistory ?? []).map((r: { level: number; classId: string; hpRolled: number; featsTaken: string[]; notes?: string }) => {
+const levelHistory = (rpgscribe?.levelHistory ?? []).map((r: { level: number; classId: string; hpRolled: number; featsTaken: string[]; notes?: string; skillPointsSpent?: Record<string, number> }) => {
   const all = r.featsTaken.map((f) => (f === 'favored-enemy' && r.level > 1 ? 'favored-enemy-2' : FEAT_ALIAS[f] ?? f));
   const classLevel = r.classId === 'ranger' ? r.level : r.level - 5;
   const features = new Set([...(r.classId === 'ranger' ? RANGER_FEATURES[classLevel] ?? [] : MH_FEATURES[classLevel] ?? []), ...all.filter((f) => CLASS_FEATURES.has(f))]);
@@ -24,6 +27,8 @@ const levelHistory = (rpgscribe?.levelHistory ?? []).map((r: { level: number; cl
     hpRolled: HP_ROLLS[r.level] ?? r.hpRolled,
     featsTaken: [...all.filter((f) => !CLASS_FEATURES.has(f)), ...(EXTRA_FEATS[r.level] ?? [])],
     featuresGained: [...features],
+    // Ranks on the character sheet are the source of truth; this per-level ledger just stops showing unknown-* labels.
+    ...(r.skillPointsSpent ? { skillPointsSpent: Object.fromEntries(Object.entries(r.skillPointsSpent).map(([k, v]) => [SKILL_ALIAS[k] ?? k, v])) } : {}),
     notes: [r.notes, HP_ROLLS[r.level] ? 'HP roll guessed (export unclear); total of levels 5+6 is 12' : '', EXTRA_FEATS[r.level] ? `${EXTRA_FEATS[r.level]!.join(', ')}: slot guessed, not in RPG Scribe history` : ''].filter(Boolean).join(' · ') || undefined,
   };
 });
@@ -55,6 +60,9 @@ const linkedAbilities = new Set(inventory.map((i) => i.abilityId));
 const KD_TABLE = [{ upTo: 15, value: 1 }, { upTo: 25, value: 2 }, { upTo: 30, value: 3 }, { upTo: 35, value: 4 }, { value: 5 }];
 /** Monster Killer's chosen types, read from that record so callers never re-collect the same choice. */
 const monsterKillerTypes = "player.paramsOf('monster-killer').types";
+// Favored enemy (1st/2nd) plus Monster Killer's chosen types, unioned — shared by every record whose
+// trigger is "any of your favored enemy or Monster Killer types" (Formido, Vaelor Aura, Astra Vindicta).
+const declareFavoredAndMkTypes = "const types = [...player.paramsOf('favored-enemy-1').types, ...player.paramsOf('favored-enemy-2').types, ...player.paramsOf('monster-killer').types];";
 
 const pack: Pack = PackSchema.parse({
   id: 'memento',
@@ -143,7 +151,7 @@ const pack: Pack = PackSchema.parse({
       text: '+2 Will vs your favored enemy and Monster Killer types (taken from those records).',
       scripts: [{
         id: 'will', events: ['always'],
-        source: "const types = [...player.paramsOf('favored-enemy-1').types, ...player.paramsOf('favored-enemy-2').types, ...player.paramsOf('monster-killer').types];\nif (target.isOneOf(types)) bonus('save.will', 2);",
+        source: declareFavoredAndMkTypes + "\nif (target.isOneOf(types)) bonus('save.will', 2);",
       }],
     },
     { id: 'the-shit-ive-seen', name: 'The Shit I\'ve Seen', source: 'feat', text: '+4 Survival.', effects: [{ id: 's', do: [{ kind: 'bonus', to: 'skill.survival', value: 4 }] }] },
@@ -264,8 +272,9 @@ const pack: Pack = PackSchema.parse({
     hp: { max: 50, current: 50, temp: 0, nonlethal: 0 },
     baseArmor: 0, baseShield: 0, baseNaturalArmor: 0, speed: 30,
     skills: {
-      spot: { ranks: 8 }, hide: { ranks: 7 }, 'move-silently': { ranks: 7 }, survival: { ranks: 7 }, listen: { ranks: 6 }, climb: { ranks: 2 },
-      'knowledge-monsters': { ranks: 8 }, 'craft-taxidermy': { ranks: 6 },
+      climb: { ranks: 2 }, 'craft-taxidermy': { ranks: 8 }, 'handle-animal': { ranks: 8 }, hide: { ranks: 7 },
+      'knowledge-arcana': { ranks: 6, classSkillOverride: true }, 'knowledge-dungeoneering': { ranks: 8 }, 'knowledge-nature': { ranks: 8 }, 'knowledge-monsters': { ranks: 6 },
+      listen: { ranks: 7 }, 'move-silently': { ranks: 7 }, search: { ranks: 6 }, spot: { ranks: 8 }, survival: { ranks: 7 },
     },
     attackProfiles: [],
     abilities: [
@@ -295,10 +304,9 @@ const pack: Pack = PackSchema.parse({
       'TODO confirm: Monster Killer 3 types. Guessed monstrous humanoid + aberration + magical beast (MH says Monstrous Humanoid costs 2 picks).',
       'TODO confirm: system feats from export (1109FFDC, 3A4A00BD, 4DEAF3B6, B186BA2D+weapon). Guessed Point Blank Shot (human bonus, lvl 1), Rapid Shot (combat style), Track, Weapon Focus (lvl 1). Knowledge Devotion assumed to be the level-3 feat. General feat slots used: lvl1 ×2, lvl3, lvl6 (Woodland Archer).',
       'Ranger spells: 1 first-level spell/day (0 base + Wis bonus). Spells known are unresolved UUIDs in the export; edit vars.rangerSpells1 if different.',
-      'Knowledge (Monsters) is Wis-based per the class PDF; cap = MH level + 5 (6 now). Export shows 8 ranks: check with DM.',
-      'TODO confirm: 4 unknown skills with ranks 8/8/8/7 and one class-skill override with 6 (export uuids D11C1603, 700AC2F3, D80DE6A9, ECB3CA28, 40AD06C4).',
+      'Knowledge (Monsters) is Wis-based per the class PDF; cap = MH level + 5 (6 now).',
+      'Skills are the player\'s authoritative list, not the raw export. The five uuids the export left unresolved (D11C1603, 700AC2F3, D80DE6A9, ECB3CA28, 40AD06C4) are Handle Animal, Knowledge (Dungeoneering), Knowledge (Nature), Search and Knowledge (Arcana); the level ledger\'s per-level skillPointsSpent uses those names now, but does not sum to the ranks above exactly (the export itself had unspent/overspent notes) — the ranks are the truth, the ledger stays as recorded.',
       'Skill ranks = export value / 2 (export stores half-ranks). Human: +1 skill point/level (matches 40 points at level 1).',
-      'Level ledger imported from RPG Scribe (tools/rpgscribe-import.ts); unknown-* skills are the 5 unresolved ones above.',
       'Ability scores are base values (RPG Scribe raw); the Belt of Strength adds +2 STR as an enhancement bonus on top.',
       'Trophies worn: only Chuul Gloves enabled; enable others in Character > Abilities if worn.',
     ].join('\n'),

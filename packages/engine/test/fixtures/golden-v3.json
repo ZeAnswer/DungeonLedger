@@ -91,7 +91,7 @@
         "skill.spot": 11,
         "skill.survival": 14,
         "skill.swim": 9,
-        "skill.knowledge-monsters": 12
+        "skill.knowledge-monsters": 10
       },
       "actions": [
         {
@@ -231,7 +231,7 @@
         "skill.spot": 15,
         "skill.survival": 18,
         "skill.swim": 9,
-        "skill.knowledge-monsters": 12
+        "skill.knowledge-monsters": 10
       },
       "actions": [
         {
@@ -372,7 +372,7 @@
         "skill.spot": 15,
         "skill.survival": 18,
         "skill.swim": 9,
-        "skill.knowledge-monsters": 12
+        "skill.knowledge-monsters": 10
       },
       "actions": [
         {
@@ -513,7 +513,7 @@
         "skill.spot": 11,
         "skill.survival": 14,
         "skill.swim": 9,
-        "skill.knowledge-monsters": 12
+        "skill.knowledge-monsters": 10
       },
       "actions": [
         {

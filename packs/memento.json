@@ -1129,29 +1129,45 @@
       "baseNaturalArmor": 0,
       "speed": 30,
       "skills": {
-        "spot": {
+        "climb": {
+          "ranks": 2
+        },
+        "craft-taxidermy": {
+          "ranks": 8
+        },
+        "handle-animal": {
           "ranks": 8
         },
         "hide": {
           "ranks": 7
         },
+        "knowledge-arcana": {
+          "ranks": 6,
+          "classSkillOverride": true
+        },
+        "knowledge-dungeoneering": {
+          "ranks": 8
+        },
+        "knowledge-nature": {
+          "ranks": 8
+        },
+        "knowledge-monsters": {
+          "ranks": 6
+        },
+        "listen": {
+          "ranks": 7
+        },
         "move-silently": {
           "ranks": 7
         },
-        "survival": {
-          "ranks": 7
-        },
-        "listen": {
+        "search": {
           "ranks": 6
         },
-        "climb": {
-          "ranks": 2
-        },
-        "knowledge-monsters": {
+        "spot": {
           "ranks": 8
         },
-        "craft-taxidermy": {
-          "ranks": 6
+        "survival": {
+          "ranks": 7
         }
       },
       "attackProfiles": [],
@@ -1383,10 +1399,10 @@
           "classId": "ranger",
           "hpRolled": 8,
           "skillPointsSpent": {
-            "unknown-d11c1603": 4,
-            "unknown-700ac2f3": 4,
-            "unknown-d80de6a9": 4,
-            "unknown-ecb3ca28": 4,
+            "handle-animal": 4,
+            "knowledge-dungeoneering": 4,
+            "knowledge-nature": 4,
+            "search": 4,
             "hide": 4,
             "spot": 4,
             "listen": 4,
@@ -1411,9 +1427,9 @@
           "classId": "ranger",
           "hpRolled": 8,
           "skillPointsSpent": {
-            "unknown-d11c1603": 1,
-            "unknown-d80de6a9": 1,
-            "unknown-ecb3ca28": 1,
+            "handle-animal": 1,
+            "knowledge-nature": 1,
+            "search": 1,
             "spot": 1,
             "move-silently": 1,
             "climb": 2,
@@ -1447,11 +1463,11 @@
           "classId": "ranger",
           "hpRolled": 8,
           "skillPointsSpent": {
-            "unknown-d11c1603": 1,
-            "unknown-700ac2f3": 2,
-            "unknown-d80de6a9": 1,
-            "unknown-ecb3ca28": 1,
-            "unknown-40ad06c4": 1,
+            "handle-animal": 1,
+            "knowledge-dungeoneering": 2,
+            "knowledge-nature": 1,
+            "search": 1,
+            "knowledge-arcana": 1,
             "spot": 1,
             "listen": 1,
             "survival": 1,
@@ -1470,10 +1486,10 @@
           "classId": "ranger",
           "hpRolled": 6,
           "skillPointsSpent": {
-            "unknown-d11c1603": 1,
-            "unknown-700ac2f3": 2,
-            "unknown-d80de6a9": 2,
-            "unknown-ecb3ca28": 1,
+            "handle-animal": 1,
+            "knowledge-dungeoneering": 2,
+            "knowledge-nature": 2,
+            "search": 1,
             "hide": 2,
             "spot": 2,
             "listen": 1,
@@ -1640,7 +1656,7 @@
         "trophyMultiplier": 1,
         "rangerSpells1": 1
       },
-      "notes": "Bow: Strong-Arm Composite Longbow +1 (DM homebrew: Str to damage up to +4). Armor: studded leather +3. No melee weapon. Bracers of Armor +1 carried, not worn (arms slot: Bracers of Archery; would not stack with armor anyway).\nTODO confirm: favored enemy types (export params 321140E5, E6E711CC), which one is +4.\nTODO confirm: Monster Killer 3 types. Guessed monstrous humanoid + aberration + magical beast (MH says Monstrous Humanoid costs 2 picks).\nTODO confirm: system feats from export (1109FFDC, 3A4A00BD, 4DEAF3B6, B186BA2D+weapon). Guessed Point Blank Shot (human bonus, lvl 1), Rapid Shot (combat style), Track, Weapon Focus (lvl 1). Knowledge Devotion assumed to be the level-3 feat. General feat slots used: lvl1 ×2, lvl3, lvl6 (Woodland Archer).\nRanger spells: 1 first-level spell/day (0 base + Wis bonus). Spells known are unresolved UUIDs in the export; edit vars.rangerSpells1 if different.\nKnowledge (Monsters) is Wis-based per the class PDF; cap = MH level + 5 (6 now). Export shows 8 ranks: check with DM.\nTODO confirm: 4 unknown skills with ranks 8/8/8/7 and one class-skill override with 6 (export uuids D11C1603, 700AC2F3, D80DE6A9, ECB3CA28, 40AD06C4).\nSkill ranks = export value / 2 (export stores half-ranks). Human: +1 skill point/level (matches 40 points at level 1).\nLevel ledger imported from RPG Scribe (tools/rpgscribe-import.ts); unknown-* skills are the 5 unresolved ones above.\nAbility scores are base values (RPG Scribe raw); the Belt of Strength adds +2 STR as an enhancement bonus on top.\nTrophies worn: only Chuul Gloves enabled; enable others in Character > Abilities if worn."
+      "notes": "Bow: Strong-Arm Composite Longbow +1 (DM homebrew: Str to damage up to +4). Armor: studded leather +3. No melee weapon. Bracers of Armor +1 carried, not worn (arms slot: Bracers of Archery; would not stack with armor anyway).\nTODO confirm: favored enemy types (export params 321140E5, E6E711CC), which one is +4.\nTODO confirm: Monster Killer 3 types. Guessed monstrous humanoid + aberration + magical beast (MH says Monstrous Humanoid costs 2 picks).\nTODO confirm: system feats from export (1109FFDC, 3A4A00BD, 4DEAF3B6, B186BA2D+weapon). Guessed Point Blank Shot (human bonus, lvl 1), Rapid Shot (combat style), Track, Weapon Focus (lvl 1). Knowledge Devotion assumed to be the level-3 feat. General feat slots used: lvl1 ×2, lvl3, lvl6 (Woodland Archer).\nRanger spells: 1 first-level spell/day (0 base + Wis bonus). Spells known are unresolved UUIDs in the export; edit vars.rangerSpells1 if different.\nKnowledge (Monsters) is Wis-based per the class PDF; cap = MH level + 5 (6 now).\nSkills are the player's authoritative list, not the raw export. The five uuids the export left unresolved (D11C1603, 700AC2F3, D80DE6A9, ECB3CA28, 40AD06C4) are Handle Animal, Knowledge (Dungeoneering), Knowledge (Nature), Search and Knowledge (Arcana); the level ledger's per-level skillPointsSpent uses those names now, but does not sum to the ranks above exactly (the export itself had unspent/overspent notes) — the ranks are the truth, the ledger stays as recorded.\nSkill ranks = export value / 2 (export stores half-ranks). Human: +1 skill point/level (matches 40 points at level 1).\nAbility scores are base values (RPG Scribe raw); the Belt of Strength adds +2 STR as an enhancement bonus on top.\nTrophies worn: only Chuul Gloves enabled; enable others in Character > Abilities if worn."
     }
   ],
   "functions": [
