@@ -3,14 +3,14 @@ import { ItemCategorySchema, MonsterSchema, TagSchema, type Ability, type Monste
 import { useStore } from '../store/store';
 import { Button, Chip, Field, Sheet, cx, humanize, inputCls } from '../components/ui';
 import { RecordEditor, freshRecord } from '../components/library/RecordEditor';
-import { GlobalsTab } from '../components/library/GlobalsTab';
+import { VariablesTab } from '../components/library/VariablesTab';
 import { FunctionsTab } from '../components/library/FunctionsTab';
 
 const CATEGORIES = ['creatureType', 'subtype', 'habitat', 'condition', 'custom'] as const;
 const SIZES: Size[] = ['fine', 'diminutive', 'tiny', 'small', 'medium', 'large', 'huge', 'gargantuan', 'colossal'];
 
 type Tab = RecordKind | 'tags' | 'monsters' | 'globals' | 'functions';
-const TABS: { id: Tab; label: string }[] = [{ id: 'feature', label: 'Features' }, { id: 'item', label: 'Items' }, { id: 'spell', label: 'Spells' }, { id: 'status', label: 'Statuses' }, { id: 'tags', label: 'Tags' }, { id: 'monsters', label: 'Monsters' }, { id: 'globals', label: 'Globals' }, { id: 'functions', label: 'Functions' }];
+const TABS: { id: Tab; label: string }[] = [{ id: 'feature', label: 'Features' }, { id: 'item', label: 'Items' }, { id: 'spell', label: 'Spells' }, { id: 'status', label: 'Statuses' }, { id: 'tags', label: 'Tags' }, { id: 'monsters', label: 'Monsters' }, { id: 'globals', label: 'Variables' }, { id: 'functions', label: 'Functions' }];
 
 export function LibraryScreen() {
   const [tab, setTab] = useState<Tab>(() => { try { return (localStorage.getItem('hl.libraryTab') as Tab) || 'feature'; } catch { return 'feature'; } });
@@ -21,7 +21,7 @@ export function LibraryScreen() {
       <div className="mb-3 flex gap-1 overflow-x-auto rounded-xl bg-zinc-900 p-1">
         {TABS.map((t) => <button key={t.id} type="button" onClick={() => pick(t.id)} className={cx('flex-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-sm', tab === t.id ? 'bg-zinc-700 text-white' : 'text-zinc-400')}>{t.label}</button>)}
       </div>
-      {tab === 'tags' ? <Tags /> : tab === 'monsters' ? <Monsters /> : tab === 'globals' ? <GlobalsTab /> : tab === 'functions' ? <FunctionsTab /> : <RecordsTab key={tab} kind={tab} />}
+      {tab === 'tags' ? <Tags /> : tab === 'monsters' ? <Monsters /> : tab === 'globals' ? <VariablesTab /> : tab === 'functions' ? <FunctionsTab /> : <RecordsTab key={tab} kind={tab} />}
     </div>
   );
 }

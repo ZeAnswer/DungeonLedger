@@ -18,7 +18,7 @@ After changing code: run `npm run serve` again; the installed app picks up the n
 ## Where things are edited
 
 - **Library › Features / Items / Spells / Statuses** — one record per row. The editor has a form for the record's own fields and a list of **scripts**: each row is one dropdown for when it runs (`Always` is the compute phase, or one moment — `When I hit`, `Round start`, `Custom…`, …) beside a CodeMirror box for the JavaScript; label, id, the enabled switch and the priority fold behind a `⋯` button. A script can also be stored as a **call** to a library function instead of code — a small link under the box switches either way, and a call row shows a typed form (dropdowns for ability/stat/skill/bonus type/tag/duration/attack kind/…) with no code box at all. Under each script, "Right now" previews what it emits against the live character, battle and target.
-- **Library › Globals** — values shared by every character (`vars.<name>` falls back to them); warns when the active character shadows one.
+- **Library › Variables** — the active character's own `vars`, plus globals shared by every character (`vars.<name>` reads the character's own first, then a shared one); warns when the active character shadows a shared one.
 - **Library › Functions** — shared script bodies with typed parameters, and the records that call them.
 - **Long-press any number** (stats, skills, HP, ability scores, charges, items, switches, prompts) to see the path a script reads it with, with a Copy button.
 - **Settings › Scripts** — safe mode (scripts off; also `?safe=1`, and it turns itself on after two failed starts). **Settings › Script errors** — everything a script threw this session, and any script paused after three failures.

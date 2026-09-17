@@ -260,9 +260,9 @@ fn.trophy({ stat: 'init', base: 4 });                    // in a script's source
 
 Library › Functions edits these: name, description, a parameter table (name, type, label, required) and the body. The same screen lists the records that call each function — through `script.call.fn` or a `fn.<id>(…)` in a source. A record's script switches between "code" and "call a function" with the switch behind the row's `⋯` (or the small link under the box); a row that calls a function shows no code box at all, just the typed form and "Right now". The call form renders one control per parameter type and an ƒx switch that turns any box into a raw expression (`{ "k": "expr" }`); a `path` or `ref` parameter stores `{ "k": "ref" }`.
 
-## Globals
+## Variables
 
-`Pack.globals` and the app's `hl.globals` slice hold values shared by every character: `vars.<name>` reads the character's var first, then the global. `setVar` writes the character's var when it has one, otherwise the global. Library › Globals adds, edits and deletes them and warns when the active character's own var shadows one; they travel in the full backup and in an exported library pack. Importing a pack seeds keys the app does not have yet and keeps the values it does.
+`Character.vars` holds a character's own values; `Pack.globals` and the app's `hl.globals` slice hold values shared by every character. `vars.<name>` reads the character's var first, then the global. `setVar` writes the character's var when it has one, otherwise the global. Library › Variables has two sections: "<character>'s variables" (the active character's own `vars`, writes go through the character) and "Shared by every character" (the globals); the shared section warns when the active character's own var shadows one. Both add, edit and delete rows the same way (number/text/yes-no controls). Globals travel in the full backup and in an exported library pack; importing a pack seeds keys the app does not have yet and keeps the values it does.
 
 ## The loop guard, budgets and `// @noguard`
 
