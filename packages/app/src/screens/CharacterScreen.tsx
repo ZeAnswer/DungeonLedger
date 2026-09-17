@@ -20,7 +20,7 @@ export function statPath(id: string): string {
 const GROUPS: { id: string; title: string; test: (a: Ability) => boolean }[] = [
   { id: 'feats', title: 'Feats', test: (a) => a.kind === 'feature' && a.acquired.kind === 'feat' },
   { id: 'class', title: 'Class abilities', test: (a) => a.kind === 'feature' && (a.acquired.kind === 'class' || a.acquired.kind === 'race') },
-  { id: 'memories', title: 'Memories & DM grants', test: (a) => a.kind === 'feature' && a.acquired.kind === 'dm' },
+  { id: 'memories', title: 'DM grants', test: (a) => a.kind === 'feature' && a.acquired.kind === 'dm' },
   { id: 'spells', title: 'Spells', test: (a) => a.kind === 'spell' },
 ];
 
