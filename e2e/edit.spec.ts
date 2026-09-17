@@ -10,7 +10,11 @@ test('skills: budgeted +/- then accept; JSON override', async ({ page }) => {
   if (await sheet.getByText('Edit stats').isVisible()) { await sheet.getByRole('button', { name: 'Close' }).first().click(); await page.getByRole('button', { name: 'Edit' }).nth(1).click(); }
   await expect(sheet.getByText('Edit skills')).toBeVisible();
   const remaining = sheet.getByText(/Points remaining:/);
-  const before = Number((await remaining.textContent())!.match(/remaining: (\d+)/)![1]);
+  // The seed character's authoritative skill list spends the whole budget (remaining: 0), so every +
+  // button starts disabled; free one point elsewhere first, same as a player over budget would have to.
+  await sheet.getByPlaceholder('Filter skills…').fill('Climb');
+  await sheet.getByRole('button', { name: '−' }).first().click();
+  const before = Number((await remaining.textContent())!.match(/remaining: (-?\d+)/)![1]);
   await sheet.getByPlaceholder('Filter skills…').fill('Spot');
   await sheet.getByRole('button', { name: '+' }).first().click();
   await expect(remaining).toContainText(`remaining: ${before - 1}`);

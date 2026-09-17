@@ -87,7 +87,7 @@ const pack: Pack = PackSchema.parse({
   tags: [
     { id: 'analyzed', label: 'Analyzed (Hunter\'s Analysis)', category: 'condition' },
     { id: 'oversized', label: 'Oversized (above Large)', category: 'custom' },
-    { id: 'has-hurt-me', label: 'Has hurt Memento (Astra Vindicta)', category: 'condition' },
+    { id: 'has-hurt-me', label: 'Has hurt you (Astra Vindicta)', category: 'condition' },
   ],
   skills: [
     { id: 'knowledge-monsters', name: 'Knowledge (Monsters)', ability: 'wis', trainedOnly: true },
