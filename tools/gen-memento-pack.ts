@@ -8,7 +8,7 @@ import { THIS_ATTACK, UNTIL_MY_NEXT_TURN } from '../packages/engine/src/scripts/
 
 const rpgscribePath = new URL('./data/memento-rpgscribe.json', import.meta.url);
 const rpgscribe = existsSync(rpgscribePath) ? JSON.parse(readFileSync(rpgscribePath, 'utf8')) : undefined;
-const FEAT_ALIAS: Record<string, string> = { 'track?': 'track', 'weapon-focus?': 'weapon-focus-ranged', 'rapid-shot?': 'rapid-shot', 'point-blank-shot?': 'point-blank-shot', 'favored-enemy': 'favored-enemy-1', '2nd-favored-enemy': 'favored-enemy-2', 'knowledge-devotion': 'knowledge-devotion', 'woodland-archer': 'woodland-archer' };
+const FEAT_ALIAS: Record<string, string> = { 'track?': 'track', 'weapon-focus?': 'precise-shot', 'rapid-shot?': 'rapid-shot', 'point-blank-shot?': 'point-blank-shot', 'favored-enemy': 'favored-enemy-1', '2nd-favored-enemy': 'favored-enemy-2', 'knowledge-devotion': 'knowledge-devotion', 'woodland-archer': 'woodland-archer' };
 // tools/data/memento-rpgscribe.json is a frozen import (no source XML in the repo to rerun rpgscribe-import.ts
 // against), so the five skill uuids it couldn't resolve are fixed up here rather than in that table.
 const SKILL_ALIAS: Record<string, string> = { 'unknown-d11c1603': 'handle-animal', 'unknown-700ac2f3': 'knowledge-dungeoneering', 'unknown-d80de6a9': 'knowledge-nature', 'unknown-ecb3ca28': 'search', 'unknown-40ad06c4': 'knowledge-arcana' };
@@ -83,6 +83,13 @@ const pack: Pack = PackSchema.parse({
       ],
       source: 'bonus(stat, base * (vars.trophyMultiplier ?? 1), type);',
     },
+    {
+      id: 'trophyDc', name: 'Trophy save DC', description: 'A trophy\'s save DC: base + Monster Hunter level + Wis mod.',
+      params: [
+        { name: 'base', type: 'number', label: 'Base DC', required: true },
+      ],
+      source: "return base + player.classes['monster-hunter'] + player.mod.wis;",
+    },
   ],
   tags: [
     { id: 'analyzed', label: 'Analyzed (Hunter\'s Analysis)', category: 'condition' },
@@ -102,8 +109,6 @@ const pack: Pack = PackSchema.parse({
     },
   ],
   abilities: [
-    // ---- feats bound to gear ----
-    { id: 'weapon-focus-longbow', name: 'Weapon Focus (longbow)', origin: 'feat', sourceRef: 'PHB p.102', text: '+1 on attack rolls with longbows.', effects: [{ id: 'wf', when: { is: 'attack.weapon.tag.longbow' }, do: [{ verb: 'modify', to: 'attack', value: 1 }] }] },
     // ---- DM feats / memories ----
     {
       id: 'woodland-archer', name: 'Woodland Archer', source: 'feat', sourceRef: 'Races of the Wild p.154',
@@ -200,6 +205,13 @@ const pack: Pack = PackSchema.parse({
             id: 'declared', label: 'Monster Blow', events: ['always'],
             source: "if (target.isOneOf(" + monsterKillerTypes + ")) {\n  need(target.hurt >= HURT.BLOODIED, 'target is bloodied or worse');\n  note(`MONSTER BLOW: on hit, Fort DC = damage + ${player.classes['monster-hunter'] + player.mod.wis} or die.`);\n}",
           },
+          // Scoped to the activation, so this only fires while Monster Blow is declared (the chip switched
+          // on) for this attack. Damage isn't known when a hit is logged (the player enters it afterward on
+          // the Log row), so `dc` carries only the MH level + Wis mod half; the effect text says to add damage.
+          {
+            id: 'hit', label: 'Monster Blow', events: ['hit'],
+            source: "if (target.isOneOf(" + monsterKillerTypes + ") && target.hurt >= HURT.BLOODIED) {\n  check('Monster Blow', { save: 'fort', dc: player.classes['monster-hunter'] + player.mod.wis, effect: 'plus damage dealt, or die (Fort negates)' });\n}",
+          },
         ],
       }],
     },
@@ -274,7 +286,10 @@ const pack: Pack = PackSchema.parse({
     // ---- trophies (Monster Hunter) ----
     {
       id: 'chuul-gloves', kind: 'item', item: { category: 'trophy', slot: 'hands' }, name: 'Chuul Gloves (trophy)', text: 'Trophy: +4 initiative (improved initiative); paralysis touch DC 11+, Fort negates.',
-      scripts: [{ id: 'i', events: ['always'], source: "fn.trophy({ stat: 'init', base: 4 });" }],
+      scripts: [
+        { id: 'i', events: ['always'], source: "fn.trophy({ stat: 'init', base: 4 });" },
+        { id: 'paralysis', label: 'Chuul Gloves', events: ['hit'], source: "check('Chuul Gloves: paralysis', { save: 'fort', dc: fn.trophyDc({ base: 11 }), effect: 'paralysed (Fort negates)' });" },
+      ],
     },
     {
       id: 'gargoyle-bracers', kind: 'item', item: { category: 'trophy', slot: 'arms' }, name: 'Gargoyle Bracers (trophy)',
@@ -306,7 +321,7 @@ const pack: Pack = PackSchema.parse({
       { abilityId: 'favored-enemy-1', paramValues: { types: ['aberration'] } },
       { abilityId: 'favored-enemy-2', paramValues: { types: ['outsider'] } },
       { abilityId: 'track' }, { abilityId: 'endurance' }, { abilityId: 'wild-empathy', enabled: false },
-      { abilityId: 'point-blank-shot' }, { abilityId: 'rapid-shot' }, { abilityId: 'weapon-focus-longbow' }, { abilityId: 'ranger-spells' },
+      { abilityId: 'point-blank-shot' }, { abilityId: 'rapid-shot' }, { abilityId: 'precise-shot' }, { abilityId: 'ranger-spells' },
       { abilityId: 'woodland-archer' }, { abilityId: 'knowledge-devotion' }, { abilityId: 'distracting-attack' },
       { abilityId: 'memento-aqua' }, { abilityId: 'memento-formido' }, { abilityId: 'vaelor-aura' }, { abilityId: 'astra-vindicta' },
       { abilityId: 'the-shit-ive-seen' },

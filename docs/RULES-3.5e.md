@@ -32,5 +32,5 @@ Sources: SRD (Ranger, Humans, Hit Points via dandwiki.com/wiki/SRD:*), PHB level
 
 ## Memento's current sheet (level 6, human ranger 5 / MH 1)
 - HP 50 = 44 rolled + 6 × Con +1. Dex 16 includes the level-4 increase.
-- General feat slots: level 1 ×2 (Weapon Focus, Point Blank Shot*), level 3 (Knowledge Devotion*), level 6 (Woodland Archer). *guessed placement.
+- General feat slots: level 1 ×2 (Precise Shot, Point Blank Shot — player-confirmed), level 3 (Knowledge Devotion*), level 6 (Woodland Archer). *guessed placement.
 - Skill points: 40 at level 1 (6 + 3 Int + 1 human, ×4), 10 per level after.

@@ -22,30 +22,6 @@
   ],
   "abilities": [
     {
-      "id": "weapon-focus-longbow",
-      "name": "Weapon Focus (longbow)",
-      "text": "+1 on attack rolls with longbows.",
-      "sourceRef": "PHB p.102",
-      "scripts": [
-        {
-          "id": "wf",
-          "events": [
-            "always"
-          ],
-          "source": "if (attack.weapon.is('longbow')) {\n  bonus('attack', 1);\n}",
-          "enabled": true,
-          "priority": 0
-        }
-      ],
-      "kind": "feature",
-      "acquired": {
-        "kind": "feat"
-      },
-      "enabledByDefault": true,
-      "activations": [],
-      "pools": []
-    },
-    {
       "id": "woodland-archer",
       "name": "Woodland Archer",
       "text": "Adjust for Range: after missing a foe with a ranged attack, +4 on later ranged attacks vs that foe this round (DM ruling: stacks per miss). Pierce the Foliage: after hitting despite concealment, next round your ranged attacks vs that foe ignore that concealment. Moving Sniper: after a successful sniping attack you may move once before re-hiding.",
@@ -340,6 +316,16 @@
                 "always"
               ],
               "source": "if (target.isOneOf(player.paramsOf('monster-killer').types)) {\n  need(target.hurt >= HURT.BLOODIED, 'target is bloodied or worse');\n  note(`MONSTER BLOW: on hit, Fort DC = damage + ${player.classes['monster-hunter'] + player.mod.wis} or die.`);\n}",
+              "enabled": true,
+              "priority": 0
+            },
+            {
+              "id": "hit",
+              "label": "Monster Blow",
+              "events": [
+                "hit"
+              ],
+              "source": "if (target.isOneOf(player.paramsOf('monster-killer').types) && target.hurt >= HURT.BLOODIED) {\n  check('Monster Blow', { save: 'fort', dc: player.classes['monster-hunter'] + player.mod.wis, effect: 'plus damage dealt, or die (Fort negates)' });\n}",
               "enabled": true,
               "priority": 0
             }
@@ -979,6 +965,16 @@
           "source": "fn.trophy({ stat: 'init', base: 4 });",
           "enabled": true,
           "priority": 0
+        },
+        {
+          "id": "paralysis",
+          "label": "Chuul Gloves",
+          "events": [
+            "hit"
+          ],
+          "source": "check('Chuul Gloves: paralysis', { save: 'fort', dc: fn.trophyDc({ base: 11 }), effect: 'paralysed (Fort negates)' });",
+          "enabled": true,
+          "priority": 0
         }
       ],
       "kind": "item",
@@ -1283,7 +1279,7 @@
           "paramValues": {}
         },
         {
-          "abilityId": "weapon-focus-longbow",
+          "abilityId": "precise-shot",
           "enabled": true,
           "paramValues": {}
         },
@@ -1488,7 +1484,7 @@
             "knowledge-monsters": 4
           },
           "featsTaken": [
-            "weapon-focus-ranged",
+            "precise-shot",
             "point-blank-shot"
           ],
           "featuresGained": [
@@ -1763,6 +1759,20 @@
         }
       ],
       "source": "bonus(stat, base * (vars.trophyMultiplier ?? 1), type);"
+    },
+    {
+      "id": "trophyDc",
+      "name": "Trophy save DC",
+      "description": "A trophy's save DC: base + Monster Hunter level + Wis mod.",
+      "params": [
+        {
+          "name": "base",
+          "type": "number",
+          "label": "Base DC",
+          "required": true
+        }
+      ],
+      "source": "return base + player.classes['monster-hunter'] + player.mod.wis;"
     }
   ],
   "globals": {}

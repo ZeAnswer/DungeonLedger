@@ -199,6 +199,7 @@ Every name below is destructured into scope; there is no `api.` prefix. `Math`, 
 | `grant(recordId, duration?)` · `suppress(recordId)` | Start another record as a buff · switch one off |
 | `charges(id).use(n = 1)` `.restore(n)` `.set(n)` `.left` | Spend, refund or set a pool |
 | `heal(n)` · `hurt(n)` · `temp(n)` | HP |
+| `check(name, { save, dc, effect })` | "For the monster": records a save the DM rolls after this event (`save` ∈ `'fort'`, `'ref'`, `'will'`); shown on the logged event, gone when it's undone |
 | `setVar(name, value)` | Writes a character var (number, text or true/false); undoable |
 | `log(text)` | A line in the battle log |
 | `emit(name, payload?)` | Wakes every `custom:<name>` script |
@@ -350,6 +351,12 @@ if (target.isOneOf(params.types)) {
 
 ```js
 charges('monster-blow').use();   // events: ['use']
+```
+
+**Chuul Gloves** — item, hands slot. On a hit, "for the monster": a `hit` script asks the DM to roll a save on the monster's behalf, shown on the logged attack row until it's undone or the next attack is logged:
+
+```js
+check('Chuul Gloves: paralysis', { save: 'fort', dc: fn.trophyDc({ base: 11 }), effect: 'paralysed (Fort negates)' });
 ```
 
 **Boots of Speed** — item, feet slot, one activation `{ id: "boots-rounds", action: "free", charges: { max: 10, resetOn: "day" }, duration: "untilMyNextTurn" }` whose `always` script is `fn.haste();`. Use spends one haste round and applies haste until your next turn.
