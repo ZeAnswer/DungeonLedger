@@ -9,6 +9,7 @@ export type MergeReport = {
   updated: string[];
   unchanged: string[];
   conflicts: { key: string; existingPack: string; incomingPack: string }[];
+  removed: string[];
 };
 
 export function emptyLibrary(): LibraryWithMeta {
@@ -17,8 +18,13 @@ export function emptyLibrary(): LibraryWithMeta {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-/** Merge a pack into a library. Same-pack newer versions update; foreign differing items conflict unless overwrite. */
-export function mergePack(library: Library & { meta?: Record<string, PackItemMeta> }, pack: Pack, opts: { overwrite?: boolean } = {}): { library: LibraryWithMeta; report: MergeReport } {
+/**
+ * Merge a pack into a library. Same-pack newer versions update; foreign differing items conflict
+ * unless overwrite. `prune` (default true) retires same-pack records the incoming version no longer
+ * ships — a built-in pack update wants that; a user-initiated import passes `prune: false` so nothing
+ * disappears from under them without an explicit "here's what would go" confirmation.
+ */
+export function mergePack(library: Library & { meta?: Record<string, PackItemMeta> }, pack: Pack, opts: { overwrite?: boolean; prune?: boolean } = {}): { library: LibraryWithMeta; report: MergeReport } {
   const lib: LibraryWithMeta = {
     abilities: { ...library.abilities }, tags: { ...library.tags }, skills: { ...library.skills },
     classTables: { ...library.classTables }, xpTable: [...library.xpTable],
@@ -26,7 +32,11 @@ export function mergePack(library: Library & { meta?: Record<string, PackItemMet
     ...(library as { monsters?: Record<string, unknown>; characters?: Record<string, unknown> }).monsters ? { monsters: { ...(library as { monsters?: Record<string, unknown> }).monsters } } : {},
     ...(library as { characters?: Record<string, unknown> }).characters ? { characters: { ...(library as { characters?: Record<string, unknown> }).characters } } : {},
   } as LibraryWithMeta;
-  const report: MergeReport = { added: [], updated: [], unchanged: [], conflicts: [] };
+  const report: MergeReport = { added: [], updated: [], unchanged: [], conflicts: [], removed: [] };
+  // A record this same pack owned at some earlier version, still that version's content (no newer
+  // version has touched it below), tells us whether this merge is an *update* of a pack already seen —
+  // vs. this pack's first install, where nothing has ever been "retired".
+  const priorVersion = Math.max(0, ...Object.values(library.meta ?? {}).filter((m) => m.packId === pack.id).map((m) => m.version));
 
   function put<T extends { id: string }>(kind: string, table: Record<string, T>, item: T) {
     const key = `${kind}:${item.id}`;
@@ -64,6 +74,32 @@ export function mergePack(library: Library & { meta?: Record<string, PackItemMet
   if (pack.monsters.length) { l.monsters ??= {}; for (const m of pack.monsters) put('monster', l.monsters, m); }
   if (pack.characters.length) { l.characters ??= {}; for (const c of pack.characters) put('character', l.characters, c); }
   if (pack.xpTable?.length) lib.xpTable = pack.xpTable;
+
+  // A newer version of a pack already installed retires records that pack used to ship and no longer
+  // does: anything still recorded (in `meta`) as owned by this pack id, that the incoming pack no
+  // longer lists, is dropped. There's no way to tell whether the stored copy was hand-edited since —
+  // the conflict/"same" check above needs an incoming item to diff against, and a retired record has
+  // none — so this always removes rather than risking a stale record nobody can see or fix.
+  if ((opts.prune ?? true) && priorVersion > 0 && pack.version > priorVersion) {
+    const incomingIds: Partial<Record<string, Set<string>>> = {
+      tag: new Set(pack.tags.map((t) => t.id)),
+      function: new Set(pack.functions.map((f) => f.id)),
+      global: new Set(Object.keys(pack.globals)),
+      ability: new Set(pack.abilities.map((a) => a.id)),
+    };
+    const tables: Record<string, Record<string, unknown>> = { tag: lib.tags, function: lib.functions, global: lib.globals, ability: lib.abilities };
+    for (const [key, meta] of Object.entries(lib.meta)) {
+      if (meta.packId !== pack.id) continue;
+      const sep = key.indexOf(':');
+      const kind = key.slice(0, sep);
+      const id = key.slice(sep + 1);
+      const ids = incomingIds[kind];
+      if (!ids || ids.has(id)) continue;
+      delete tables[kind]![id];
+      delete lib.meta[key];
+      report.removed.push(key);
+    }
+  }
   return { library: lib, report };
 }
 

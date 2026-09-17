@@ -34,6 +34,28 @@ test('same id from a newer pack version updates; same version with different con
   expect(mergePack(r2.library, other, { overwrite: true }).library.abilities['rapid-shot']!.name).toBe('Different');
 });
 
+test('a newer same-pack version retires records it no longer ships; a record owned by another pack is untouched; a fresh install removes nothing', () => {
+  const p1b = PackSchema.parse({ ...p1, abilities: [...p1.abilities, { id: 'weapon-focus-longbow', name: 'Weapon Focus (longbow)', kind: 'feature', scripts: [] }], tags: [...p1.tags, { id: 'extra-tag', label: 'Extra', category: 'habitat' }] });
+  const installed = mergePack(emptyLibrary(), p1b).library;
+  expect(installed.abilities['weapon-focus-longbow']).toBeDefined();
+
+  const other = PackSchema.parse({ id: 'other', name: 'Other', version: 1, abilities: [{ id: 'foreign', name: 'Foreign', kind: 'feature', scripts: [] }] });
+  const withForeign = mergePack(installed, other).library;
+
+  // core v2 no longer ships weapon-focus-longbow or extra-tag (dropped back to p1's original lists).
+  const p2 = PackSchema.parse({ ...p1, version: 2 });
+  const { library, report } = mergePack(withForeign, p2);
+  expect(library.abilities['weapon-focus-longbow']).toBeUndefined();
+  expect(library.tags['extra-tag']).toBeUndefined();
+  expect([...report.removed].sort()).toEqual(['ability:weapon-focus-longbow', 'tag:extra-tag']);
+  expect(library.abilities['foreign']).toBeDefined(); // a record owned by another pack is untouched
+  expect(library.abilities['rapid-shot']).toBeDefined(); // still shipped by core v2
+
+  // A fresh install (no prior version of this pack in the library) removes nothing.
+  const fresh = mergePack(emptyLibrary(), p2);
+  expect(fresh.report.removed).toEqual([]);
+});
+
 test('library round-trips through a pack', () => {
   const { library } = mergePack(emptyLibrary(), p1);
   const pack = libraryToPack(library, { id: 'backup', name: 'Backup', version: 3 });

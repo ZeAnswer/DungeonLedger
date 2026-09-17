@@ -135,25 +135,36 @@ export const useStore = create<Store>((set, get) => ({
     for (const p of defaultPacks) {
       const seen = Math.max(0, ...Object.values(lib.meta).filter((m) => m.packId === p.id).map((m) => m.version));
       if (p.version > seen) {
-        const m = mergePack({ ...lib, globals: mergedGlobals }, { ...p, characters: [] }, {});
+        const m = mergePack({ ...lib, globals: mergedGlobals }, { ...p, characters: [] }, { prune: true });
         const { globals: _mLibGlobals, ...mLib } = m.library as FullLibrary;
         void _mLibGlobals;
         lib = { ...lib, ...mLib };
         mergedGlobals = m.library.globals;
         updated.push(p.name);
+        // Records this pack used to ship and no longer does (mergePack's own retirement pass, since
+        // this is a same-pack version bump): drop the character's instances and inventory rows for
+        // them — an ability id nobody can see or fix in the library anymore is just dead weight.
+        const removedAbilityIds = new Set(m.report.removed.filter((k) => k.startsWith('ability:')).map((k) => k.slice('ability:'.length)));
+        if (removedAbilityIds.size && patchedCharacter) {
+          const droppedHere = new Set([
+            ...patchedCharacter.abilities.filter((a) => removedAbilityIds.has(a.abilityId)).map((a) => a.abilityId),
+            ...patchedCharacter.inventory.filter((i) => i.abilityId && removedAbilityIds.has(i.abilityId)).map((i) => i.abilityId!),
+          ]);
+          if (droppedHere.size) {
+            droppedAbilityNames.push(...[...droppedHere].map((id) => library.abilities[id]?.name ?? id));
+            patchedCharacter = {
+              ...patchedCharacter,
+              abilities: patchedCharacter.abilities.filter((a) => !removedAbilityIds.has(a.abilityId)),
+              inventory: patchedCharacter.inventory.filter((i) => !i.abilityId || !removedAbilityIds.has(i.abilityId)),
+            };
+          }
+        }
         const seed = p.characters.find((c) => c.id === patchedCharacter?.id);
         if (seed && patchedCharacter) {
           const missing = Object.entries(seed.skills).filter(([id]) => !patchedCharacter!.skills[id]);
           if (missing.length) {
             patchedCharacter = { ...patchedCharacter, skills: { ...patchedCharacter.skills, ...Object.fromEntries(missing) } };
             restoredSkillNames.push(...missing.map(([id]) => lib.skills[id]?.name ?? id));
-          }
-          // An ability the seed no longer lists and that no longer exists anywhere in the merged library
-          // (a content mistake removed outright, not just unassigned) is stale on the stored sheet: drop it.
-          const gone = patchedCharacter.abilities.filter((a) => !seed.abilities.some((sa) => sa.abilityId === a.abilityId) && !lib.abilities[a.abilityId]);
-          if (gone.length) {
-            droppedAbilityNames.push(...gone.map((a) => library.abilities[a.abilityId]?.name ?? a.abilityId));
-            patchedCharacter = { ...patchedCharacter, abilities: patchedCharacter.abilities.filter((a) => !gone.includes(a)) };
           }
         }
       }
@@ -195,7 +206,10 @@ export const useStore = create<Store>((set, get) => ({
     const { library, character, globals } = get();
     // Diff the pack's globals against the live globals slice (not the stale library.globals blob), so
     // the MergeReport's added/updated/conflicts counts reflect what the player actually has right now.
-    const m = mergePack({ ...library, globals }, pack, opts);
+    // prune: false — a user-initiated import never silently removes records on a same-pack version
+    // bump; doing that safely needs a confirmation that lists what would go, which this dialog
+    // doesn't have room for, so this stays unpruned (see hydrate() for the built-in-pack path, which does prune).
+    const m = mergePack({ ...library, globals }, pack, { ...opts, prune: false });
     // The merged globals go to the live slice below, never into the persisted library blob (a pack
     // update must not clobber it, and setVar must never need to touch the library).
     const { globals: _mLibGlobals, ...mLib } = m.library as FullLibrary;
