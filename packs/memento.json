@@ -13,6 +13,11 @@
       "id": "oversized",
       "label": "Oversized (above Large)",
       "category": "custom"
+    },
+    {
+      "id": "has-hurt-me",
+      "label": "Has hurt Memento (Astra Vindicta)",
+      "category": "condition"
     }
   ],
   "abilities": [
@@ -190,6 +195,68 @@
       "enabledByDefault": true,
       "activations": [],
       "pools": []
+    },
+    {
+      "id": "vaelor-aura",
+      "name": "Vaelor Aura",
+      "text": "Any flying monster of your favored enemy or Monster Killer types can be persuaded to carry you (and the party) to a destination within flight range for one hour. If it refuses, or attacks first, your weapon range is doubled for that fight.",
+      "scripts": [
+        {
+          "id": "aura",
+          "events": [
+            "always"
+          ],
+          "source": "const types = [...player.paramsOf('favored-enemy-1').types, ...player.paramsOf('favored-enemy-2').types, ...player.paramsOf('monster-killer').types];\nif (target.isOneOf(types)) {\n  note('Vaelor Aura: persuade it to carry you for an hour; refused or attacked first → weapon range ×2 this fight (switch: Vaelor refused)');\n  if (battle.on('vaelor-refused')) note('Vaelor Aura: weapon range ×2 this fight');\n}",
+          "enabled": true,
+          "priority": 0
+        }
+      ],
+      "kind": "feature",
+      "acquired": {
+        "kind": "dm"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": []
+    },
+    {
+      "id": "astra-vindicta",
+      "name": "Astra Vindicta",
+      "text": "Against any monster of your favored enemy or Monster Killer types that has ever hurt you — this life or a past one — you get +2 damage and +2 Fortitude. The purple bottle: once a week, summon a monster you have defeated (up to your level +1) for one hour; it vanishes after the fight. The app has no weekly reset for the bottle’s charge; reset it manually (Character › Charges).",
+      "scripts": [
+        {
+          "id": "mark",
+          "events": [
+            "damaged"
+          ],
+          "source": "target.mark('has-hurt-me', UNTIL_REMOVED);",
+          "enabled": true,
+          "priority": 0
+        },
+        {
+          "id": "grudge",
+          "events": [
+            "always"
+          ],
+          "source": "const types = [...player.paramsOf('favored-enemy-1').types, ...player.paramsOf('favored-enemy-2').types, ...player.paramsOf('monster-killer').types];\nif (target.isOneOf(types) && (target.is('has-hurt-me') || battle.on('astra-grudge'))) {\n  bonus('damage', 2);\n  bonus('save.fort', 2);\n}",
+          "enabled": true,
+          "priority": 0
+        }
+      ],
+      "kind": "feature",
+      "acquired": {
+        "kind": "dm"
+      },
+      "enabledByDefault": true,
+      "activations": [],
+      "pools": [
+        {
+          "id": "astra-bottle",
+          "label": "Purple bottle (summon)",
+          "max": 1,
+          "resetOn": "never"
+        }
+      ]
     },
     {
       "id": "the-shit-ive-seen",
@@ -1247,6 +1314,16 @@
         },
         {
           "abilityId": "memento-formido",
+          "enabled": true,
+          "paramValues": {}
+        },
+        {
+          "abilityId": "vaelor-aura",
+          "enabled": true,
+          "paramValues": {}
+        },
+        {
+          "abilityId": "astra-vindicta",
           "enabled": true,
           "paramValues": {}
         },

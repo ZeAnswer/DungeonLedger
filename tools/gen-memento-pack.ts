@@ -87,6 +87,7 @@ const pack: Pack = PackSchema.parse({
   tags: [
     { id: 'analyzed', label: 'Analyzed (Hunter\'s Analysis)', category: 'condition' },
     { id: 'oversized', label: 'Oversized (above Large)', category: 'custom' },
+    { id: 'has-hurt-me', label: 'Has hurt Memento (Astra Vindicta)', category: 'condition' },
   ],
   skills: [
     { id: 'knowledge-monsters', name: 'Knowledge (Monsters)', ability: 'wis', trainedOnly: true },
@@ -153,6 +154,26 @@ const pack: Pack = PackSchema.parse({
         id: 'will', events: ['always'],
         source: declareFavoredAndMkTypes + "\nif (target.isOneOf(types)) bonus('save.will', 2);",
       }],
+    },
+    {
+      id: 'vaelor-aura', name: 'Vaelor Aura', kind: 'feature', acquired: { kind: 'dm' },
+      text: 'Any flying monster of your favored enemy or Monster Killer types can be persuaded to carry you (and the party) to a destination within flight range for one hour. If it refuses, or attacks first, your weapon range is doubled for that fight.',
+      scripts: [{
+        id: 'aura', events: ['always'],
+        source: declareFavoredAndMkTypes + "\nif (target.isOneOf(types)) {\n  note('Vaelor Aura: persuade it to carry you for an hour; refused or attacked first → weapon range ×2 this fight (switch: Vaelor refused)');\n  if (battle.on('vaelor-refused')) note('Vaelor Aura: weapon range ×2 this fight');\n}",
+      }],
+    },
+    {
+      id: 'astra-vindicta', name: 'Astra Vindicta', kind: 'feature', acquired: { kind: 'dm' },
+      text: 'Against any monster of your favored enemy or Monster Killer types that has ever hurt you — this life or a past one — you get +2 damage and +2 Fortitude. The purple bottle: once a week, summon a monster you have defeated (up to your level +1) for one hour; it vanishes after the fight. The app has no weekly reset for the bottle’s charge; reset it manually (Character › Charges).',
+      pools: [{ id: 'astra-bottle', label: 'Purple bottle (summon)', max: 1, resetOn: 'never' }],
+      scripts: [
+        { id: 'mark', events: ['damaged'], source: "target.mark('has-hurt-me', UNTIL_REMOVED);" },
+        {
+          id: 'grudge', events: ['always'],
+          source: declareFavoredAndMkTypes + "\nif (target.isOneOf(types) && (target.is('has-hurt-me') || battle.on('astra-grudge'))) {\n  bonus('damage', 2);\n  bonus('save.fort', 2);\n}",
+        },
+      ],
     },
     { id: 'the-shit-ive-seen', name: 'The Shit I\'ve Seen', source: 'feat', text: '+4 Survival.', effects: [{ id: 's', do: [{ kind: 'bonus', to: 'skill.survival', value: 4 }] }] },
     // ---- Monster Hunter class ----
@@ -283,7 +304,7 @@ const pack: Pack = PackSchema.parse({
       { abilityId: 'track' }, { abilityId: 'endurance' }, { abilityId: 'wild-empathy', enabled: false },
       { abilityId: 'point-blank-shot' }, { abilityId: 'rapid-shot' }, { abilityId: 'weapon-focus-longbow' }, { abilityId: 'ranger-spells' },
       { abilityId: 'woodland-archer' }, { abilityId: 'knowledge-devotion' }, { abilityId: 'distracting-attack' },
-      { abilityId: 'memento-aqua' }, { abilityId: 'memento-formido' },
+      { abilityId: 'memento-aqua' }, { abilityId: 'memento-formido' }, { abilityId: 'vaelor-aura' }, { abilityId: 'astra-vindicta' },
       { abilityId: 'the-shit-ive-seen' },
       { abilityId: 'monster-killer', paramValues: { types: ['aberration', 'dragon', 'giant', 'construct'] } },
       { abilityId: 'monster-blow' },
