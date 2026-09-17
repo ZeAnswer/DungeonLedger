@@ -108,7 +108,10 @@ export function makeApi(ctx: EvalContext, run: RunContext, sink: Sink, patches: 
       tag: proxy((k) => (sel(`self.equipped.count.tag.${k}`) as number) ?? 0),
     }),
     params: proxy((k) => [...(src.instance?.paramValues[k] ?? [])]),
-    paramsOf: (recordId: string) => proxy((k) => [...(ctx.character.abilities.find((a) => a.abilityId === recordId)?.paramValues[k] ?? [])]),
+    paramsOf: (recordId: string) => proxy((k) => {
+      const inst = ctx.character.abilities.find((a) => a.abilityId === recordId);
+      return inst && inst.enabled ? [...(inst.paramValues[k] ?? [])] : [];
+    }),
     get lastDamage() { return run.event?.damage ?? ctx.lastDamage ?? 0; },
   });
 

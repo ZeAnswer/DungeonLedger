@@ -21,7 +21,7 @@ const feat = AbilitySchema.parse({ id: 'f', name: 'Feat', kind: 'feature', param
 function setup(phase: 'always' | 'event' = 'always') {
   const battle = makeBattle({ combatants: [makeCombatant({ id: 'c1', tags: ['aberration', 'aquatic'], size: 'large', hurt: 'bloodied', distanceFeet: 20 })], toggles: { sniping: true }, tags: ['underwater'], prompts: { 'knowledge:aberration': 24 } });
   const ctx = makeCtx({
-    character: makeCharacter({ abilities: [{ abilityId: 'f', enabled: true, paramValues: { types: ['aberration'] } }, { abilityId: 'other', enabled: true, paramValues: { types: ['dragon'] } }], vars: { trophyMultiplier: 2 } }),
+    character: makeCharacter({ abilities: [{ abilityId: 'f', enabled: true, paramValues: { types: ['aberration'] } }, { abilityId: 'other', enabled: true, paramValues: { types: ['dragon'] } }, { abilityId: 'off', enabled: false, paramValues: { types: ['giant'] } }], vars: { trophyMultiplier: 2 } }),
     battle,
     target: battle.combatants[0],
     attack: { profile: { id: 'bow', name: 'Bow', kind: 'ranged', baseDice: '1d8', enhancement: 1, critRange: 20, critMult: 3, attackAbility: 'dex', damageAbilityMultiplier: 1 }, kind: 'ranged', index: 2, modeId: 'full' },
@@ -156,6 +156,7 @@ test('player.paramsOf(recordId) reads another record\'s chosen tags, as a copy, 
   expect(api.player.paramsOf('other').types).toEqual(['dragon']);
   expect(api.player.paramsOf('f').types).toEqual(['aberration']); // same as this record's own params
   expect(api.player.paramsOf('missing').types).toEqual([]);
+  expect(api.player.paramsOf('off').types).toEqual([]); // on the sheet but switched off: does not feed a derived check
   api.player.paramsOf('other').types!.push('giant');
   expect(ctx.character.abilities.find((a) => a.abilityId === 'other')!.paramValues.types).toEqual(['dragon']);
 });
