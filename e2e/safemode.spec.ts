@@ -5,9 +5,8 @@ test('?safe=1 turns scripts off, the banner turns them back on', async ({ page }
   const banner = page.locator('[data-role="safe-banner"]');
   await expect(banner).toContainText('Scripts are off');
 
-  // Memento's default longbow carries two always-on script bonuses to attack (Weapon Focus and
-  // Bracers of Archery, Lesser, both +1). With scripts off the attack row should show the base
-  // total without them.
+  // Memento's default longbow carries an always-on script bonus to attack (Bracers of Archery,
+  // Lesser, +1). With scripts off the attack row should show the base total without it.
   await page.getByRole('button', { name: /New battle/ }).click();
   const row = page.locator('[data-attack]').first();
   await expect(row).toContainText('+10');
@@ -17,7 +16,7 @@ test('?safe=1 turns scripts off, the banner turns them back on', async ({ page }
   expect(await page.evaluate(() => localStorage.getItem('hl.safeMode'))).toBeNull();
 
   // The attack number updates in place, right there on the Battle screen, with no remount needed.
-  await expect(row).toContainText('+12');
+  await expect(row).toContainText('+11');
 });
 
 test('safe mode survives a reload once it is stored, and Settings switches it', async ({ page }) => {

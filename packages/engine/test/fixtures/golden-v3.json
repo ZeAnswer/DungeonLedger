@@ -8,7 +8,7 @@
           "modeId": "single",
           "attacks": [
             {
-              "attackBonus": 12,
+              "attackBonus": 11,
               "damageFlat": 3,
               "damageDice": [
                 "1d8"
@@ -23,7 +23,7 @@
           "modeId": "full",
           "attacks": [
             {
-              "attackBonus": 12,
+              "attackBonus": 11,
               "damageFlat": 3,
               "damageDice": [
                 "1d8"
@@ -32,7 +32,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 7,
+              "attackBonus": 6,
               "damageFlat": 3,
               "damageDice": [
                 "1d8"
@@ -47,7 +47,7 @@
           "modeId": "rapid-shot",
           "attacks": [
             {
-              "attackBonus": 10,
+              "attackBonus": 9,
               "damageFlat": 3,
               "damageDice": [
                 "1d8"
@@ -56,7 +56,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 10,
+              "attackBonus": 9,
               "damageFlat": 3,
               "damageDice": [
                 "1d8"
@@ -65,7 +65,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 5,
+              "attackBonus": 4,
               "damageFlat": 3,
               "damageDice": [
                 "1d8"
@@ -148,7 +148,7 @@
           "modeId": "single",
           "attacks": [
             {
-              "attackBonus": 13,
+              "attackBonus": 12,
               "damageFlat": 8,
               "damageDice": [
                 "1d8"
@@ -163,7 +163,7 @@
           "modeId": "full",
           "attacks": [
             {
-              "attackBonus": 13,
+              "attackBonus": 12,
               "damageFlat": 8,
               "damageDice": [
                 "1d8"
@@ -172,7 +172,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 8,
+              "attackBonus": 7,
               "damageFlat": 8,
               "damageDice": [
                 "1d8"
@@ -187,7 +187,7 @@
           "modeId": "rapid-shot",
           "attacks": [
             {
-              "attackBonus": 11,
+              "attackBonus": 10,
               "damageFlat": 8,
               "damageDice": [
                 "1d8"
@@ -196,7 +196,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 11,
+              "attackBonus": 10,
               "damageFlat": 8,
               "damageDice": [
                 "1d8"
@@ -205,7 +205,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 6,
+              "attackBonus": 5,
               "damageFlat": 8,
               "damageDice": [
                 "1d8"
@@ -289,7 +289,7 @@
           "modeId": "single",
           "attacks": [
             {
-              "attackBonus": 14,
+              "attackBonus": 13,
               "damageFlat": 9,
               "damageDice": [
                 "1d8"
@@ -304,7 +304,7 @@
           "modeId": "full",
           "attacks": [
             {
-              "attackBonus": 14,
+              "attackBonus": 13,
               "damageFlat": 9,
               "damageDice": [
                 "1d8"
@@ -313,7 +313,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 9,
+              "attackBonus": 8,
               "damageFlat": 9,
               "damageDice": [
                 "1d8"
@@ -328,7 +328,7 @@
           "modeId": "rapid-shot",
           "attacks": [
             {
-              "attackBonus": 12,
+              "attackBonus": 11,
               "damageFlat": 9,
               "damageDice": [
                 "1d8"
@@ -337,7 +337,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 12,
+              "attackBonus": 11,
               "damageFlat": 9,
               "damageDice": [
                 "1d8"
@@ -346,7 +346,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 7,
+              "attackBonus": 6,
               "damageFlat": 9,
               "damageDice": [
                 "1d8"
@@ -430,7 +430,7 @@
           "modeId": "single",
           "attacks": [
             {
-              "attackBonus": 21,
+              "attackBonus": 20,
               "damageFlat": 4,
               "damageDice": [
                 "1d8"
@@ -445,7 +445,7 @@
           "modeId": "full",
           "attacks": [
             {
-              "attackBonus": 21,
+              "attackBonus": 20,
               "damageFlat": 4,
               "damageDice": [
                 "1d8"
@@ -454,7 +454,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 16,
+              "attackBonus": 15,
               "damageFlat": 4,
               "damageDice": [
                 "1d8"
@@ -469,7 +469,7 @@
           "modeId": "rapid-shot",
           "attacks": [
             {
-              "attackBonus": 19,
+              "attackBonus": 18,
               "damageFlat": 4,
               "damageDice": [
                 "1d8"
@@ -478,7 +478,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 19,
+              "attackBonus": 18,
               "damageFlat": 4,
               "damageDice": [
                 "1d8"
@@ -487,7 +487,7 @@
               "critMult": 3
             },
             {
-              "attackBonus": 14,
+              "attackBonus": 13,
               "damageFlat": 4,
               "damageDice": [
                 "1d8"

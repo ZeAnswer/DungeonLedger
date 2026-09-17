@@ -12,32 +12,32 @@ test('gargoyle fight: knowledge check, woodland archer +4 after a miss, monster 
   await page.getByRole('button', { name: 'Aberration', exact: true }).click();
   await page.getByRole('button', { name: /^Add Gargoyle$/ }).click();
 
-  // full attack rows: +12 / +7 with favored enemy damage +4 → 1d8+6
+  // full attack rows: +11 / +6 with favored enemy damage +4 → 1d8+6
   const rows = page.locator('[data-attack]');
   await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0)).toContainText('+12');
+  await expect(rows.nth(0)).toContainText('+11');
   await expect(rows.nth(0)).toContainText('1d8 +7');
-  await expect(rows.nth(1)).toContainText('+7');
+  await expect(rows.nth(1)).toContainText('+6');
 
   // knowledge devotion warning → enter check 22 → +2 insight
   await page.getByRole('button', { name: /Knowledge Devotion: roll Knowledge/ }).click();
   await page.getByLabel(/Roll result/).fill('22');
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(rows.nth(0)).toContainText('+14');
+  await expect(rows.nth(0)).toContainText('+13');
   await expect(rows.nth(0)).toContainText('1d8 +9');
 
-  // miss attack 1 → attack 2 gets Woodland Archer +4 (7+2+4 = 13)
+  // miss attack 1 → attack 2 gets Woodland Archer +4 (6+2+4 = 12)
   await rows.nth(0).getByRole('button', { name: 'Miss' }).click();
   await expect(rows.nth(0)).toContainText('MISS');
-  await expect(rows.nth(0)).toContainText('+14'); // frozen at the number it was rolled with
-  await expect(rows.nth(1)).toContainText('+13');
+  await expect(rows.nth(0)).toContainText('+13'); // frozen at the number it was rolled with
+  await expect(rows.nth(1)).toContainText('+12');
   await rows.nth(1).locator("button").first().click();
   await expect(rows.nth(1)).toContainText('Adjust for Range');
   // undo the miss → bonus disappears, row is live again; redo the miss
   await rows.nth(0).getByRole('button', { name: 'Undo' }).click();
-  await expect(rows.nth(1)).toContainText('+9');
+  await expect(rows.nth(1)).toContainText('+8');
   await rows.nth(0).getByRole('button', { name: 'Miss' }).click();
-  await expect(rows.nth(1)).toContainText('+13');
+  await expect(rows.nth(1)).toContainText('+12');
 
   // hit attack 2 → Distracting Attack flanks the target
   await rows.nth(1).getByRole('button', { name: 'Hit' }).click();
@@ -52,7 +52,7 @@ test('gargoyle fight: knowledge check, woodland archer +4 after a miss, monster 
   // next round clears the +4
   await page.getByRole('button', { name: /Next round/ }).click();
   await expect(page.getByText(/Round 2/)).toBeVisible();
-  await expect(rows.nth(1)).toContainText('+9');
+  await expect(rows.nth(1)).toContainText('+8');
 
   // persists across reload
   await page.waitForTimeout(600);

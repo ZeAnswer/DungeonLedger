@@ -11,6 +11,7 @@ const patchText = (p: Patch): string => {
     case 'suppress': return `suppresses ${p.abilityId}`;
     case 'hp': return `${p.op} ${p.amount} hp`;
     case 'reveal': return 'reveals the target';
+    case 'check': return `for the monster: ${p.name} — ${p.save} DC ${p.dc}: ${p.effect}`;
     case 'setVar': return `${p.name} = ${String(p.value)}`;
     case 'log': return `logs "${p.text}"`;
     case 'emit': return `emits "${p.name}"`;

@@ -131,6 +131,7 @@ export const useStore = create<Store>((set, get) => ({
     // never touching a skill it already has, and only for the character id that pack actually seeds.
     let patchedCharacter = character;
     const restoredSkillNames: string[] = [];
+    const droppedAbilityNames: string[] = [];
     for (const p of defaultPacks) {
       const seen = Math.max(0, ...Object.values(lib.meta).filter((m) => m.packId === p.id).map((m) => m.version));
       if (p.version > seen) {
@@ -147,11 +148,21 @@ export const useStore = create<Store>((set, get) => ({
             patchedCharacter = { ...patchedCharacter, skills: { ...patchedCharacter.skills, ...Object.fromEntries(missing) } };
             restoredSkillNames.push(...missing.map(([id]) => lib.skills[id]?.name ?? id));
           }
+          // An ability the seed no longer lists and that no longer exists anywhere in the merged library
+          // (a content mistake removed outright, not just unassigned) is stale on the stored sheet: drop it.
+          const gone = patchedCharacter.abilities.filter((a) => !seed.abilities.some((sa) => sa.abilityId === a.abilityId) && !lib.abilities[a.abilityId]);
+          if (gone.length) {
+            droppedAbilityNames.push(...gone.map((a) => library.abilities[a.abilityId]?.name ?? a.abilityId));
+            patchedCharacter = { ...patchedCharacter, abilities: patchedCharacter.abilities.filter((a) => !gone.includes(a)) };
+          }
         }
       }
     }
     if (restoredSkillNames.length && patchedCharacter) {
       patchedCharacter = { ...patchedCharacter, journal: [...patchedCharacter.journal, { at: new Date().toISOString(), kind: 'edit', text: `Skills restored from built-in pack: ${restoredSkillNames.join(', ')}` }] };
+    }
+    if (droppedAbilityNames.length && patchedCharacter) {
+      patchedCharacter = { ...patchedCharacter, journal: [...patchedCharacter.journal, { at: new Date().toISOString(), kind: 'edit', text: `Removed from sheet (no longer in the pack): ${droppedAbilityNames.join(', ')}` }] };
     }
     set({
       library: lib,

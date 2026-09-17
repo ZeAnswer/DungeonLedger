@@ -1,11 +1,44 @@
 import { useMemo, useState } from 'react';
 import {
-  attackProfiles, availableActions, listAttackModes, logAttack, resolveAttack, setPrompt, undoEvent, useAbility, type ActionInfo, type AttackResult, type BreakdownEntry, type EvalContext, type PromptRequest,
+  attackProfiles, availableActions, listAttackModes, logAttack, resolveAttack, setPrompt, targetTags, undoEvent, useAbility, type ActionInfo, type AttackResult, type BreakdownEntry, type EvalContext, type PromptRequest,
 } from '@hl/engine';
 import { useStore } from '../../store/store';
 import { collectToggles } from '../../store/hooks';
 import { usePathLongPress } from '../../hooks/usePathLongPress';
 import { Button, Chip, Field, Sheet, cx, humanize, inputCls, signed } from '../ui';
+
+const SAVE_LABEL: Record<string, string> = { fort: 'Fort', ref: 'Ref', will: 'Will' };
+
+/** "For the monster": the checks the DM rolls after a logged hit, `<name> — <Save> DC <n>: <effect>`. */
+export function ForTheMonster({ checks }: { checks: { name: string; save: string; dc: number; effect: string }[] }) {
+  return (
+    <div className="mt-2 space-y-1 rounded-xl border border-amber-900 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
+      <div className="text-xs font-semibold uppercase tracking-wide text-amber-400">For the monster</div>
+      {checks.map((c, i) => <div key={i}>{c.name} — {SAVE_LABEL[c.save] ?? c.save} DC {c.dc}: {c.effect}</div>)}
+    </div>
+  );
+}
+
+const CONCEAL_PCT: Record<'concealed' | 'invisible', number> = { concealed: 20, invisible: 50 };
+
+/**
+ * Miss chance from the target's concealed/invisible condition (invisible wins if both). When the
+ * resolved attack ignores concealment (Woodland Archer's Pierce the Foliage, the round after a hit
+ * despite concealment) the same line renders struck through instead. Purely informational: the d%
+ * roll is local, never logged.
+ */
+function ConcealmentLine({ reason, pierced }: { reason: 'concealed' | 'invisible'; pierced: boolean }) {
+  const [roll, setRoll] = useState<number | undefined>();
+  const pct = CONCEAL_PCT[reason];
+  if (pierced) return <div className="mt-1 text-xs text-zinc-500 line-through">Miss chance {pct}% — Pierce the Foliage</div>;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-amber-300">
+      <span>Miss chance {pct}% — {reason}</span>
+      <button type="button" className="underline decoration-dotted" onClick={() => setRoll(1 + Math.floor(Math.random() * 100))}>roll d%</button>
+      {roll !== undefined && <span className="text-zinc-400">rolled {roll} → {roll <= pct ? 'missed by concealment' : 'hit stands'}</span>}
+    </div>
+  );
+}
 
 export function AttackPanel({ ctx }: { ctx: EvalContext }) {
   const setBattle = useStore((s) => s.setBattle);
@@ -13,6 +46,8 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
   const showToast = useStore((s) => s.showToast);
   const battle = ctx.battle!;
   const target = ctx.target;
+  const targetTagList = target ? targetTags(target) : [];
+  const concealReason: 'concealed' | 'invisible' | undefined = targetTagList.includes('invisible') ? 'invisible' : targetTagList.includes('concealed') ? 'concealed' : undefined;
   const profiles = useMemo(() => attackProfiles(ctx), [ctx]);
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? '');
   const effectiveProfileId = profiles.some((p) => p.id === profileId) ? profileId : profiles[0]?.id ?? '';
@@ -86,14 +121,19 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
             const logged = battle.log.find((e) => e.kind === 'attack' && e.round === battle.round && e.targetId === target?.id && e.modeId === mode?.modeId && e.attackIndex === a.index && e.profileId === effectiveProfileId);
             if (logged) {
               // Executed: frozen at the numbers it was rolled with; only Undo can change it.
+              // "For the monster" checks stay on the row through the next attack — gone once a newer event is logged or this one is undone.
+              const checks = battle.log.at(-1)?.id === logged.id ? logged.checks : undefined;
               return (
-                <div key={a.index} data-attack={a.index} className={cx('flex w-full items-center justify-between rounded-2xl border bg-zinc-950 px-3 py-2 opacity-80', logged.result === 'miss' ? 'border-red-900' : 'border-emerald-800')}>
-                  <span className="min-w-0">
-                    <span className="text-xs text-zinc-500">#{a.index}</span>
-                    <span className={cx('ml-2 font-bold', logged.result === 'miss' ? 'text-red-300' : 'text-emerald-300')}>{logged.result!.toUpperCase()}</span>
-                    {logged.snapshot && <span className="ml-3 text-sm text-zinc-400">{signed(logged.snapshot.attackBonus)} · {logged.snapshot.damageText}</span>}
-                  </span>
-                  <Button size="sm" variant="ghost" onClick={() => { const r = undoEvent(ctx, logged.id); applyState(r); showToast(`Undid attack #${a.index}`); }}>Undo</Button>
+                <div key={a.index} data-attack={a.index}>
+                  <div className={cx('flex w-full items-center justify-between rounded-2xl border bg-zinc-950 px-3 py-2 opacity-80', logged.result === 'miss' ? 'border-red-900' : 'border-emerald-800')}>
+                    <span className="min-w-0">
+                      <span className="text-xs text-zinc-500">#{a.index}</span>
+                      <span className={cx('ml-2 font-bold', logged.result === 'miss' ? 'text-red-300' : 'text-emerald-300')}>{logged.result!.toUpperCase()}</span>
+                      {logged.snapshot && <span className="ml-3 text-sm text-zinc-400">{signed(logged.snapshot.attackBonus)} · {logged.snapshot.damageText}</span>}
+                    </span>
+                    <Button size="sm" variant="ghost" onClick={() => { const r = undoEvent(ctx, logged.id); applyState(r); showToast(`Undid attack #${a.index}`); }}>Undo</Button>
+                  </div>
+                  {checks && checks.length > 0 && <ForTheMonster checks={checks} />}
                 </div>
               );
             }
@@ -109,6 +149,7 @@ export function AttackPanel({ ctx }: { ctx: EvalContext }) {
                   <span className="text-zinc-500">{expanded === a.index ? '▲' : '▼'}</span>
                 </button>
                 {a.damage.dice.length > 1 && <div className="mt-1 text-xs text-zinc-400">{a.damage.dice.map((d) => `${d.dice} ${d.label}${d.damageType ? ` (${d.damageType})` : ''}`).join(' · ')}</div>}
+                {concealReason && <ConcealmentLine reason={concealReason} pierced={a.ignoreConcealment} />}
                 {target && !target.dead && (
                   <div className="mt-2 grid grid-cols-3 gap-2">
                     <Button variant="success" onClick={() => record(a, 'hit')}>Hit</Button>

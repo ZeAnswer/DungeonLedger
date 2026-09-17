@@ -23,15 +23,15 @@ test('Hand of Glory: Daylight and See Invisibility are separate actions with the
 test('distance chip enables Point Blank Shot; Boots of Speed toggle adds an attack and ticks per round', async ({ page }) => {
   await startWithGargoyle(page);
   const rows = page.locator('[data-attack]');
-  await expect(rows.nth(0)).toContainText('+12');
+  await expect(rows.nth(0)).toContainText('+11');
   await page.getByRole('button', { name: '30 ft', exact: true }).click();
-  await expect(rows.nth(0)).toContainText('+13'); // Point Blank Shot
+  await expect(rows.nth(0)).toContainText('+12'); // Point Blank Shot
   await expect(rows).toHaveCount(2);
   const boots = page.locator('[data-activation="boots-rounds"]');
   await expect(boots).toContainText('8/10');
   await boots.getByRole('button', { name: 'Use' }).click();
   await expect(rows).toHaveCount(3); // haste extra attack this round
-  await expect(rows.nth(0)).toContainText('+14'); // +1 dodge
+  await expect(rows.nth(0)).toContainText('+13'); // +1 dodge
   await expect(boots).toContainText('7/10');
   await expect(boots).toContainText('ACTIVE');
   await page.getByRole('button', { name: /Next round/ }).click();

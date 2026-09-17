@@ -12,6 +12,7 @@ export const INSERT_GROUPS: InsertGroup[] = [
       { label: "note('…')", insert: "note('…');" },
       { label: "target.mark('shaken', ROUND)", insert: "target.mark('shaken', ROUND);" },
       { label: "charges('id').use()", insert: "charges('id').use();" },
+      { label: "check('Name', { save: 'fort', dc: 10, effect: '…' })", insert: "check('Name', { save: 'fort', dc: 10, effect: '…' });" },
       { label: 'if (attack.isRanged) { }', insert: 'if (attack.isRanged) {\n  \n}' },
       { label: "if (target.is('undead')) { }", insert: "if (target.is('undead')) {\n  \n}" },
       { label: "if (battle.on('switch')) { }", insert: "if (battle.on('switch')) {\n  \n}" },

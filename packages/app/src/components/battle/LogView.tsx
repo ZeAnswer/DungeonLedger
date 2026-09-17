@@ -3,6 +3,8 @@ import { useCtx } from '../../store/hooks';
 import { useStore } from '../../store/store';
 import { Button, Chip, cx } from '../ui';
 
+const SAVE_LABEL: Record<string, string> = { fort: 'Fort', ref: 'Ref', will: 'Will' };
+
 export function LogView({ battle }: { battle: Battle }) {
   const setBattle = useStore((s) => s.setBattle);
   const applyState = useStore((s) => s.applyState);
@@ -38,6 +40,11 @@ export function LogView({ battle }: { battle: Battle }) {
               <div className="mt-1 flex flex-wrap items-center gap-1">
                 {(['hit', 'miss', 'crit'] as const).map((r) => <Chip key={r} tone={r === 'miss' ? 'red' : r === 'crit' ? 'amber' : 'green'} active={e.result === r} onClick={() => setBattle(editLogEvent(battle, e.id, { result: r }))}>{r}</Chip>)}
                 <input className="ml-2 w-20 rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm" inputMode="numeric" placeholder="dmg" value={e.damage ?? ''} onChange={(ev) => setBattle(editLogEvent(battle, e.id, { damage: ev.target.value === '' ? undefined : Number(ev.target.value) }))} />
+              </div>
+            )}
+            {e.checks && e.checks.length > 0 && (
+              <div className="mt-1 space-y-0.5 text-xs text-amber-300">
+                {e.checks.map((c, i) => <div key={i}>{c.name} — {SAVE_LABEL[c.save] ?? c.save} DC {c.dc}: {c.effect}</div>)}
               </div>
             )}
           </div>
